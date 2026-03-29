@@ -1,6 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Elegant warm background -->
-  <rect x="4" y="4" width="504" height="504" rx="106" fill="#f0edea" stroke="#d8d3ce" stroke-width="2"/>
-  <!-- CMD text, elegant red, serif, centered -->
-  <text x="256" y="256" text-anchor="middle" dominant-baseline="central" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="168" fill="#c44b2b">CMD</text>
+  <rect x="4" y="4" width="504" height="504" rx="106" fill="#f0edea"/>
+
+  <!-- Paper lines -->
+  <line x1="40" y1="140" x2="472" y2="140" stroke="#d8d3ce" stroke-width="1"/>
+  <line x1="40" y1="180" x2="472" y2="180" stroke="#d8d3ce" stroke-width="1"/>
+  <line x1="40" y1="220" x2="472" y2="220" stroke="#d8d3ce" stroke-width="1"/>
+  <line x1="40" y1="260" x2="472" y2="260" stroke="#d8d3ce" stroke-width="1"/>
+  <line x1="40" y1="300" x2="472" y2="300" stroke="#d8d3ce" stroke-width="1"/>
+  <line x1="40" y1="340" x2="472" y2="340" stroke="#d8d3ce" stroke-width="1"/>
+  <line x1="40" y1="380" x2="472" y2="380" stroke="#d8d3ce" stroke-width="1"/>
+
+  <!-- Can body - 1.85:1 ratio, height 340, width 184 -->
+  <defs>
+    <clipPath id="can">
+      <rect x="164" y="86" width="184" height="340"/>
+    </clipPath>
+  </defs>
+  <rect x="164" y="86" width="184" height="340" fill="#c44b2b"/>
+
+  <!-- Wave clipped to can, extended past edges to fill fully -->
+  <path d="M130,256 C175,220 215,220 256,256 C297,292 337,292 382,256" fill="none" stroke="#f0edea" stroke-width="10" stroke-linecap="butt" clip-path="url(#can)"/>
 </svg>
