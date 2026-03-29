@@ -6,7 +6,6 @@ export interface ElectronAPI {
   saveFile: (content: string) => Promise<boolean>
   saveFileAs: (content: string) => Promise<boolean>
   exportPDF: () => Promise<boolean>
-  exportHTML: (html: string) => Promise<boolean>
   loadCustomTheme: () => Promise<string | null>
   getPathForFile: (file: File) => string
   onFileChanged: (callback: (content: string) => void) => void
@@ -16,7 +15,6 @@ export interface ElectronAPI {
   onMenuSave: (callback: () => void) => void
   onMenuSaveAs: (callback: () => void) => void
   onMenuExportPDF: (callback: () => void) => void
-  onMenuExportHTML: (callback: () => void) => void
   onSetTheme: (callback: (theme: string) => void) => void
   onMenuImportTheme: (callback: () => void) => void
 }
@@ -27,7 +25,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (content: string) => ipcRenderer.invoke('save-file', content),
   saveFileAs: (content: string) => ipcRenderer.invoke('save-file-as', content),
   exportPDF: () => ipcRenderer.invoke('export-pdf'),
-  exportHTML: (html: string) => ipcRenderer.invoke('export-html', html),
   loadCustomTheme: () => ipcRenderer.invoke('load-custom-theme'),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onFileChanged: (callback: (content: string) => void) => {
@@ -50,9 +47,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onMenuExportPDF: (callback: () => void) => {
     ipcRenderer.on('menu-export-pdf', () => callback())
-  },
-  onMenuExportHTML: (callback: () => void) => {
-    ipcRenderer.on('menu-export-html', () => callback())
   },
   onSetTheme: (callback: (theme: string) => void) => {
     ipcRenderer.on('set-theme', (_event, theme) => callback(theme))

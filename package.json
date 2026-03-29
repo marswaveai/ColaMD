@@ -1,7 +1,7 @@
 {
   "name": "colamd",
-  "version": "1.0.0",
-  "description": "A lightweight, fast, open-source WYSIWYG Markdown editor for everyone",
+  "version": "1.1.1",
+  "description": "The Agent Native Markdown Editor",
   "main": "dist/main/index.js",
   "author": "marswave.ai",
   "license": "MIT",

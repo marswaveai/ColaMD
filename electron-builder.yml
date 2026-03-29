@@ -3,11 +3,14 @@ productName: ColaMD
 copyright: Copyright © 2024-2026 marswave.ai
 
 directories:
-  output: /tmp/colamd-release
+  output: release
   buildResources: resources
 
 files:
   - dist/**/*
+
+npmArgs:
+  - "--loglevel=error"
 
 afterPack: ./scripts/afterPack.js
 
@@ -20,62 +23,6 @@ fileAssociations:
     name: Markdown Document
     role: Editor
     mimeType: text/markdown
-  - ext: txt
-    name: Text Document
-    role: Editor
-    mimeType: text/plain
-  - ext: text
-    name: Text Document
-    role: Editor
-    mimeType: text/plain
-  - ext: mdown
-    name: Markdown Document
-    role: Editor
-    mimeType: text/markdown
-  - ext: mkd
-    name: Markdown Document
-    role: Editor
-    mimeType: text/markdown
-  - ext: rst
-    name: reStructuredText
-    role: Editor
-    mimeType: text/plain
-  - ext: log
-    name: Log File
-    role: Editor
-    mimeType: text/plain
-  - ext: json
-    name: JSON File
-    role: Editor
-    mimeType: application/json
-  - ext: yaml
-    name: YAML File
-    role: Editor
-    mimeType: text/yaml
-  - ext: yml
-    name: YAML File
-    role: Editor
-    mimeType: text/yaml
-  - ext: xml
-    name: XML File
-    role: Editor
-    mimeType: text/xml
-  - ext: csv
-    name: CSV File
-    role: Editor
-    mimeType: text/csv
-  - ext: ini
-    name: INI File
-    role: Editor
-    mimeType: text/plain
-  - ext: cfg
-    name: Config File
-    role: Editor
-    mimeType: text/plain
-  - ext: conf
-    name: Config File
-    role: Editor
-    mimeType: text/plain
 
 mac:
   target:

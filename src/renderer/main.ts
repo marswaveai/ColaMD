@@ -1,4 +1,4 @@
-import { createEditor, getMarkdown, setMarkdown, getHTML } from './editor/editor'
+import { createEditor, getMarkdown, setMarkdown } from './editor/editor'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import './themes/base.css'
 
@@ -17,7 +17,6 @@ async function init(): Promise<void> {
   api.onMenuSave(() => api.saveFile(getMarkdown()))
   api.onMenuSaveAs(() => api.saveFileAs(getMarkdown()))
   api.onMenuExportPDF(() => api.exportPDF())
-  api.onMenuExportHTML(() => api.exportHTML(getHTML()))
   api.onNewFile(() => setMarkdown(''))
   api.onFileOpened((data) => setMarkdown(data.content))
   api.onFileChanged((content) => setMarkdown(content))

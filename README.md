@@ -15,7 +15,7 @@ Real-time collaboration between humans and AI agents — see your agent's change
 
 AI agents are rewriting how we work. They edit files, generate docs, and produce reports — all in Markdown.
 
-But how do you **watch** an agent work? You `cat` the file. You refresh your editor. You wait.
+But how do you **watch** an agent work? You close the file. You reopen it. You wait.
 
 **ColaMD changes this.** Open a `.md` file in ColaMD, let your agent edit it, and watch the content update in real-time — like pair programming with an AI. No refresh, no reload, no friction.
 
@@ -27,7 +27,7 @@ This is what **Agent Native** means: built from the ground up for a world where 
 - **True WYSIWYG** — Type Markdown, see rich text. No split-pane preview.
 - **Minimal by Design** — No toolbar, no sidebar, no distractions. Just your content.
 - **Themes** — 4 built-in themes + import custom CSS. Elegant theme by default.
-- **Export** — PDF and HTML.
+- **Export** — PDF.
 - **Cross-platform** — macOS, Windows, Linux.
 
 ## Download

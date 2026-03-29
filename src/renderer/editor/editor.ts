@@ -59,10 +59,3 @@ export function setMarkdown(content: string): void {
   if (!editorInstance) return
   editorInstance.action(replaceAll(content))
 }
-
-export function getHTML(): string {
-  const el = document.getElementById('editor')
-  if (!el) return ''
-  const pm = el.querySelector('.ProseMirror')
-  return pm ? pm.innerHTML : el.innerHTML
-}

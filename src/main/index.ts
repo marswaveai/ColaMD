@@ -3,15 +3,32 @@ import { join, basename } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import { watch, FSWatcher } from 'fs'
 
-let mainWindow: BrowserWindow | null = null
-let currentFilePath: string | null = null
-let fileWatcher: FSWatcher | null = null
-let isInternalSave = false
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
-let pendingFilePath: string | null = null
+// Per-window state
+interface WindowState {
+  filePath: string | null
+  watcher: FSWatcher | null
+  isInternalSave: boolean
+  debounceTimer: ReturnType<typeof setTimeout> | null
+}
 
-function createWindow(): void {
-  mainWindow = new BrowserWindow({
+const windowStates = new Map<number, WindowState>()
+let pendingFilePaths: string[] = []
+
+function getState(win: BrowserWindow): WindowState {
+  let state = windowStates.get(win.id)
+  if (!state) {
+    state = { filePath: null, watcher: null, isInternalSave: false, debounceTimer: null }
+    windowStates.set(win.id, state)
+  }
+  return state
+}
+
+function getWinFromEvent(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
+  return BrowserWindow.fromWebContents(event.sender)
+}
+
+function createWindow(filePath?: string): BrowserWindow {
+  const win = new BrowserWindow({
     width: 960,
     height: 720,
     minWidth: 600,
@@ -26,87 +43,134 @@ function createWindow(): void {
     }
   })
 
+  const state = getState(win)
+
   if (process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
+    win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (pendingFilePath) {
-      openFileFromPath(pendingFilePath)
-      pendingFilePath = null
+  win.webContents.on('did-finish-load', () => {
+    if (filePath) {
+      loadFileInWindow(win, filePath)
     }
   })
 
-  mainWindow.on('closed', () => {
-    mainWindow = null
-    stopWatching()
+  win.on('closed', () => {
+    stopWatching(state)
+    windowStates.delete(win.id)
   })
 
-  updateTitle()
+  updateTitle(win)
+  return win
 }
 
-function updateTitle(): void {
-  if (!mainWindow) return
-  const fileName = currentFilePath ? basename(currentFilePath) : 'Untitled'
-  mainWindow.setTitle(`${fileName} — ColaMD`)
+function updateTitle(win: BrowserWindow): void {
+  const state = getState(win)
+  const fileName = state.filePath ? basename(state.filePath) : 'Untitled'
+  win.setTitle(`${fileName} — ColaMD`)
 }
 
-function stopWatching(): void {
-  if (fileWatcher) {
-    fileWatcher.close()
-    fileWatcher = null
+function stopWatching(state: WindowState): void {
+  if (state.watcher) {
+    state.watcher.close()
+    state.watcher = null
   }
 }
 
-function watchCurrentFile(): void {
-  if (!currentFilePath) return
-  stopWatching()
-  const filePath = currentFilePath
-  fileWatcher = watch(filePath, (eventType) => {
-    if (eventType !== 'change' || isInternalSave) return
-    // Debounce: agents may write multiple chunks rapidly
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
+function watchFile(win: BrowserWindow, state: WindowState): void {
+  if (!state.filePath) return
+  stopWatching(state)
+  const filePath = state.filePath
+  state.watcher = watch(filePath, (eventType) => {
+    if (eventType !== 'change' || state.isInternalSave) return
+    if (state.debounceTimer) clearTimeout(state.debounceTimer)
+    state.debounceTimer = setTimeout(() => {
       readFile(filePath, 'utf-8')
-        .then((data) => mainWindow?.webContents.send('file-changed', data))
+        .then((data) => {
+          if (!win.isDestroyed()) win.webContents.send('file-changed', data)
+        })
         .catch(() => {})
     }, 100)
   })
 }
 
-function openFileFromPath(filePath: string): void {
+function loadFileInWindow(win: BrowserWindow, filePath: string): void {
   readFile(filePath, 'utf-8')
     .then((data) => {
-      currentFilePath = filePath
-      watchCurrentFile()
-      updateTitle()
-      mainWindow?.webContents.send('file-opened', { path: filePath, content: data })
+      const state = getState(win)
+      state.filePath = filePath
+      watchFile(win, state)
+      updateTitle(win)
+      win.webContents.send('file-opened', { path: filePath, content: data })
     })
     .catch(() => {})
 }
 
-async function saveToPath(filePath: string, content: string): Promise<boolean> {
+// Find window that already has this file open
+function findWindowForFile(filePath: string): BrowserWindow | null {
+  for (const [id, state] of windowStates) {
+    if (state.filePath === filePath) {
+      return BrowserWindow.fromId(id) || null
+    }
+  }
+  return null
+}
+
+// Open file: reuse existing window or create new one
+function openFile(filePath: string): void {
+  // If already open, focus that window
+  const existing = findWindowForFile(filePath)
+  if (existing) {
+    existing.focus()
+    return
+  }
+
+  // Find an untitled empty window to reuse
+  const emptyWin = findEmptyWindow()
+  if (emptyWin) {
+    loadFileInWindow(emptyWin, filePath)
+    emptyWin.focus()
+    return
+  }
+
+  // Create new window
+  const win = createWindow(filePath)
+  win.focus()
+}
+
+function findEmptyWindow(): BrowserWindow | null {
+  for (const [id, state] of windowStates) {
+    if (!state.filePath) {
+      return BrowserWindow.fromId(id) || null
+    }
+  }
+  return null
+}
+
+async function saveToPath(win: BrowserWindow, filePath: string, content: string): Promise<boolean> {
+  const state = getState(win)
   try {
-    isInternalSave = true
+    state.isInternalSave = true
     await writeFile(filePath, content, 'utf-8')
-    currentFilePath = filePath
-    watchCurrentFile()
-    updateTitle()
+    state.filePath = filePath
+    watchFile(win, state)
+    updateTitle(win)
     return true
   } catch {
     return false
   } finally {
-    setTimeout(() => { isInternalSave = false }, 100)
+    setTimeout(() => { state.isInternalSave = false }, 100)
   }
 }
 
 // IPC Handlers
 
-ipcMain.handle('open-file', async () => {
-  if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('open-file', async (event) => {
+  const win = getWinFromEvent(event)
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, {
     filters: [
       { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] },
       { name: 'Text', extensions: ['txt'] },
@@ -116,105 +180,88 @@ ipcMain.handle('open-file', async () => {
   })
   if (result.canceled || result.filePaths.length === 0) return null
 
-  try {
-    const filePath = result.filePaths[0]
-    const content = await readFile(filePath, 'utf-8')
-    currentFilePath = filePath
-    watchCurrentFile()
-    updateTitle()
-    return { path: filePath, content }
-  } catch {
+  const filePath = result.filePaths[0]
+
+  // If this window has no file, load here; otherwise open in new window
+  const state = getState(win)
+  if (!state.filePath) {
+    try {
+      const content = await readFile(filePath, 'utf-8')
+      state.filePath = filePath
+      watchFile(win, state)
+      updateTitle(win)
+      return { path: filePath, content }
+    } catch {
+      return null
+    }
+  } else {
+    openFile(filePath)
     return null
   }
 })
 
-ipcMain.handle('open-file-path', async (_event, filePath: string) => {
-  try {
-    const content = await readFile(filePath, 'utf-8')
-    currentFilePath = filePath
-    watchCurrentFile()
-    updateTitle()
-    return { path: filePath, content }
-  } catch {
+ipcMain.handle('open-file-path', async (event, filePath: string) => {
+  const win = getWinFromEvent(event)
+  if (!win) return null
+  const state = getState(win)
+
+  // If this window has no file, load here
+  if (!state.filePath) {
+    try {
+      const content = await readFile(filePath, 'utf-8')
+      state.filePath = filePath
+      watchFile(win, state)
+      updateTitle(win)
+      return { path: filePath, content }
+    } catch {
+      return null
+    }
+  } else {
+    openFile(filePath)
     return null
   }
 })
 
-ipcMain.handle('save-file', async (_event, content: string) => {
-  if (!mainWindow) return false
-  if (!currentFilePath) {
-    const result = await dialog.showSaveDialog(mainWindow, {
+ipcMain.handle('save-file', async (event, content: string) => {
+  const win = getWinFromEvent(event)
+  if (!win) return false
+  const state = getState(win)
+  if (!state.filePath) {
+    const result = await dialog.showSaveDialog(win, {
       filters: [
         { name: 'Markdown', extensions: ['md'] },
         { name: 'All Files', extensions: ['*'] }
       ]
     })
     if (result.canceled || !result.filePath) return false
-    currentFilePath = result.filePath
+    state.filePath = result.filePath
   }
-  return saveToPath(currentFilePath, content)
+  return saveToPath(win, state.filePath, content)
 })
 
-ipcMain.handle('save-file-as', async (_event, content: string) => {
-  if (!mainWindow) return false
-  const result = await dialog.showSaveDialog(mainWindow, {
+ipcMain.handle('save-file-as', async (event, content: string) => {
+  const win = getWinFromEvent(event)
+  if (!win) return false
+  const result = await dialog.showSaveDialog(win, {
     filters: [
       { name: 'Markdown', extensions: ['md'] },
       { name: 'All Files', extensions: ['*'] }
     ]
   })
   if (result.canceled || !result.filePath) return false
-  return saveToPath(result.filePath, content)
+  return saveToPath(win, result.filePath, content)
 })
 
-ipcMain.handle('export-html', async (_event, html: string) => {
-  if (!mainWindow) return false
-  const result = await dialog.showSaveDialog(mainWindow, {
-    filters: [{ name: 'HTML', extensions: ['html'] }]
-  })
-  if (result.canceled || !result.filePath) return false
-
-  const title = currentFilePath ? basename(currentFilePath).replace(/\.md$/, '') : 'Document'
-  const fullHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${title}</title>
-<style>
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; line-height: 1.6; color: #333; }
-pre { background: #f5f5f5; padding: 16px; border-radius: 4px; overflow-x: auto; }
-code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
-pre code { background: none; padding: 0; }
-blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; }
-img { max-width: 100%; }
-table { border-collapse: collapse; width: 100%; }
-th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-th { background: #f5f5f5; }
-</style>
-</head>
-<body>
-${html}
-</body>
-</html>`
-
-  try {
-    await writeFile(result.filePath, fullHtml, 'utf-8')
-    return true
-  } catch {
-    return false
-  }
-})
-
-ipcMain.handle('export-pdf', async () => {
-  if (!mainWindow) return false
-  const result = await dialog.showSaveDialog(mainWindow, {
+ipcMain.handle('export-pdf', async (event) => {
+  const win = getWinFromEvent(event)
+  if (!win) return false
+  const result = await dialog.showSaveDialog(win, {
     filters: [{ name: 'PDF', extensions: ['pdf'] }]
   })
   if (result.canceled || !result.filePath) return false
 
   try {
-    const pdfData = await mainWindow.webContents.printToPDF({
+    const pdfData = await win.webContents.printToPDF({
       marginType: 0,
       printBackground: true,
       pageSize: 'A4'
@@ -226,9 +273,10 @@ ipcMain.handle('export-pdf', async () => {
   }
 })
 
-ipcMain.handle('load-custom-theme', async () => {
-  if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('load-custom-theme', async (event) => {
+  const win = getWinFromEvent(event)
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, {
     filters: [{ name: 'CSS', extensions: ['css'] }],
     properties: ['openFile']
   })
@@ -241,7 +289,16 @@ ipcMain.handle('load-custom-theme', async () => {
   }
 })
 
-// Menu
+// Menu — targets the focused window
+
+function getFocusedWindow(): BrowserWindow | null {
+  return BrowserWindow.getFocusedWindow()
+}
+
+function sendToFocused(channel: string, ...args: unknown[]): void {
+  const win = getFocusedWindow()
+  if (win) win.webContents.send(channel, ...args)
+}
 
 function buildMenu(): void {
   const isMac = process.platform === 'darwin'
@@ -265,37 +322,23 @@ function buildMenu(): void {
         {
           label: 'New',
           accelerator: 'CmdOrCtrl+N',
-          click: () => {
-            currentFilePath = null
-            stopWatching()
-            updateTitle()
-            mainWindow?.webContents.send('new-file')
-          }
+          click: () => createWindow()
         },
         {
           label: 'Open...',
           accelerator: 'CmdOrCtrl+O',
-          click: () => mainWindow?.webContents.send('menu-open')
+          click: () => sendToFocused('menu-open')
         },
         { type: 'separator' },
         {
           label: 'Save',
           accelerator: 'CmdOrCtrl+S',
-          click: () => mainWindow?.webContents.send('menu-save')
+          click: () => sendToFocused('menu-save')
         },
         {
           label: 'Save As...',
           accelerator: 'CmdOrCtrl+Shift+S',
-          click: () => mainWindow?.webContents.send('menu-save-as')
-        },
-        { type: 'separator' },
-        {
-          label: 'Export as PDF',
-          click: () => mainWindow?.webContents.send('menu-export-pdf')
-        },
-        {
-          label: 'Export as HTML',
-          click: () => mainWindow?.webContents.send('menu-export-html')
+          click: () => sendToFocused('menu-save-as')
         },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' }
@@ -328,24 +371,24 @@ function buildMenu(): void {
       submenu: [
         {
           label: 'Light',
-          click: () => mainWindow?.webContents.send('set-theme', 'light')
+          click: () => sendToFocused('set-theme', 'light')
         },
         {
           label: 'Dark',
-          click: () => mainWindow?.webContents.send('set-theme', 'dark')
+          click: () => sendToFocused('set-theme', 'dark')
         },
         {
           label: 'Elegant',
-          click: () => mainWindow?.webContents.send('set-theme', 'elegant')
+          click: () => sendToFocused('set-theme', 'elegant')
         },
         {
           label: 'Newsprint',
-          click: () => mainWindow?.webContents.send('set-theme', 'newsprint')
+          click: () => sendToFocused('set-theme', 'newsprint')
         },
         { type: 'separator' },
         {
           label: 'Import Theme...',
-          click: () => mainWindow?.webContents.send('menu-import-theme')
+          click: () => sendToFocused('menu-import-theme')
         }
       ]
     },
@@ -368,12 +411,21 @@ function buildMenu(): void {
 app.whenReady().then(() => {
   buildMenu()
 
-  // Check command line args for file path (non-macOS, or macOS packaged)
+  // Check command line args for file paths
   const args = process.argv.slice(app.isPackaged ? 1 : 2)
-  const fileArg = args.find((arg) => !arg.startsWith('-'))
-  if (fileArg) pendingFilePath = fileArg
+  const fileArgs = args.filter((arg) => !arg.startsWith('-'))
+  if (fileArgs.length > 0) {
+    pendingFilePaths = fileArgs
+  }
 
-  createWindow()
+  if (pendingFilePaths.length > 0) {
+    for (const fp of pendingFilePaths) {
+      createWindow(fp)
+    }
+    pendingFilePaths = []
+  } else {
+    createWindow()
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -386,9 +438,9 @@ app.on('window-all-closed', () => {
 
 app.on('open-file', (event, filePath) => {
   event.preventDefault()
-  if (mainWindow && mainWindow.webContents.isLoading() === false) {
-    openFileFromPath(filePath)
+  if (app.isReady()) {
+    openFile(filePath)
   } else {
-    pendingFilePath = filePath
+    pendingFilePaths.push(filePath)
   }
 })
