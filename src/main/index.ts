@@ -93,6 +93,16 @@ function updateTitle(win: BrowserWindow): void {
   win.setTitle(`${fileName} — ColaMD`)
 }
 
+function suggestFileName(win: BrowserWindow, content?: string): string | undefined {
+  const state = getState(win)
+  if (state.filePath) return basename(state.filePath, '.md')
+  if (!content) return undefined
+  // Extract first heading or first non-empty line
+  const match = content.match(/^#\s+(.+)/m) || content.match(/^(.+)/m)
+  if (!match) return undefined
+  return match[1].trim().replace(/[/\\:*?"<>|]/g, '').slice(0, 60) || undefined
+}
+
 function stopWatching(state: WindowState): void {
   if (state.watcher) {
     state.watcher.close()
@@ -299,6 +309,7 @@ ipcMain.handle('save-file', async (event, content: string) => {
   const state = getState(win)
   if (!state.filePath) {
     const result = await dialog.showSaveDialog(win, {
+      defaultPath: suggestFileName(win, content),
       filters: [
         { name: 'Markdown', extensions: ['md'] },
         { name: 'All Files', extensions: ['*'] }
@@ -314,6 +325,7 @@ ipcMain.handle('save-file-as', async (event, content: string) => {
   const win = getWinFromEvent(event)
   if (!win) return false
   const result = await dialog.showSaveDialog(win, {
+    defaultPath: suggestFileName(win, content),
     filters: [
       { name: 'Markdown', extensions: ['md'] },
       { name: 'All Files', extensions: ['*'] }
@@ -327,16 +339,22 @@ ipcMain.handle('export-pdf', async (event) => {
   const win = getWinFromEvent(event)
   if (!win) return false
   const result = await dialog.showSaveDialog(win, {
+    defaultPath: suggestFileName(win),
     filters: [{ name: 'PDF', extensions: ['pdf'] }]
   })
   if (result.canceled || !result.filePath) return false
 
   try {
+    // Expand editor to full content height for printing
+    const cssKey = await win.webContents.insertCSS(
+      'html, body { height: auto !important; overflow: visible !important; } #titlebar { display: none !important; } #editor { height: auto !important; overflow: visible !important; } #editor .ProseMirror { min-height: auto !important; }'
+    )
     const pdfData = await win.webContents.printToPDF({
       marginType: 0,
       printBackground: true,
       pageSize: 'A4'
     })
+    await win.webContents.removeInsertedCSS(cssKey)
     await writeFile(result.filePath, pdfData)
     return true
   } catch {
@@ -348,6 +366,7 @@ ipcMain.handle('export-html', async (event, htmlContent: string) => {
   const win = getWinFromEvent(event)
   if (!win) return false
   const result = await dialog.showSaveDialog(win, {
+    defaultPath: suggestFileName(win),
     filters: [{ name: 'HTML', extensions: ['html'] }]
   })
   if (result.canceled || !result.filePath) return false
