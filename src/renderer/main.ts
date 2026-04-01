@@ -29,6 +29,7 @@ interface AgentChangeEntry {
   id: number
   summary: string
   timestamp: number
+  targetText: string | null
 }
 
 const MAX_AGENT_CHANGES = 5
@@ -46,19 +47,117 @@ function formatRelativeTime(timestamp: number): string {
   return `${diffDay}d ago`
 }
 
-function summarizeAgentChange(previous: string, next: string): string {
-  const previousLines = previous.split('\n').map((line) => line.trim()).filter(Boolean)
-  const nextLines = next.split('\n').map((line) => line.trim()).filter(Boolean)
-  const added = nextLines.filter((line) => !previousLines.includes(line))
-  const removed = previousLines.filter((line) => !nextLines.includes(line))
+function isHeadingLine(line: string): boolean {
+  return /^#{1,6}\s+/.test(line.trim())
+}
 
-  if (added.length > 0) {
-    return `Updated: ${added[0].slice(0, 140)}`
+function normalizeLine(line: string): string {
+  return line.trim()
+}
+
+function countLineOccurrences(lines: string[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const line of lines) {
+    counts.set(line, (counts.get(line) ?? 0) + 1)
   }
-  if (removed.length > 0) {
-    return `Removed: ${removed[0].slice(0, 140)}`
+  return counts
+}
+
+function collectLineDiff(previousLines: string[], nextLines: string[]): { added: string[]; removed: string[] } {
+  const previousCounts = countLineOccurrences(previousLines)
+  const nextCounts = countLineOccurrences(nextLines)
+  const added: string[] = []
+  const removed: string[] = []
+
+  for (const line of nextLines) {
+    const count = previousCounts.get(line) ?? 0
+    if (count > 0) {
+      previousCounts.set(line, count - 1)
+    } else {
+      added.push(line)
+    }
   }
-  return 'Agent updated the document structure.'
+
+  for (const line of previousLines) {
+    const count = nextCounts.get(line) ?? 0
+    if (count > 0) {
+      nextCounts.set(line, count - 1)
+    } else {
+      removed.push(line)
+    }
+  }
+
+  return { added, removed }
+}
+
+function findFirstChangedLineIndex(previousLines: string[], nextLines: string[]): number {
+  const max = Math.max(previousLines.length, nextLines.length)
+  for (let i = 0; i < max; i++) {
+    if ((previousLines[i] ?? '') !== (nextLines[i] ?? '')) return i
+  }
+  return -1
+}
+
+function findHeadingContext(lines: string[], changedIndex: number): string | null {
+  const safeIndex = Math.min(Math.max(changedIndex, 0), lines.length - 1)
+  for (let i = safeIndex; i >= 0; i--) {
+    const line = lines[i]?.trim() ?? ''
+    if (isHeadingLine(line)) return line.slice(0, 80)
+  }
+  return null
+}
+
+function buildChangeLabel(addedCount: number, removedCount: number): string {
+  if (addedCount > 0 && removedCount > 0) return 'Updated'
+  if (addedCount > 0) return 'Added'
+  if (removedCount > 0) return 'Removed'
+  return 'Reworked'
+}
+
+function formatLineDelta(addedCount: number, removedCount: number): string {
+  if (addedCount === 0 && removedCount === 0) return ''
+  if (addedCount > 0 && removedCount > 0) return ` (+${addedCount}/-${removedCount} lines)`
+  if (addedCount > 0) return ` (+${addedCount} lines)`
+  return ` (-${removedCount} lines)`
+}
+
+function analyzeAgentChange(previous: string, next: string): { summary: string; targetText: string | null } {
+  const previousLines = previous.split('\n').map(normalizeLine).filter(Boolean)
+  const nextLines = next.split('\n').map(normalizeLine).filter(Boolean)
+  const { added, removed } = collectLineDiff(previousLines, nextLines)
+  const changedIndex = findFirstChangedLineIndex(previousLines, nextLines)
+  const headingContext = findHeadingContext(nextLines, changedIndex >= 0 ? changedIndex : nextLines.length - 1)
+    ?? findHeadingContext(previousLines, changedIndex >= 0 ? changedIndex : previousLines.length - 1)
+  const label = buildChangeLabel(added.length, removed.length)
+  const lineDelta = formatLineDelta(added.length, removed.length)
+
+  if (headingContext) {
+    return {
+      summary: `${label} ${headingContext}${lineDelta}`,
+      targetText: headingContext.replace(/^#{1,6}\s+/, '')
+    }
+  }
+
+  const firstAdded = added.find((line) => !isHeadingLine(line))
+  if (firstAdded) {
+    return {
+      summary: `${label} paragraph: ${firstAdded.slice(0, 110)}${lineDelta}`,
+      targetText: firstAdded
+    }
+  }
+
+  const firstRemoved = removed.find((line) => !isHeadingLine(line))
+  if (firstRemoved) {
+    return {
+      summary: `${label} paragraph: ${firstRemoved.slice(0, 110)}${lineDelta}`,
+      targetText: firstRemoved
+    }
+  }
+
+  return {
+    summary: `Agent updated the document structure${lineDelta}`.trim(),
+    targetText: null
+  }
 }
 
 async function init(): Promise<void> {
@@ -84,6 +183,38 @@ async function init(): Promise<void> {
   const agentSummary = document.getElementById('agent-summary')
   const agentChangeList = document.getElementById('agent-change-list')
 
+  const jumpToAgentChange = (change: AgentChangeEntry): void => {
+    const editorEl = document.getElementById('editor')
+    const proseMirror = document.querySelector('#editor .ProseMirror')
+    if (!editorEl || !proseMirror) return
+
+    const children = Array.from(proseMirror.children) as HTMLElement[]
+    const normalizedTarget = change.targetText?.trim().toLowerCase()
+    let match: HTMLElement | null = null
+
+    if (normalizedTarget) {
+      match = children.find((child) => {
+        const text = child.textContent?.trim().toLowerCase() ?? ''
+        return text === normalizedTarget || text.startsWith(normalizedTarget) || text.includes(normalizedTarget)
+      }) ?? null
+    }
+
+    if (!match) {
+      match = children[0] ?? null
+    }
+    if (!match) return
+
+    match.classList.remove('agent-change-target')
+    editorEl.scrollTo({
+      top: Math.max(match.offsetTop - 24, 0),
+      behavior: 'smooth'
+    })
+    requestAnimationFrame(() => {
+      match?.classList.add('agent-change-target')
+      setTimeout(() => match?.classList.remove('agent-change-target'), 1800)
+    })
+  }
+
   const renderAgentUI = (): void => {
     if (agentStatus) {
       if (agentState === 'active') {
@@ -108,9 +239,15 @@ async function init(): Promise<void> {
         const time = document.createElement('span')
         time.className = 'agent-change-time'
         time.textContent = formatRelativeTime(change.timestamp)
-        const summary = document.createElement('div')
-        summary.className = 'agent-change-summary'
-        summary.textContent = change.summary
+        const summary = document.createElement('button')
+        summary.type = 'button'
+        summary.className = 'agent-change-link'
+        summary.addEventListener('click', () => jumpToAgentChange(change))
+        summary.title = change.targetText ? `Jump to ${change.targetText}` : 'Jump to document'
+        const summaryText = document.createElement('span')
+        summaryText.className = 'agent-change-summary'
+        summaryText.textContent = change.summary
+        summary.appendChild(summaryText)
         item.append(time, summary)
         agentChangeList.appendChild(item)
       }
@@ -259,11 +396,13 @@ img{max-width:100%}
     currentMarkdown = content
     lastAgentUpdateAt = Date.now()
     agentUpdateCount += 1
+    const changeInfo = analyzeAgentChange(previousMarkdown, content)
     agentChanges = [
       {
         id: ++agentChangeId,
-        summary: summarizeAgentChange(previousMarkdown, content),
-        timestamp: lastAgentUpdateAt
+        summary: changeInfo.summary,
+        timestamp: lastAgentUpdateAt,
+        targetText: changeInfo.targetText
       },
       ...agentChanges
     ].slice(0, MAX_AGENT_CHANGES)

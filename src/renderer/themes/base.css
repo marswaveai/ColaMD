@@ -103,10 +103,28 @@ html, body {
   font-size: 12px;
 }
 
+.agent-change-link {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-change-link:hover .agent-change-summary {
+  color: var(--link-color);
+}
+
 .agent-change-summary {
   color: var(--text-color);
   font-size: 14px;
   line-height: 1.5;
+}
+
+#editor .ProseMirror .agent-change-target {
+  animation: agent-jump-highlight 1.8s ease;
 }
 
 #error-toast {
@@ -148,6 +166,15 @@ html, body {
 @keyframes agent-breathe {
   0%, 100% { opacity: 0.45; transform: scale(0.95); }
   50% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes agent-jump-highlight {
+  0% {
+    background: color-mix(in srgb, var(--link-color) 22%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 #editor {
