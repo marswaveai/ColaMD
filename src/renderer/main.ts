@@ -55,6 +55,21 @@ function normalizeLine(line: string): string {
   return line.trim()
 }
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/!\[.*?\]\(.*?\)/g, '')       // images
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')     // inline code and code blocks
+    .replace(/[*_]{1,2}([^*_]+)[*_]{1,2}/g, '$1') // bold and italic
+    .replace(/^#{1,6}\s+/gm, '')           // headings
+    .replace(/^[-*+]\s+/gm, '')            // unordered list markers
+    .replace(/^\d+\.\s+/gm, '')            // ordered list markers
+    .replace(/^>\s+/gm, '')                 // blockquotes
+    .replace(/^---$/gm, '')                 // horizontal rules
+    .replace(/\|[^|\n]+/g, '')             // table cells
+    .trim()
+}
+
 function countLineOccurrences(lines: string[]): Map<string, number> {
   const counts = new Map<string, number>()
   for (const line of lines) {
@@ -134,7 +149,7 @@ function analyzeAgentChange(previous: string, next: string): { summary: string; 
   if (headingContext) {
     return {
       summary: `${label} ${headingContext}${lineDelta}`,
-      targetText: headingContext.replace(/^#{1,6}\s+/, '')
+      targetText: stripMarkdown(headingContext)
     }
   }
 
@@ -142,7 +157,7 @@ function analyzeAgentChange(previous: string, next: string): { summary: string; 
   if (firstAdded) {
     return {
       summary: `${label} paragraph: ${firstAdded.slice(0, 110)}${lineDelta}`,
-      targetText: firstAdded
+      targetText: stripMarkdown(firstAdded)
     }
   }
 
@@ -150,7 +165,7 @@ function analyzeAgentChange(previous: string, next: string): { summary: string; 
   if (firstRemoved) {
     return {
       summary: `${label} paragraph: ${firstRemoved.slice(0, 110)}${lineDelta}`,
-      targetText: firstRemoved
+      targetText: stripMarkdown(firstRemoved)
     }
   }
 

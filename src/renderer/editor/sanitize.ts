@@ -76,7 +76,15 @@ export function sanitizeHTMLFragment(raw: string): string {
     }
     // Walk promoted elements so their attributes are also sanitized
     for (const el of promoted) {
-      walk(el)
+      // Check if the promoted element's own tag is allowed, otherwise strip it too
+      if (ALLOWED_HTML_TAGS.has(el.tagName.toLowerCase())) {
+        walk(el)
+      } else {
+        // Strip disallowed tag but promote its children for further processing
+        const childNodes = Array.from(el.childNodes)
+        el.replaceWith(...childNodes)
+        promoted.push(...Array.from(childNodes).filter((n): n is Element => n instanceof Element))
+      }
     }
   }
 
