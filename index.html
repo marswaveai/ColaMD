@@ -3,403 +3,190 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ColaMD — The Agent Native Markdown Editor</title>
-<meta name="description" content="Real-time collaboration between humans and AI agents. See your agent's changes as they happen.">
+<title>ColaMD — The Free Markdown Editor for Humans and AI Agents</title>
+<meta name="description" content="ColaMD is an open-source, free, lightweight, and elegant Markdown editor with real-time sync for AI agent changes.">
 <link rel="icon" type="image/svg+xml" href="resources/icon.svg">
 <style>
+  :root {
+    --paper: #f4f1ed;
+    --paper-deep: #e9e4de;
+    --ink: #292725;
+    --muted: #77716c;
+    --line: #d8d1ca;
+    --accent: #c44b2b;
+    --accent-dark: #9e371f;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-
   body {
     font-family: Georgia, 'Palatino Linotype', serif;
-    background: #f0edea;
-    color: #2c2c2c;
+    background: var(--paper);
+    color: var(--ink);
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
   }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-dark); }
+  .container { max-width: 1040px; margin: 0 auto; padding: 0 48px; }
 
-  a { color: #c44b2b; text-decoration: none; }
-  a:hover { opacity: 0.8; }
-
-  .container {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 0 48px;
-  }
-
-  /* Nav */
   nav {
-    padding: 32px 0;
+    padding: 28px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    border-bottom: 1px solid var(--line);
   }
+  .brand { display: flex; align-items: center; gap: 12px; color: var(--ink); font-weight: 700; }
+  .logo { width: 42px; height: 42px; border-radius: 11px; overflow: hidden; border: 1.5px solid var(--line); }
+  .logo img { width: 100%; height: 100%; display: block; }
+  .brand-name { font-size: 1.15rem; letter-spacing: -0.02em; }
+  nav .links { display: flex; align-items: center; gap: 28px; font-size: 0.9rem; }
+  nav .links a { color: var(--muted); }
+  nav .links a:hover { color: var(--accent); }
+  nav .language { color: var(--ink) !important; font-weight: 600; }
 
-  .logo {
-    display: inline-block;
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1.5px solid #d8d3ce;
-  }
+  .hero { padding: 112px 0 124px; max-width: 860px; }
+  .eyebrow { color: var(--accent); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+  .hero h1 { margin-top: 20px; font-size: clamp(3.5rem, 8vw, 6.8rem); font-weight: 700; letter-spacing: -0.065em; line-height: 0.98; }
+  .hero .subtitle { margin-top: 26px; font-size: clamp(1.35rem, 2.4vw, 2rem); line-height: 1.3; color: var(--accent); }
+  .hero .desc { margin-top: 28px; max-width: 690px; color: var(--muted); font-size: 1.12rem; line-height: 1.9; }
+  .hero .actions { margin-top: 42px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .btn-primary { display: inline-block; background: var(--accent); color: var(--paper); font-size: 1rem; font-weight: 700; padding: 13px 34px; border-radius: 7px; }
+  .btn-primary:hover { background: var(--accent-dark); color: var(--paper); }
+  .btn-ghost { color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+  .btn-ghost:hover { color: var(--accent); border-color: var(--accent); }
 
-  .logo img {
-    width: 100%;
-    height: 100%;
-  }
+  section { border-top: 1px solid var(--line); }
+  .section-grid { padding: 76px 0; display: grid; grid-template-columns: 230px 1fr; gap: 72px; align-items: start; }
+  h2 { font-size: 1.2rem; line-height: 1.3; }
+  .section-intro { color: var(--muted); font-size: 1.05rem; line-height: 1.9; }
+  .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 14px; align-items: center; }
+  .flow-step { padding: 22px 16px; background: var(--paper-deep); border-radius: 9px; text-align: center; }
+  .flow-step .label { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .flow-step .value { margin-top: 4px; font-size: 0.98rem; font-weight: 700; }
+  .flow-step .value.accent { color: var(--accent); }
+  .flow-arrow { color: var(--line); font-size: 1.2rem; }
 
-  nav .links {
-    display: flex;
-    gap: 32px;
-    font-size: 0.9rem;
-    color: #777;
-  }
+  .features { padding: 76px 0; }
+  .features-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 38px; }
+  .features-header p { color: var(--muted); font-size: 0.95rem; }
+  .feature-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .feature-item { min-height: 154px; padding: 24px 22px; border-left: 3px solid var(--line); background: rgba(255,255,255,0.18); transition: border-color 0.2s, transform 0.2s; }
+  .feature-item:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .feature-item h3 { font-size: 1rem; line-height: 1.3; }
+  .feature-item p { margin-top: 8px; color: var(--muted); font-size: 0.88rem; line-height: 1.65; }
 
-  nav .links a { color: #777; }
-  nav .links a:hover { color: #c44b2b; }
+  .statement { padding: 88px 0; }
+  .statement p { max-width: 760px; font-size: clamp(1.7rem, 3.4vw, 2.7rem); letter-spacing: -0.035em; line-height: 1.25; }
+  .statement em { color: var(--accent); font-style: normal; }
 
-  /* Hero */
-  .hero {
-    padding: 100px 0 120px;
-  }
+  .download { padding: 76px 0; }
+  .download-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 32px; }
+  .version { color: var(--accent); font-size: 0.85rem; }
+  .download-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .download-card { padding: 24px; background: var(--paper-deep); border-radius: 9px; display: flex; justify-content: space-between; align-items: center; color: var(--ink); }
+  .download-card:hover { background: #ded8d1; color: var(--ink); }
+  .platform { font-weight: 700; }
+  .format { color: var(--accent); font-size: 0.85rem; }
 
-  .hero h1 {
-    font-size: 6rem;
-    font-weight: 700;
-    letter-spacing: -0.04em;
-    line-height: 1.05;
-    margin-bottom: 0;
-  }
+  footer { padding: 38px 0 54px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 0.84rem; }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--accent); }
+  .footer-links { display: flex; gap: 22px; }
 
-  .hero .subtitle {
-    font-size: 2rem;
-    color: #c44b2b;
-    margin-top: 16px;
-    font-weight: 400;
-    letter-spacing: -0.01em;
-  }
-
-  .hero .desc {
-    font-size: 1.15rem;
-    color: #777;
-    margin-top: 32px;
-    max-width: 520px;
-    line-height: 1.8;
-  }
-
-  .hero .actions {
-    margin-top: 48px;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-  }
-
-  .btn-primary {
-    display: inline-block;
-    background: #c44b2b;
-    color: #f0edea;
-    font-family: Georgia, serif;
-    font-size: 1rem;
-    font-weight: 600;
-    padding: 14px 40px;
-    border-radius: 8px;
-    transition: opacity 0.2s;
-  }
-  .btn-primary:hover { opacity: 0.85; text-decoration: none; }
-
-  .btn-ghost {
-    font-size: 1rem;
-    color: #777;
-    border-bottom: 1px solid #d8d3ce;
-    padding-bottom: 2px;
-  }
-  .btn-ghost:hover { color: #c44b2b; border-color: #c44b2b; }
-
-  /* How it works */
-  .how {
-    padding: 80px 0;
-    border-top: 1px solid #d8d3ce;
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 64px;
-    align-items: start;
-  }
-
-  .how h2 {
-    font-size: 1.3rem;
-    font-weight: 700;
-  }
-
-  .flow {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-  }
-
-  .flow-step {
-    flex: 1;
-    padding: 24px;
-    background: #e8e4df;
-    border-radius: 10px;
-    text-align: center;
-  }
-
-  .flow-step .label {
-    font-size: 0.8rem;
-    color: #777;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 8px;
-  }
-
-  .flow-step .value {
-    font-size: 1rem;
-    font-weight: 600;
-  }
-
-  .flow-step .value.accent { color: #c44b2b; }
-
-  .flow-arrow {
-    font-size: 1.2rem;
-    color: #d8d3ce;
-    flex-shrink: 0;
-  }
-
-  /* Features */
-  .features {
-    padding: 80px 0;
-    border-top: 1px solid #d8d3ce;
-  }
-
-  .features h2 {
-    font-size: 1.3rem;
-    font-weight: 700;
-    margin-bottom: 48px;
-  }
-
-  .feature-list {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-
-  .feature-item {
-    padding: 28px 24px;
-    border-left: 3px solid #d8d3ce;
-    transition: border-color 0.2s;
-  }
-
-  .feature-item:hover {
-    border-color: #c44b2b;
-  }
-
-  .feature-item h3 {
-    font-size: 1rem;
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-
-  .feature-item p {
-    font-size: 0.9rem;
-    color: #777;
-    line-height: 1.6;
-  }
-
-  /* Philosophy */
-  .philosophy {
-    padding: 80px 0;
-    border-top: 1px solid #d8d3ce;
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 64px;
-    align-items: start;
-  }
-
-  .philosophy h2 {
-    font-size: 1.3rem;
-    font-weight: 700;
-  }
-
-  .philosophy p {
-    font-size: 1.05rem;
-    color: #777;
-    line-height: 1.9;
-  }
-
-  .philosophy em {
-    color: #2c2c2c;
-    font-style: normal;
-    font-weight: 600;
-  }
-
-  /* Download */
-  .download {
-    padding: 80px 0;
-    border-top: 1px solid #d8d3ce;
-  }
-
-  .download h2 {
-    font-size: 1.3rem;
-    font-weight: 700;
-    margin-bottom: 32px;
-  }
-
-  .download-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-  }
-
-  .download-card {
-    padding: 24px;
-    background: #e8e4df;
-    border-radius: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .download-card .platform {
-    font-weight: 600;
-    font-size: 1rem;
-  }
-
-  .download-card .format {
-    font-size: 0.85rem;
-    color: #c44b2b;
-  }
-
-  /* Footer */
-  footer {
-    padding: 40px 0 60px;
-    border-top: 1px solid #d8d3ce;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.85rem;
-    color: #777;
-  }
-
-  footer a { color: #777; }
-  footer a:hover { color: #c44b2b; }
-
-  .footer-links {
-    display: flex;
-    gap: 24px;
-  }
-
-  /* Responsive */
-  @media (max-width: 768px) {
+  @media (max-width: 760px) {
     .container { padding: 0 24px; }
-    .hero { padding: 60px 0 80px; }
-    .hero h1 { font-size: 3.5rem; }
-    .hero .subtitle { font-size: 1.4rem; }
-    .how, .philosophy { grid-template-columns: 1fr; gap: 24px; }
-    .flow { flex-direction: column; }
-    .flow-arrow { transform: rotate(90deg); }
-    .feature-list { grid-template-columns: 1fr; }
-    .download-grid { grid-template-columns: 1fr; }
+    nav .links { gap: 14px; font-size: 0.8rem; }
+    nav .links a:nth-child(1), nav .links a:nth-child(2) { display: none; }
+    .hero { padding: 76px 0 88px; }
+    .section-grid { grid-template-columns: 1fr; gap: 22px; padding: 58px 0; }
+    .flow { grid-template-columns: 1fr; gap: 8px; }
+    .flow-arrow { transform: rotate(90deg); justify-self: center; }
+    .features { padding: 58px 0; }
+    .features-header { display: block; }
+    .features-header p { margin-top: 8px; }
+    .feature-list, .download-grid { grid-template-columns: 1fr; }
+    .statement { padding: 64px 0; }
     footer { flex-direction: column; gap: 16px; text-align: center; }
   }
 </style>
 </head>
 <body>
-
 <div class="container">
-
   <nav>
-    <div class="logo"><img src="resources/icon.svg" alt="ColaMD"></div>
+    <a class="brand" href="./">
+      <span class="logo"><img src="resources/icon.svg" alt="ColaMD"></span>
+      <span class="brand-name">ColaMD</span>
+    </a>
     <div class="links">
       <a href="#features">Features</a>
       <a href="#download">Download</a>
       <a href="https://github.com/marswaveai/ColaMD">GitHub</a>
+      <a class="language" href="https://github.com/marswaveai/ColaMD/blob/main/README_CN.md">中文</a>
     </div>
   </nav>
 
-  <section class="hero">
-    <h1>ColaMD</h1>
-    <div class="subtitle">The Agent Native Markdown Editor</div>
-    <p class="desc">Watch your AI agent's changes in real-time. When an agent edits a .md file, ColaMD refreshes instantly — like pair programming with an AI.</p>
+  <header class="hero">
+    <div class="eyebrow">Open-source · Free · Lightweight</div>
+    <h1>A better home<br>for Markdown.</h1>
+    <div class="subtitle">An elegant Markdown editor for humans and AI agents.</div>
+    <p class="desc">Markdown has become the standard for writing, notes, documentation, and collaboration. ColaMD is a focused desktop editor built to become dependable everyday infrastructure — with real-time sync for every change your AI agent makes.</p>
     <div class="actions">
-      <a href="https://github.com/marswaveai/ColaMD/releases" class="btn-primary">Download</a>
+      <a href="https://github.com/marswaveai/ColaMD/releases" class="btn-primary">Download ColaMD</a>
       <a href="https://github.com/marswaveai/ColaMD" class="btn-ghost">View on GitHub</a>
     </div>
-  </section>
+  </header>
 
-  <section class="how">
-    <h2>How it works</h2>
-    <div class="flow">
-      <div class="flow-step">
-        <div class="label">Agent</div>
-        <div class="value">Claude, Cursor...</div>
-      </div>
-      <div class="flow-arrow">&rarr;</div>
-      <div class="flow-step">
-        <div class="label">Writes</div>
-        <div class="value accent">.md file</div>
-      </div>
-      <div class="flow-arrow">&rarr;</div>
-      <div class="flow-step">
-        <div class="label">Detects &amp; renders</div>
-        <div class="value accent">ColaMD</div>
+  <section>
+    <div class="section-grid">
+      <h2>How it works</h2>
+      <div>
+        <p class="section-intro">Open a Markdown file. Let your agent work. ColaMD watches the file and keeps your editor up to date — no closing, reopening, or manual refresh.</p>
+        <div class="flow" style="margin-top: 28px;">
+          <div class="flow-step"><div class="label">Your agent</div><div class="value">Claude, Cursor...</div></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-step"><div class="label">Writes</div><div class="value accent">.md file</div></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-step"><div class="label">Live sync</div><div class="value accent">ColaMD</div></div>
+        </div>
       </div>
     </div>
   </section>
 
   <section class="features" id="features">
-    <h2>Features</h2>
+    <div class="features-header">
+      <h2>Everything you need in a Markdown editor.</h2>
+      <p>Simple first. Powerful where it matters.</p>
+    </div>
     <div class="feature-list">
-      <div class="feature-item">
-        <h3>Live Agent Sync</h3>
-        <p>When an AI agent modifies your .md file, ColaMD detects the change and refreshes instantly.</p>
-      </div>
-      <div class="feature-item">
-        <h3>True WYSIWYG</h3>
-        <p>Type Markdown, see rich text. No split-pane preview needed.</p>
-      </div>
-      <div class="feature-item">
-        <h3>Minimal by Design</h3>
-        <p>No toolbar, no sidebar, no distractions. Just your content.</p>
-      </div>
-      <div class="feature-item">
-        <h3>Themes &amp; Export</h3>
-        <p>4 built-in themes + custom CSS import. Export to PDF.</p>
-      </div>
+      <div class="feature-item"><h3>Live Agent Sync</h3><p>Changes made by Claude Code, Cursor, Copilot, or other agents appear in real time.</p></div>
+      <div class="feature-item"><h3>Agent Activity Indicator</h3><p>A small titlebar dot shows when your agent is writing and when it has finished.</p></div>
+      <div class="feature-item"><h3>True WYSIWYG</h3><p>Type Markdown and see rich text directly. No split-pane preview.</p></div>
+      <div class="feature-item"><h3>Same-Directory Files</h3><p>Discover and switch between Markdown files in the current folder. Agent-created files appear automatically.</p></div>
+      <div class="feature-item"><h3>Task Lists</h3><p>Click checkboxes to complete tasks, or use the keyboard shortcut.</p></div>
+      <div class="feature-item"><h3>Highlights &amp; LaTeX</h3><p>Write <code>==highlighted text==</code> and render mathematical formulas with KaTeX.</p></div>
+      <div class="feature-item"><h3>Search</h3><p>Find anything in the current document with &ldquo;⌘/Ctrl+F&rdquo;.</p></div>
+      <div class="feature-item"><h3>Themes &amp; PDF Export</h3><p>Four built-in themes, custom CSS imports, and PDF export when you need a finished copy.</p></div>
+      <div class="feature-item"><h3>Cross-Platform</h3><p>Available for macOS, Windows, and Linux. Minimal by design.</p></div>
     </div>
   </section>
 
-  <section class="philosophy">
-    <h2>One thing, done well.</h2>
-    <p>No file manager. No cloud sync. No AI built in. ColaMD is a <em>viewer and editor</em> for AI-generated content — nothing more, nothing less.</p>
+  <section class="statement">
+    <p>Our ambition is simple: make ColaMD the <em>best free Markdown editor</em> — and a reliable foundation for the Markdown world.</p>
   </section>
 
   <section class="download" id="download">
-    <h2>Download</h2>
+    <div class="download-header"><h2>Download</h2><span class="version">Latest release: v1.7.3</span></div>
     <div class="download-grid">
-      <a href="https://github.com/marswaveai/ColaMD/releases" class="download-card">
-        <span class="platform">macOS</span>
-        <span class="format">.dmg</span>
-      </a>
-      <a href="https://github.com/marswaveai/ColaMD/releases" class="download-card">
-        <span class="platform">Windows</span>
-        <span class="format">.exe</span>
-      </a>
-      <a href="https://github.com/marswaveai/ColaMD/releases" class="download-card">
-        <span class="platform">Linux</span>
-        <span class="format">.AppImage</span>
-      </a>
+      <a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">macOS</span><span class="format">.dmg</span></a>
+      <a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">Windows</span><span class="format">.exe</span></a>
+      <a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">Linux</span><span class="format">.AppImage / .deb</span></a>
     </div>
   </section>
 
   <footer>
-    <span>MIT License &middot; Built by <a href="https://marswave.ai">marswave.ai</a></span>
-    <div class="footer-links">
-      <a href="https://github.com/marswaveai/ColaMD">GitHub</a>
-      <a href="https://github.com/marswaveai/ColaMD/releases">Releases</a>
-    </div>
+    <span>MIT License · Built by <a href="https://marswave.ai">marswave.ai</a></span>
+    <div class="footer-links"><a href="https://github.com/marswaveai/ColaMD">GitHub</a><a href="https://github.com/marswaveai/ColaMD/releases">Releases</a></div>
   </footer>
-
 </div>
-
 </body>
 </html>
