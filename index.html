@@ -74,6 +74,14 @@
   .document .lead { margin-top: 12px; color: var(--muted); font-size: 0.82rem; line-height: 1.75; }
   .document h3 { margin-top: 20px; color: var(--accent); font-size: 0.87rem; }
   .document ul { margin: 8px 0 0 17px; color: var(--muted); font-size: 0.78rem; line-height: 1.75; }
+  .heading-sample { margin-top: 8px; line-height: 1.3; }
+  .heading-sample .sample-h1 { font-size: 0.98rem; font-weight: 700; }
+  .heading-sample .sample-h2 { font-size: 0.86rem; font-weight: 700; }
+  .heading-sample .sample-h3 { color: var(--accent); font-size: 0.76rem; font-weight: 700; }
+  .source { margin-top: 4px; color: var(--faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.58rem; line-height: 1.45; }
+  .sample-render { margin-top: 8px; color: var(--muted); font-size: 0.78rem; }
+  .sample-render strong { color: var(--ink); }
+  .sample-render mark { padding: 0 2px; background: #eadb8f; color: var(--ink); }
   .document .cursor { display: inline-block; width: 1px; height: 0.9em; margin-left: 2px; vertical-align: -0.1em; background: var(--accent); animation: blink 1.2s infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
@@ -162,7 +170,7 @@
         <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="window-title">ColaMD</span></div>
         <div class="window-body">
           <aside class="file-list"><div class="file-label" data-en="FILES" data-zh="文件">FILES</div><div class="file">readme.md</div><div class="file">notes.md</div><div class="file active">markdown.md</div><div class="file">tasks.md</div></aside>
-          <article class="document"><div class="document-meta"><span>markdown.md</span><span class="sync">SYNCED</span></div><h2 data-en="Markdown, made simple." data-zh="Markdown，如此简单。">Markdown, made simple.</h2><p class="lead" data-en="Write once. Read anywhere. Keep your ideas close to the content." data-zh="写一次，处处可读。让想法回到内容本身。">Write once. Read anywhere. Keep your ideas close to the content.</p><h3 data-en="Everything starts with a heading." data-zh="一切，从一个标题开始。">Everything starts with a heading.</h3><ul><li data-en="Rich text, without the clutter" data-zh="没有干扰的富文本">Rich text, without the clutter</li><li data-en="Lists, links, and tasks" data-zh="列表、链接和待办事项">Lists, links, and tasks</li><li data-en="A clean place to think" data-zh="一个干净的思考空间">A clean place to think</li></ul><span class="cursor"></span></article>
+          <article class="document"><div class="document-meta"><span>markdown.md</span><span class="sync">SYNCED</span></div><h2 data-en="Markdown Syntax Cheat Sheet" data-zh="Markdown 语法速查">Markdown Syntax Cheat Sheet</h2><p class="lead" data-en="ColaMD supports these Markdown formats. See the source below each example." data-zh="ColaMD 支持下面这些 Markdown 格式。每个示例下方是它的源码写法。">ColaMD supports these Markdown formats. See the source below each example.</p><h3 data-en="Headings" data-zh="标题">Headings</h3><div class="heading-sample"><div class="sample-h1" data-en="Heading 1" data-zh="一级标题">Heading 1</div><div class="sample-h2" data-en="Heading 2" data-zh="二级标题">Heading 2</div><div class="sample-h3" data-en="Heading 3" data-zh="三级标题">Heading 3</div></div><div class="source" data-en="Source: # Heading 1 · ## Heading 2 · ### Heading 3" data-zh="源码：# 一级标题 · ## 二级标题 · ### 三级标题">Source: # Heading 1 · ## Heading 2 · ### Heading 3</div><h3 data-en="Emphasis" data-zh="强调">Emphasis</h3><div class="sample-render" data-en-html="&lt;strong&gt;Bold&lt;/strong&gt;, &lt;em&gt;Italic&lt;/em&gt;, &lt;del&gt;Strike&lt;/del&gt;, &lt;mark&gt;Highlight&lt;/mark&gt;" data-zh-html="&lt;strong&gt;加粗&lt;/strong&gt;、&lt;em&gt;斜体&lt;/em&gt;、&lt;del&gt;删除线&lt;/del&gt;、&lt;mark&gt;高亮&lt;/mark&gt;"><strong>Bold</strong>, <em>Italic</em>, <del>Strike</del>, <mark>Highlight</mark></div><div class="source" data-en="Source: **Bold** · *Italic* · ~~Strike~~ · ==Highlight==" data-zh="源码：**加粗** · *斜体* · ~~删除线~~ · ==高亮==">Source: **Bold** · *Italic* · ~~Strike~~ · ==Highlight==</div><span class="cursor"></span></article>
         </div>
       </div>
     </div>
