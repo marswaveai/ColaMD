@@ -54,13 +54,29 @@
   .btn-ghost:hover { color: var(--accent); border-color: var(--accent); }
   .hero-meta { margin-top: 27px; color: var(--faint); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.7rem; letter-spacing: 0.03em; }
 
-  .screenshots { position: relative; min-height: 500px; display: flex; align-items: center; justify-content: center; }
-  .screenshots::before { content: ''; position: absolute; width: 360px; height: 360px; border-radius: 50%; background: #ead7cc; opacity: 0.7; filter: blur(2px); }
-  .screen { position: absolute; overflow: hidden; width: 238px; height: 468px; border: 7px solid var(--paper-light); border-radius: 12px; background: var(--paper-light); box-shadow: 0 28px 55px var(--shadow); }
-  .screen img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: top center; }
-  .screen.back { transform: translate(-100px, 21px) rotate(-6deg); }
-  .screen.front { transform: translate(87px, -19px) rotate(5deg); }
-  .screen-label { position: absolute; z-index: 3; right: 12px; bottom: 12px; padding: 5px 9px; border-radius: 4px; background: var(--ink); color: var(--paper-light); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .editor-window { position: relative; transform: translateY(24px) rotate(1.2deg); }
+  .editor-window::before { content: ''; position: absolute; inset: 24px -18px -22px 22px; border: 1px solid var(--line); border-radius: 14px; transform: rotate(-2.4deg); }
+  .window { position: relative; overflow: hidden; border: 1px solid #d0c7bd; border-radius: 12px; background: var(--paper-light); box-shadow: 0 26px 55px var(--shadow); }
+  .window-bar { height: 43px; display: flex; align-items: center; gap: 7px; padding: 0 16px; border-bottom: 1px solid #e3ddd6; background: #eee9e3; }
+  .window-dot { width: 8px; height: 8px; border-radius: 50%; background: #cfc6bd; }
+  .window-dot:first-child { background: #d38168; }
+  .window-title { margin-left: 9px; color: var(--faint); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.68rem; }
+  .window-body { min-height: 350px; display: grid; grid-template-columns: 145px 1fr; }
+  .file-list { padding: 23px 14px; border-right: 1px solid #e3ddd6; background: #f0ebe5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .file-label { margin: 0 8px 14px; color: var(--faint); font-size: 0.61rem; font-weight: 700; letter-spacing: 0.12em; }
+  .file { overflow: hidden; margin: 3px 0; padding: 7px 8px; border-radius: 5px; color: var(--muted); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+  .file.active { background: #e3d8cf; color: var(--ink); font-weight: 600; }
+  .file::before { content: '·'; margin-right: 7px; color: var(--accent); font-weight: 700; }
+  .document { padding: 26px 31px 28px; }
+  .document-meta { display: flex; align-items: center; justify-content: space-between; color: var(--faint); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.63rem; }
+  .sync { color: #709070; font-weight: 700; letter-spacing: 0.04em; }
+  .sync::before { content: '●'; margin-right: 5px; font-size: 0.55rem; }
+  .document h2 { margin-top: 29px; font-size: 1.72rem; letter-spacing: -0.04em; line-height: 1.15; }
+  .document .lead { margin-top: 12px; color: var(--muted); font-size: 0.82rem; line-height: 1.75; }
+  .document h3 { margin-top: 20px; color: var(--accent); font-size: 0.87rem; }
+  .document ul { margin: 8px 0 0 17px; color: var(--muted); font-size: 0.78rem; line-height: 1.75; }
+  .document .cursor { display: inline-block; width: 1px; height: 0.9em; margin-left: 2px; vertical-align: -0.1em; background: var(--accent); animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
 
   section { border-top: 1px solid var(--line); }
   .manifesto { padding: 94px 0 102px; display: block; }
@@ -97,7 +113,7 @@
   @media (max-width: 860px) {
     .container { padding: 0 30px; }
     .hero { grid-template-columns: 1fr; gap: 50px; padding: 82px 0 92px; }
-    .screenshots { min-height: 510px; max-width: 620px; width: 100%; justify-self: center; }
+    .editor-window { max-width: 620px; width: 100%; justify-self: center; transform: rotate(1.2deg); }
     .manifesto .copy { gap: 36px; }
   }
   @media (max-width: 650px) {
@@ -107,10 +123,11 @@
     nav .links a:nth-child(1), nav .links a:nth-child(2) { display: none; }
     .hero h1 { font-size: 4.2rem; }
     .hero .subtitle { font-size: 1.18rem; }
-    .screenshots { min-height: 420px; }
-    .screen { width: 174px; height: 342px; border-width: 5px; }
-    .screen.back { transform: translate(-68px, 16px) rotate(-6deg); }
-    .screen.front { transform: translate(62px, -14px) rotate(5deg); }
+    .editor-window { max-width: 100%; }
+    .window-body { grid-template-columns: 104px 1fr; }
+    .file-list { padding: 18px 8px; }
+    .document { padding: 22px 18px; }
+    .document h2 { font-size: 1.42rem; }
     .manifesto { padding: 66px 0 74px; }
     .manifesto .copy { display: block; margin-top: 25px; }
     .manifesto .copy p + p { margin-top: 17px; }
@@ -134,17 +151,21 @@
   <header class="hero">
     <div>
       <div class="kicker"><span class="free-badge">FREE</span><span data-en="Open-source · Lightweight" data-zh="开源 · 轻量">Open-source · Lightweight</span></div>
-      <h1 data-en-html="Markdown,<br><em>made calm.</em>" data-zh-html="Markdown，<br><em>安静地写。</em>">Markdown,<br><em>made calm.</em></h1>
+      <h1 data-en-html="Writing should feel<br><em>this simple.</em>" data-zh-html="写作本该如此<br><em>简单。</em>">Writing should feel<br><em>this simple.</em></h1>
       <div class="subtitle" data-en-html="An elegant, <strong>free forever</strong> Markdown editor for humans and AI agents." data-zh-html="一款优雅、<strong>永久免费</strong>的 Markdown 编辑器，适合人类与 AI Agent。">An elegant, <strong>free forever</strong> Markdown editor for humans and AI agents.</div>
       <p class="desc" data-en="Markdown is the common language of writing, notes, documentation, and collaboration. ColaMD gives it a quiet, focused home — with real-time sync for every change your AI agent makes." data-zh="Markdown 已经成为写作、记录、文档和协作的共同语言。ColaMD 给它一个安静、专注的家，同时实时同步 AI Agent 做出的每一次改动。">Markdown is the common language of writing, notes, documentation, and collaboration. ColaMD gives it a quiet, focused home — with real-time sync for every change your AI agent makes.</p>
       <div class="actions"><a href="https://github.com/marswaveai/ColaMD/releases" class="btn-primary" data-en="Download for free" data-zh="免费下载">Download for free</a><a href="https://github.com/marswaveai/ColaMD" class="btn-ghost" data-en="View on GitHub" data-zh="查看 GitHub">View on GitHub</a></div>
       <div class="hero-meta" data-en="FREE FOREVER · macOS · Windows · Linux · MIT License · v1.7.3" data-zh="永久免费 · macOS · Windows · Linux · MIT 协议 · v1.7.3">FREE FOREVER · macOS · Windows · Linux · MIT License · v1.7.3</div>
     </div>
 
-    <div class="screenshots" aria-label="ColaMD screenshots">
-      <figure class="screen back"><img src="resources/screenshots/markdown-rendering.png" alt="ColaMD Markdown rendering" data-en-alt="ColaMD Markdown rendering" data-zh-alt="ColaMD Markdown 渲染效果"></figure>
-      <figure class="screen front"><img src="resources/screenshots/markdown-cheatsheet.png" alt="ColaMD Markdown cheatsheet" data-en-alt="ColaMD Markdown cheatsheet" data-zh-alt="ColaMD Markdown 语法速查"></figure>
-      <div class="screen-label" data-en="Real Markdown · Real files" data-zh="真实 Markdown · 真实文件">Real Markdown · Real files</div>
+    <div class="editor-window" aria-label="ColaMD editor preview">
+      <div class="window">
+        <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="window-title">ColaMD</span></div>
+        <div class="window-body">
+          <aside class="file-list"><div class="file-label" data-en="FILES" data-zh="文件">FILES</div><div class="file active">changelog.md</div><div class="file">tasks.md</div><div class="file">format.md</div><div class="file">agent-sim.md</div></aside>
+          <article class="document"><div class="document-meta"><span>changelog.md</span><span class="sync">SYNCED</span></div><h2 data-en="ColaMD v1.7.3" data-zh="ColaMD v1.7.3">ColaMD v1.7.3</h2><p class="lead" data-en="A calmer place to write, read, and work with Markdown — even when an agent is writing beside you." data-zh="一个更安静的 Markdown 空间，即使 Agent 正在旁边写作，也能保持清晰。">A calmer place to write, read, and work with Markdown — even when an agent is writing beside you.</p><h3 data-en="What’s new" data-zh="新功能">What’s new</h3><ul><li data-en="Same-directory file list" data-zh="同目录文件列表">Same-directory file list</li><li data-en="Live updates from your agent" data-zh="Agent 改动实时同步">Live updates from your agent</li><li data-en="Highlights &amp; LaTeX" data-zh="高亮与 LaTeX">Highlights &amp; LaTeX</li></ul><span class="cursor"></span></article>
+        </div>
+      </div>
     </div>
   </header>
 
