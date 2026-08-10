@@ -41,8 +41,7 @@
 
   .hero { min-height: 680px; padding: 102px 0 116px; display: grid; grid-template-columns: minmax(300px, 0.85fr) minmax(450px, 1.15fr); gap: 70px; align-items: center; }
   .kicker, .eyebrow { color: var(--accent); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
-  .free-badge { display: inline-block; margin-right: 8px; padding: 4px 8px 3px; border-radius: 4px; background: var(--accent); color: var(--paper-light); letter-spacing: 0.12em; box-shadow: 3px 3px 0 rgba(196, 75, 43, 0.18); }
-  .hero h1 { margin-top: 22px; font-size: clamp(4rem, 8vw, 7.3rem); font-weight: 700; letter-spacing: -0.075em; line-height: 0.88; }
+  .hero h1 { margin-top: 22px; font-size: clamp(3.2rem, 5vw, 5.3rem); font-weight: 700; letter-spacing: -0.075em; line-height: 0.92; }
   .hero h1 em, .manifesto h2 em { color: var(--accent); font-style: normal; }
   .hero .subtitle { max-width: 420px; margin-top: 30px; font-size: 1.3rem; line-height: 1.45; }
   .hero .subtitle strong { color: var(--accent); font-weight: 400; }
@@ -121,7 +120,7 @@
     nav { height: 76px; }
     nav .links { gap: 14px; font-size: 0.78rem; }
     nav .links a:nth-child(1), nav .links a:nth-child(2) { display: none; }
-    .hero h1 { font-size: 4.2rem; }
+    .hero h1 { font-size: 3.5rem; }
     .hero .subtitle { font-size: 1.18rem; }
     .editor-window { max-width: 100%; }
     .window-body { grid-template-columns: 104px 1fr; }
@@ -150,20 +149,20 @@
 
   <header class="hero">
     <div>
-      <div class="kicker"><span class="free-badge">FREE</span><span data-en="Open-source · Lightweight" data-zh="开源 · 轻量">Open-source · Lightweight</span></div>
+      <div class="kicker" data-en="Open-source · Lightweight · Elegant" data-zh="免费 · 开源 · 轻量 · 优雅">Open-source · Lightweight · Elegant</div>
       <h1 data-en-html="Writing should feel<br><em>this simple.</em>" data-zh-html="写作本该如此<br><em>简单。</em>">Writing should feel<br><em>this simple.</em></h1>
-      <div class="subtitle" data-en-html="An elegant, <strong>free forever</strong> Markdown editor for humans and AI agents." data-zh-html="一款优雅、<strong>永久免费</strong>的 Markdown 编辑器，适合人类与 AI Agent。">An elegant, <strong>free forever</strong> Markdown editor for humans and AI agents.</div>
+      <div class="subtitle" data-en="An elegant Markdown editor for humans and AI agents." data-zh="一款优雅的 Markdown 编辑器，适合人类与 AI Agent。">An elegant Markdown editor for humans and AI agents.</div>
       <p class="desc" data-en="Markdown is the common language of writing, notes, documentation, and collaboration. ColaMD gives it a quiet, focused home — with real-time sync for every change your AI agent makes." data-zh="Markdown 已经成为写作、记录、文档和协作的共同语言。ColaMD 给它一个安静、专注的家，同时实时同步 AI Agent 做出的每一次改动。">Markdown is the common language of writing, notes, documentation, and collaboration. ColaMD gives it a quiet, focused home — with real-time sync for every change your AI agent makes.</p>
       <div class="actions"><a href="https://github.com/marswaveai/ColaMD/releases" class="btn-primary" data-en="Download for free" data-zh="免费下载">Download for free</a><a href="https://github.com/marswaveai/ColaMD" class="btn-ghost" data-en="View on GitHub" data-zh="查看 GitHub">View on GitHub</a></div>
-      <div class="hero-meta" data-en="FREE FOREVER · macOS · Windows · Linux · MIT License · v1.7.3" data-zh="永久免费 · macOS · Windows · Linux · MIT 协议 · v1.7.3">FREE FOREVER · macOS · Windows · Linux · MIT License · v1.7.3</div>
+      <div class="hero-meta" data-en="macOS · Windows · Linux · MIT License · v1.7.3" data-zh="macOS · Windows · Linux · MIT 协议 · v1.7.3">macOS · Windows · Linux · MIT License · v1.7.3</div>
     </div>
 
     <div class="editor-window" aria-label="ColaMD editor preview">
       <div class="window">
         <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="window-title">ColaMD</span></div>
         <div class="window-body">
-          <aside class="file-list"><div class="file-label" data-en="FILES" data-zh="文件">FILES</div><div class="file active">changelog.md</div><div class="file">tasks.md</div><div class="file">format.md</div><div class="file">agent-sim.md</div></aside>
-          <article class="document"><div class="document-meta"><span>changelog.md</span><span class="sync">SYNCED</span></div><h2 data-en="ColaMD v1.7.3" data-zh="ColaMD v1.7.3">ColaMD v1.7.3</h2><p class="lead" data-en="A calmer place to write, read, and work with Markdown — even when an agent is writing beside you." data-zh="一个更安静的 Markdown 空间，即使 Agent 正在旁边写作，也能保持清晰。">A calmer place to write, read, and work with Markdown — even when an agent is writing beside you.</p><h3 data-en="What’s new" data-zh="新功能">What’s new</h3><ul><li data-en="Same-directory file list" data-zh="同目录文件列表">Same-directory file list</li><li data-en="Live updates from your agent" data-zh="Agent 改动实时同步">Live updates from your agent</li><li data-en="Highlights &amp; LaTeX" data-zh="高亮与 LaTeX">Highlights &amp; LaTeX</li></ul><span class="cursor"></span></article>
+          <aside class="file-list"><div class="file-label" data-en="FILES" data-zh="文件">FILES</div><div class="file">readme.md</div><div class="file">notes.md</div><div class="file active">markdown.md</div><div class="file">tasks.md</div></aside>
+          <article class="document"><div class="document-meta"><span>markdown.md</span><span class="sync">SYNCED</span></div><h2 data-en="Markdown, made simple." data-zh="Markdown，如此简单。">Markdown, made simple.</h2><p class="lead" data-en="Write once. Read anywhere. Keep your ideas close to the content." data-zh="写一次，处处可读。让想法回到内容本身。">Write once. Read anywhere. Keep your ideas close to the content.</p><h3 data-en="Everything starts with a heading." data-zh="一切，从一个标题开始。">Everything starts with a heading.</h3><ul><li data-en="Rich text, without the clutter" data-zh="没有干扰的富文本">Rich text, without the clutter</li><li data-en="Lists, links, and tasks" data-zh="列表、链接和待办事项">Lists, links, and tasks</li><li data-en="A clean place to think" data-zh="一个干净的思考空间">A clean place to think</li></ul><span class="cursor"></span></article>
         </div>
       </div>
     </div>
