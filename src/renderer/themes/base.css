@@ -12,6 +12,11 @@ html, body {
   color: var(--text-color);
 }
 
+body {
+  --search-match-bg: color-mix(in srgb, var(--link-color) 18%, transparent);
+  --search-match-current-bg: color-mix(in srgb, var(--link-color) 32%, transparent);
+}
+
 #titlebar {
   -webkit-app-region: drag;
   height: 52px;
@@ -216,7 +221,7 @@ html, body {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-secondary, var(--text-muted));
   padding: 4px 8px 8px;
   user-select: none;
 }
@@ -288,7 +293,7 @@ html, body {
 }
 
 #file-list button.parent {
-  color: var(--text-muted);
+  color: var(--text-secondary, var(--text-muted));
   border-bottom: 1px solid var(--border-color);
   border-radius: 0;
   margin-bottom: 4px;
@@ -409,7 +414,7 @@ body.show-file-panel #source-editor {
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: var(--bg-color);
-  color: var(--text-muted);
+  color: var(--text-secondary, var(--text-muted));
   font: inherit;
   font-size: 12px;
   line-height: 1.4;
@@ -442,7 +447,7 @@ body.show-file-panel #source-editor {
   border-left: 4px solid var(--blockquote-border);
   padding-left: 16px;
   margin: 1em 0;
-  color: var(--text-muted);
+  color: var(--text-secondary, var(--text-muted));
 }
 
 /* Lists */
@@ -491,7 +496,7 @@ body.show-file-panel #source-editor {
 }
 
 #editor .ProseMirror li[data-item-type="task"][data-checked="true"] > p {
-  color: var(--text-muted);
+  color: var(--text-secondary, var(--text-muted));
   text-decoration: line-through;
 }
 
@@ -541,9 +546,10 @@ body.show-file-panel #source-editor {
 
 /* ======= THEMES ======= */
 
-body, body.theme-light {
+body:not(.theme-custom), body.theme-light {
   --bg-color: #ffffff;
   --text-color: #24292f;
+  --text-secondary: #656d76;
   --text-muted: #656d76;
   --border-color: #d0d7de;
   --link-color: #0969da;
@@ -558,6 +564,7 @@ body, body.theme-light {
 body.theme-dark {
   --bg-color: #0d1117;
   --text-color: #e6edf3;
+  --text-secondary: #aab3bd;
   --text-muted: #8b949e;
   --border-color: #30363d;
   --link-color: #58a6ff;
@@ -572,9 +579,10 @@ body.theme-dark {
 body.theme-elegant {
   --bg-color: #f0edea;
   --text-color: #2c2c2c;
+  --text-secondary: #6c6c6c;
   --text-muted: #777;
   --border-color: #d8d3ce;
-  --link-color: #c44b2b;
+  --link-color: #bc4424;
   --code-bg: #e8e4df;
   --code-block-bg: #2c2c2c;
   --code-block-text: #e0dcd7;
@@ -670,7 +678,7 @@ body.theme-elegant #editor .ProseMirror table td {
 
 .search-count {
   min-width: 32px;
-  color: var(--text-muted);
+  color: var(--text-secondary, var(--text-muted));
   font-size: 12px;
   text-align: center;
 }
@@ -695,12 +703,12 @@ body.theme-elegant #editor .ProseMirror table td {
 }
 
 .search-match {
-  background: rgba(255, 213, 79, 0.4);
+  background: var(--search-match-bg);
   border-radius: 2px;
 }
 
 .search-match-current {
-  background: rgba(255, 152, 0, 0.6);
+  background: var(--search-match-current-bg);
   border-radius: 2px;
 }
 
@@ -784,7 +792,7 @@ body.theme-elegant #editor .ProseMirror table td {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-muted);
+  color: var(--text-secondary, var(--text-muted));
   font-size: 13px;
 }
 
