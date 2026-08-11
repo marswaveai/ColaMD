@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ColaMD — Markdown, made calm.</title>
-<meta name="description" content="ColaMD is an open-source, free, lightweight, and elegant Markdown editor for humans and AI agents.">
+<title>ColaMD — Writing should feel this simple.</title>
+<meta name="description" content="ColaMD is a free, open-source Markdown editor for humans and AI agents — with real-time sync for every change your AI agent makes.">
 <link rel="icon" type="image/svg+xml" href="resources/icon.svg">
 <style>
   :root {
@@ -218,6 +218,7 @@
     function setLanguage(language) {
       const isChinese = language === 'zh';
       document.documentElement.lang = isChinese ? 'zh-CN' : 'en';
+      document.title = isChinese ? 'ColaMD — 写作本该如此简单。' : 'ColaMD — Writing should feel this simple.';
       textNodes.forEach((node) => { node.textContent = node.dataset[isChinese ? 'zh' : 'en']; });
       htmlNodes.forEach((node) => { node.innerHTML = node.dataset[isChinese ? 'zhHtml' : 'enHtml']; });
       images.forEach((image) => { image.alt = image.dataset[isChinese ? 'zhAlt' : 'enAlt']; });
