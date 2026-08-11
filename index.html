@@ -136,6 +136,19 @@
   .feature-item h3 { margin-top: 11px; font-size: 0.98rem; line-height: 1.25; }
   .feature-item p { margin-top: 7px; color: var(--muted); font-size: 0.83rem; line-height: 1.65; }
 
+  .themes { padding: 80px 0 94px; }
+  .themes-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 34px; }
+  .themes-head p { color: var(--muted); font-size: 0.9rem; }
+  .theme-group-label { margin: 30px 0 12px; color: var(--accent); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+  .theme-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 13px; }
+  .theme-swatch { display: flex; flex-direction: column; gap: 9px; min-height: 106px; padding: 14px 13px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--sw-bg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
+  .theme-swatch:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.09); }
+  .theme-swatch .num { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.1em; color: var(--sw-muted); }
+  .theme-swatch .cn { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.9rem; font-weight: 700; color: var(--sw-text); }
+  .theme-swatch .en { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.62rem; letter-spacing: 0.03em; color: var(--sw-muted); }
+  .theme-swatch .dots { display: flex; gap: 6px; margin-top: auto; }
+  .theme-swatch .dot { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--sw-bd); }
+
   .download { padding: 76px 0 86px; }
   .download-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 28px; }
   .version { color: var(--accent); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.72rem; letter-spacing: 0.04em; }
@@ -155,6 +168,7 @@
     .hero { grid-template-columns: 1fr; gap: 50px; padding: 82px 0 92px; }
     .editor-window { max-width: 620px; width: 100%; justify-self: center; transform: rotate(1.2deg); }
     .manifesto .copy { gap: 36px; }
+    .theme-grid { grid-template-columns: repeat(3, 1fr); }
   }
   @media (max-width: 650px) {
     .container { padding: 0 22px; }
@@ -175,6 +189,7 @@
     .features-head { display: block; }
     .features-head p { margin-top: 8px; }
     .feature-list, .download-grid { grid-template-columns: 1fr; }
+    .theme-grid { grid-template-columns: repeat(2, 1fr); }
     .download-head { display: block; }
     .version { display: block; margin-top: 8px; }
     footer { flex-direction: column; gap: 15px; text-align: center; }
@@ -224,13 +239,21 @@
       <div class="feature-item"><div class="feature-number">04</div><h3 data-en="Task Lists" data-zh="待办列表">Task Lists</h3><p data-en="Click checkboxes to complete tasks, or use the keyboard shortcut." data-zh="点击复选框完成任务，也可以使用快捷键。">Click checkboxes to complete tasks, or use the keyboard shortcut.</p></div>
       <div class="feature-item"><div class="feature-number">05</div><h3 data-en="Highlights &amp; LaTeX" data-zh="高亮与 LaTeX">Highlights &amp; LaTeX</h3><p data-en="Write ==highlighted text== and render mathematical formulas with KaTeX." data-zh="使用 ==高亮文本==，并通过 KaTeX 渲染数学公式。">Write <code>==highlighted text==</code> and render mathematical formulas with KaTeX.</p></div>
       <div class="feature-item"><div class="feature-number">06</div><h3 data-en="Search" data-zh="文档搜索">Search</h3><p data-en="Find anything in the current document with ⌘/Ctrl+F." data-zh="使用 ⌘/Ctrl+F 快速查找当前文档内容。">Find anything in the current document with “⌘/Ctrl+F”.</p></div>
-      <div class="feature-item"><div class="feature-number">07</div><h3 data-en="Themes &amp; Export" data-zh="主题与导出">Themes &amp; Export</h3><p data-en="Four built-in themes, custom CSS imports, and PDF or self-contained HTML export." data-zh="4 个内置主题、自定义 CSS 导入，以及导出 PDF 或独立 HTML。">Four built-in themes, custom CSS imports, and PDF or self-contained HTML export.</p></div>
+      <div class="feature-item"><div class="feature-number">07</div><h3 data-en="Themes &amp; Export" data-zh="主题与导出">Themes &amp; Export</h3><p data-en="Twelve built-in themes, custom CSS imports, and PDF or self-contained HTML export." data-zh="12 个内置主题、自定义 CSS 导入，以及导出 PDF 或独立 HTML。">Twelve built-in themes, custom CSS imports, and PDF or self-contained HTML export.</p></div>
       <div class="feature-item"><div class="feature-number">08</div><h3 data-en="Rich Text Copy" data-zh="富文本复制">Rich Text Copy</h3><p data-en="Copy formatted content into WeChat, email, and other rich-text editors." data-zh="复制后粘贴到微信、邮件和其他富文本编辑器，格式完整保留。">Copy formatted content into WeChat, email, and other rich-text editors.</p></div>
       <div class="feature-item"><div class="feature-number">09</div><h3 data-en="Cross-Platform" data-zh="跨平台">Cross-Platform</h3><p data-en="Available for macOS, Windows, and Linux. Minimal by design." data-zh="支持 macOS、Windows 和 Linux，保持极简设计。">Available for macOS, Windows, and Linux. Minimal by design.</p></div>
       <div class="feature-item"><div class="feature-number">10</div><h3 data-en="Agent Activity Indicator" data-zh="Agent 活动指示">Agent Activity Indicator</h3><p data-en="A subtle titlebar dot shows when your agent is writing — and when it's done." data-zh="标题栏上一个小小的圆点，显示 Agent 正在写入，以及写入完成。">A subtle titlebar dot shows when your agent is writing — and when it's done.</p></div>
       <div class="feature-item"><div class="feature-number">11</div><h3 data-en="Source Mode" data-zh="源码模式">Source Mode</h3><p data-en="Switch to raw Markdown anytime to inspect or edit exactly what your agent wrote." data-zh="随时切换到原始 Markdown，查看或编辑 Agent 写入的确切内容。">Switch to raw Markdown anytime to inspect or edit exactly what your agent wrote.</p></div>
       <div class="feature-item"><div class="feature-number">12</div><h3 data-en="Smart Line Breaks" data-zh="智能换行">Smart Line Breaks</h3><p data-en="Single newlines render as line breaks, matching how people and AI agents write." data-zh="单个换行直接显示为换行，符合人类和 AI Agent 的书写习惯。">Single newlines render as line breaks, matching how people and AI agents write.</p></div>
     </div>
+  </section>
+
+  <section class="themes" id="themes">
+    <div class="themes-head"><h2 data-en="Twelve themes, each with its own mood." data-zh="12 个主题，各有各的气质。">Twelve themes, each with its own mood.</h2><p data-en="Six light · six dark" data-zh="6 浅 · 6 深">Six light · six dark</p></div>
+    <div class="theme-group-label" data-en="Light" data-zh="浅色">Light</div>
+    <div class="theme-grid"><div class="theme-swatch" style="--sw-bg:#ffffff;--sw-text:#24292f;--sw-muted:#656d76;--sw-bd:#d0d7de"><div class="num">01</div><div><div class="cn">浅色</div><div class="en">Light</div></div><div class="dots"><div class="dot" style="background:#24292f"></div><div class="dot" style="background:#0969da"></div><div class="dot" style="background:#656d76"></div></div></div><div class="theme-swatch" style="--sw-bg:#f0edea;--sw-text:#2c2c2c;--sw-muted:#777777;--sw-bd:#d8d3ce"><div class="num">02</div><div><div class="cn">雅致</div><div class="en">Elegant</div></div><div class="dots"><div class="dot" style="background:#2c2c2c"></div><div class="dot" style="background:#c44b2b"></div><div class="dot" style="background:#777777"></div></div></div><div class="theme-swatch" style="--sw-bg:#ffffff;--sw-text:#37352f;--sw-muted:#9b9a97;--sw-bd:#e9e9e7"><div class="num">03</div><div><div class="cn">简白</div><div class="en">Notion</div></div><div class="dots"><div class="dot" style="background:#37352f"></div><div class="dot" style="background:#37352f"></div><div class="dot" style="background:#9b9a97"></div></div></div><div class="theme-swatch" style="--sw-bg:#fcfcfa;--sw-text:#1a1a1a;--sw-muted:#8e8e8a;--sw-bd:#e3e3de"><div class="num">04</div><div><div class="cn">作家</div><div class="en">Writer</div></div><div class="dots"><div class="dot" style="background:#1a1a1a"></div><div class="dot" style="background:#3b6ec4"></div><div class="dot" style="background:#8e8e8a"></div></div></div><div class="theme-swatch" style="--sw-bg:#ffffff;--sw-text:#262626;--sw-muted:#8a8a8a;--sw-bd:#e8e6e3"><div class="num">05</div><div><div class="cn">熊红</div><div class="en">Bear</div></div><div class="dots"><div class="dot" style="background:#262626"></div><div class="dot" style="background:#d43d2a"></div><div class="dot" style="background:#8a8a8a"></div></div></div><div class="theme-swatch" style="--sw-bg:#f6efe0;--sw-text:#4f4032;--sw-muted:#9a8a72;--sw-bd:#e2d7bf"><div class="num">06</div><div><div class="cn">羊皮纸</div><div class="en">Sepia</div></div><div class="dots"><div class="dot" style="background:#4f4032"></div><div class="dot" style="background:#a0622d"></div><div class="dot" style="background:#9a8a72"></div></div></div></div>
+    <div class="theme-group-label" data-en="Dark" data-zh="深色">Dark</div>
+    <div class="theme-grid"><div class="theme-swatch" style="--sw-bg:#0d1117;--sw-text:#e6edf3;--sw-muted:#8b949e;--sw-bd:#30363d"><div class="num">07</div><div><div class="cn">深色</div><div class="en">Dark</div></div><div class="dots"><div class="dot" style="background:#e6edf3"></div><div class="dot" style="background:#58a6ff"></div><div class="dot" style="background:#8b949e"></div></div></div><div class="theme-swatch" style="--sw-bg:#282828;--sw-text:#ebdbb2;--sw-muted:#928374;--sw-bd:#3c3836"><div class="num">08</div><div><div class="cn">暖木</div><div class="en">Gruvbox</div></div><div class="dots"><div class="dot" style="background:#ebdbb2"></div><div class="dot" style="background:#83a598"></div><div class="dot" style="background:#928374"></div></div></div><div class="theme-swatch" style="--sw-bg:#000000;--sw-text:#d6d6d6;--sw-muted:#7a7a7a;--sw-bd:#262626"><div class="num">09</div><div><div class="cn">午夜</div><div class="en">Midnight</div></div><div class="dots"><div class="dot" style="background:#d6d6d6"></div><div class="dot" style="background:#0a84ff"></div><div class="dot" style="background:#7a7a7a"></div></div></div><div class="theme-swatch" style="--sw-bg:#002b36;--sw-text:#839496;--sw-muted:#586e75;--sw-bd:#0d3d4a"><div class="num">10</div><div><div class="cn">夜航</div><div class="en">Solarized Dark</div></div><div class="dots"><div class="dot" style="background:#839496"></div><div class="dot" style="background:#268bd2"></div><div class="dot" style="background:#586e75"></div></div></div><div class="theme-swatch" style="--sw-bg:#2e3440;--sw-text:#d8dee9;--sw-muted:#7d8ba1;--sw-bd:#3b4252"><div class="num">11</div><div><div class="cn">极地</div><div class="en">Nord</div></div><div class="dots"><div class="dot" style="background:#d8dee9"></div><div class="dot" style="background:#88c0d0"></div><div class="dot" style="background:#7d8ba1"></div></div></div><div class="theme-swatch" style="--sw-bg:#282a36;--sw-text:#f8f8f2;--sw-muted:#7f86a8;--sw-bd:#44475a"><div class="num">12</div><div><div class="cn">德古拉</div><div class="en">Dracula</div></div><div class="dots"><div class="dot" style="background:#f8f8f2"></div><div class="dot" style="background:#bd93f9"></div><div class="dot" style="background:#7f86a8"></div></div></div></div>
   </section>
 
   <section class="download" id="download">
