@@ -4,7 +4,39 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ColaMD — Writing should feel this simple.</title>
-<meta name="description" content="ColaMD is a free, open-source Markdown editor for humans and AI agents — with real-time sync for every change your AI agent makes.">
+<meta name="description" content="ColaMD is a free, open-source Markdown editor for humans and AI agents — with real-time sync for every change your AI agent makes. Available on macOS, Windows and Linux.">
+<link rel="canonical" href="https://colamd.com/">
+<meta name="keywords" content="markdown editor, best markdown editor, free markdown editor, open source markdown editor, markdown editor for mac, markdown editor for windows, markdown editor for linux, wysiwyg markdown editor, typora alternative, obsidian alternative, AI markdown editor, markdown editor for AI agents, markdown 编辑器, markdown 编辑器推荐, 免费 markdown 编辑器, 开源 markdown 编辑器, typora 替代">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ColaMD">
+<meta property="og:title" content="ColaMD — Writing should feel this simple.">
+<meta property="og:description" content="ColaMD is a free, open-source Markdown editor for humans and AI agents — with real-time sync for every change your AI agent makes. macOS, Windows and Linux.">
+<meta property="og:url" content="https://colamd.com/">
+<meta property="og:image" content="https://colamd.com/resources/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ColaMD — Writing should feel this simple.">
+<meta name="twitter:description" content="A free, open-source Markdown editor for humans and AI agents, with real-time sync. macOS · Windows · Linux.">
+<meta name="twitter:image" content="https://colamd.com/resources/og-image.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "ColaMD",
+  "alternateName": "ColaMD Markdown Editor",
+  "description": "A free, open-source, elegant Markdown editor for humans and AI agents, with real-time sync for AI-generated changes. Available on macOS, Windows and Linux.",
+  "applicationCategory": "ProductivityApplication",
+  "operatingSystem": "macOS, Windows, Linux",
+  "url": "https://colamd.com/",
+  "softwareVersion": "1.8.1",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Organization", "name": "Marswave AI", "url": "https://github.com/marswaveai" },
+  "featureList": ["Live Agent Sync", "WYSIWYG editing", "Task lists", "Highlights and LaTeX", "Source mode", "Smart line breaks"]
+}
+</script>
 <link rel="icon" type="image/svg+xml" href="resources/icon.svg">
 <style>
   :root {
@@ -205,7 +237,7 @@
     <div class="download-grid"><a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">macOS</span><span class="format">.dmg</span></a><a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">Windows</span><span class="format">.exe</span></a><a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">Linux</span><span class="format">.AppImage / .deb</span></a></div>
   </section>
 
-  <footer><span data-en="MIT License · Built by" data-zh="MIT 协议 · 由">MIT License · Built by</span> <a href="https://marswave.ai">marswave.ai</a><div class="footer-links"><a href="https://github.com/marswaveai/ColaMD">GitHub</a><a href="https://github.com/marswaveai/ColaMD/releases" data-en="Releases" data-zh="下载">Releases</a></div></footer>
+  <footer><span data-en="Free &amp; open-source Markdown editor · MIT License · Built by" data-zh="免费开源的 Markdown 编辑器 · MIT 协议 · 由">Free &amp; open-source Markdown editor · MIT License · Built by</span> <a href="https://marswave.ai">marswave.ai</a><div class="footer-links"><a href="https://github.com/marswaveai/ColaMD">GitHub</a><a href="https://github.com/marswaveai/ColaMD/releases" data-en="Releases" data-zh="下载">Releases</a></div></footer>
 </div>
 <script>
   (() => {
@@ -219,6 +251,10 @@
       const isChinese = language === 'zh';
       document.documentElement.lang = isChinese ? 'zh-CN' : 'en';
       document.title = isChinese ? 'ColaMD — 写作本该如此简单。' : 'ColaMD — Writing should feel this simple.';
+      document.querySelector('meta[property="og:title"]').setAttribute('content', document.title);
+      document.querySelector('meta[name="twitter:title"]').setAttribute('content', document.title);
+      document.querySelector('meta[property="og:image"]').setAttribute('content', isChinese ? 'https://colamd.com/resources/og-image-zh.png' : 'https://colamd.com/resources/og-image.png');
+      document.querySelector('meta[name="twitter:image"]').setAttribute('content', isChinese ? 'https://colamd.com/resources/og-image-zh.png' : 'https://colamd.com/resources/og-image.png');
       textNodes.forEach((node) => { node.textContent = node.dataset[isChinese ? 'zh' : 'en']; });
       htmlNodes.forEach((node) => { node.innerHTML = node.dataset[isChinese ? 'zhHtml' : 'enHtml']; });
       images.forEach((image) => { image.alt = image.dataset[isChinese ? 'zhAlt' : 'enAlt']; });
