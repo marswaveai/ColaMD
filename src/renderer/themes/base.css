@@ -546,7 +546,7 @@ body.show-file-panel #source-editor {
 
 /* ======= THEMES ======= */
 
-body:not(.theme-custom), body.theme-light {
+:root, body.theme-light {
   --bg-color: #ffffff;
   --text-color: #24292f;
   --text-secondary: #656d76;

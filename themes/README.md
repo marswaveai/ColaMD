@@ -68,5 +68,5 @@ For more control, target elements directly:
 ### Tips
 
 - Theme files should be self-contained (no external imports)
-- Test that all variables are defined to avoid invisible text
+- Omitted variables inherit ColaMD's Light defaults, so override only the tokens your theme needs
 - Name the file descriptively: `dark-ocean.css`, `solarized-light.css`, etc.

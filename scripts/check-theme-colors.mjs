@@ -45,6 +45,19 @@ function getVariables(text_block) {
 	return values_token
 }
 
+function getDefaultTheme() {
+	const match_theme = text_base.match(/:root,\s*body\.theme-light\s*\{([^}]+)\}/)
+	assert.ok(match_theme, 'Light defaults must provide the :root token baseline')
+	return getVariables(match_theme[1])
+}
+
+function getCustomTheme(text_theme) {
+	return {
+		...getDefaultTheme(),
+		...getVariables(text_theme)
+	}
+}
+
 function getBuiltInTheme(name_theme) {
 	const pattern_theme = new RegExp(
 		`body(?:,\\s*body)?\\.theme-${name_theme}\\s*\\{([^}]+)\\}`
@@ -155,12 +168,31 @@ assert.match(
 	text_base,
 	/--search-match-current-bg:\s*color-mix\(in srgb, var\(--link-color\) 32%, transparent\);/
 )
-assert.match(text_base, /body:not\(\.theme-custom\), body\.theme-light\s*\{/)
-assert.doesNotMatch(text_base, /body, body\.theme-light\s*\{/)
+assert.doesNotMatch(text_base, /body:not\(\.theme-custom\)/)
 assert.match(text_base, /\.search-match\s*\{[^}]*background: var\(--search-match-bg\);/s)
 assert.match(
 	text_base,
 	/\.search-match-current\s*\{[^}]*background: var\(--search-match-current-bg\);/s
 )
+
+const values_default = getDefaultTheme()
+const values_partial = getCustomTheme(`
+body {
+	--link-color: #0055aa;
+}
+`)
+assert.equal(values_partial['link-color'], '#0055aa')
+assert.equal(values_partial['bg-color'], values_default['bg-color'])
+assert.equal(values_partial['text-color'], values_default['text-color'])
+assert.equal(values_partial['border-color'], values_default['border-color'])
+
+const values_direct = getCustomTheme(`
+#editor .ProseMirror strong {
+	color: #c44b2b;
+}
+`)
+assert.equal(values_direct['bg-color'], values_default['bg-color'])
+assert.equal(values_direct['text-color'], values_default['text-color'])
+assert.equal(values_direct['border-color'], values_default['border-color'])
 
 console.log('Theme color contract passed for 12 built-in and standalone themes.')
