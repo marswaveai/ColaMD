@@ -2,7 +2,6 @@ import { BrowserWindow, NativeImage } from 'electron'
 import { mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { PNG } from 'pngjs'
 
 export type ImageExportPreset = 'desktop' | 'mobile'
 
@@ -13,28 +12,29 @@ export interface ImageExportSnapshot {
   background: string
 }
 
-const PRESETS: Record<ImageExportPreset, { width: number; padding: number }> = {
-  desktop: { width: 1200, padding: 64 },
-  mobile: { width: 414, padding: 28 },
+const PRESETS: Record<ImageExportPreset, { width: number; height: number; padding: number }> = {
+  desktop: { width: 1200, height: 800, padding: 64 },
+  mobile: { width: 414, height: 896, padding: 28 },
 }
 
 function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): string {
-  const { width, padding } = PRESETS[preset]
+  const { width, height: pageHeight, padding } = PRESETS[preset]
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: file:; style-src 'unsafe-inline'; img-src 'self' data: blob: https: http: file:; font-src 'self' data:">
   <style>${snapshot.styles}
-    html, body { width: ${width}px !important; min-width: ${width}px !important; height: fit-content !important; min-height: 0 !important; overflow: hidden !important; background: ${snapshot.background} !important; }
-    body { margin: 0 !important; }
+    html, body { width: ${width}px !important; min-width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; background: ${snapshot.background} !important; }
+    body { margin: 0 !important; padding: 0 !important; }
     *::-webkit-scrollbar { display: none !important; }
     #titlebar, #file-panel, #source-editor, #update-banner { display: none !important; }
     #editor { display: block !important; width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; margin: 0 !important; padding: ${padding}px !important; background: ${snapshot.background} !important; }
     #editor .ProseMirror { width: auto !important; max-width: none !important; min-height: 0 !important; }
+    #export-scroll-spacer { height: ${pageHeight}px; }
   </style>
 </head>
-<body class="${snapshot.bodyClass}"><div id="editor"><div class="ProseMirror">${snapshot.html}</div></div></body>
+<body class="${snapshot.bodyClass}"><div id="editor"><div class="ProseMirror">${snapshot.html}</div></div><div id="export-scroll-spacer"></div></body>
 </html>`
 }
 
@@ -61,34 +61,27 @@ async function waitForLayout(win: BrowserWindow): Promise<{ width: number; heigh
   })()`)
 }
 
-function nativeImageToPNG(image: NativeImage): PNG {
+async function scrollToPage(win: BrowserWindow, offset: number): Promise<void> {
+  await win.webContents.executeJavaScript(`(async () => {
+    window.scrollTo(0, ${offset})
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  })()`)
+}
+
+function capturePNG(image: NativeImage, cssWidth: number, cssHeight: number): Buffer {
   const { width, height } = image.getSize()
-  const bitmap = image.toBitmap()
-  const png = new PNG({ width, height })
-  for (let offset = 0; offset < bitmap.length; offset += 4) {
-    png.data[offset] = bitmap[offset + 2]
-    png.data[offset + 1] = bitmap[offset + 1]
-    png.data[offset + 2] = bitmap[offset]
-    png.data[offset + 3] = bitmap[offset + 3]
-  }
-  return png
+  const targetHeight = Math.min(height, Math.max(1, Math.round(cssHeight * width / cssWidth)))
+  return targetHeight === height
+    ? image.toPNG()
+    : image.crop({ x: 0, y: 0, width, height: targetHeight }).toPNG()
 }
 
-function cropTile(tile: PNG, cssWidth: number, cssHeight: number): PNG {
-  const targetHeight = Math.min(tile.height, Math.max(1, Math.round(cssHeight * tile.width / cssWidth)))
-  if (tile.height === targetHeight) return tile
-  const cropped = new PNG({ width: tile.width, height: targetHeight })
-  PNG.bitblt(tile, cropped, 0, 0, tile.width, targetHeight, 0, 0)
-  return cropped
-}
-
-export async function renderDocumentPNG(snapshot: ImageExportSnapshot, preset: ImageExportPreset): Promise<Buffer> {
-  const { width } = PRESETS[preset]
-  const tileHeight = 1600
+export async function renderDocumentPNGs(snapshot: ImageExportSnapshot, preset: ImageExportPreset): Promise<Buffer[]> {
+  const { width, height: pageHeight } = PRESETS[preset]
   const win = new BrowserWindow({
     show: false,
     width,
-    height: tileHeight,
+    height: pageHeight,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   })
 
@@ -100,20 +93,15 @@ export async function renderDocumentPNG(snapshot: ImageExportSnapshot, preset: I
     await win.loadFile(exportPath)
     win.webContents.beginFrameSubscription(() => {})
     const dimensions = await waitForLayout(win)
-    const tiles: PNG[] = []
-    for (let offset = 0; offset < dimensions.height; offset += tileHeight) {
-      const height = Math.min(tileHeight, dimensions.height - offset)
-      const image = await win.webContents.capturePage({ x: 0, y: offset, width: dimensions.width, height }, { stayHidden: true })
-      tiles.push(cropTile(nativeImageToPNG(image), dimensions.width, height))
+    const pages: Buffer[] = []
+    for (let offset = 0; offset < dimensions.height; offset += pageHeight) {
+      const height = Math.min(pageHeight, dimensions.height - offset)
+      await scrollToPage(win, offset)
+      const image = await win.webContents.capturePage(undefined, { stayHidden: true })
+      if (image.isEmpty()) throw new Error('无法捕获导出页面')
+      pages.push(capturePNG(image, dimensions.width, height))
     }
-
-    const output = new PNG({ width: tiles[0]?.width ?? dimensions.width, height: tiles.reduce((sum, tile) => sum + tile.height, 0) })
-    let top = 0
-    for (const tile of tiles) {
-      PNG.bitblt(tile, output, 0, 0, tile.width, tile.height, 0, top)
-      top += tile.height
-    }
-    return PNG.sync.write(output)
+    return pages
   } finally {
     if (!win.isDestroyed()) {
       win.webContents.endFrameSubscription()

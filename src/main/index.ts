@@ -766,9 +766,31 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
   })
   if (result.canceled || !result.filePath) return false
   try {
-    const { renderDocumentPNG } = await import('./image-export')
-    await writeFile(result.filePath, await renderDocumentPNG({ html, styles, bodyClass, background }, preset))
-    shell.showItemInFolder(result.filePath)
+    const { renderDocumentPNGs } = await import('./image-export')
+    const pages = await renderDocumentPNGs({ html, styles, bodyClass, background }, preset)
+    if (pages.length === 0) throw new Error('没有可导出的内容')
+
+    const extension = extname(result.filePath)
+    const basePath = extension ? result.filePath.slice(0, -extension.length) : result.filePath
+    const digits = String(pages.length).length
+    const outputPaths = pages.map((_, index) => index === 0
+      ? result.filePath
+      : `${basePath}-${String(index + 1).padStart(digits, '0')}${extension}`)
+    const conflicts = outputPaths.slice(1).filter((path) => existsSync(path))
+    if (conflicts.length > 0) {
+      const response = await dialog.showMessageBox(win, {
+        type: 'warning',
+        buttons: ['取消', '替换'],
+        defaultId: 0,
+        cancelId: 0,
+        message: '部分图片已存在',
+        detail: `将替换 ${conflicts.length} 张同名图片。`,
+      })
+      if (response.response !== 1) return false
+    }
+
+    await Promise.all(pages.map((page, index) => writeFile(outputPaths[index], page)))
+    shell.showItemInFolder(outputPaths[0])
     return true
   } catch (error) {
     console.error('Image export failed', error)
