@@ -153,14 +153,28 @@ function updateSourceToggle(): void {
   if (tip) tip.textContent = label
 }
 
+function scrollRatio(el: HTMLElement): number {
+  const range = el.scrollHeight - el.clientHeight
+  return range > 0 ? el.scrollTop / range : 0
+}
+
+function restoreScrollRatio(el: HTMLElement, ratio: number): void {
+  requestAnimationFrame(() => {
+    const range = el.scrollHeight - el.clientHeight
+    el.scrollTop = Math.max(0, Math.min(range, range * ratio))
+  })
+}
+
 function toggleSourceMode(): void {
   if (sourceModeActive) {
+    const ratio = scrollRatio(sourceEl())
     // Source → WYSIWYG: re-parse the textarea content back into the editor
     exitSourceMode()
     setMarkdownProgrammatically(sourceEl().value)
+    restoreScrollRatio(editorEl(), ratio)
   } else {
     // WYSIWYG → Source: serialize the current editor content into the textarea
-    enterSourceMode(getMarkdown())
+    enterSourceMode(getMarkdown(), scrollRatio(editorEl()))
   }
   updateWordCount()
 }
@@ -229,12 +243,13 @@ async function refreshSiblings(): Promise<void> {
   if (files) renderFileList(files)
 }
 
-function enterSourceMode(content: string): void {
+function enterSourceMode(content: string, ratio = 0): void {
   sourceModeActive = true
   editorEl().classList.add('hidden')
   const ta = sourceEl()
   ta.classList.add('visible')
   ta.value = content
+  restoreScrollRatio(ta, ratio)
   updateSourceToggle()
 }
 
@@ -280,6 +295,7 @@ function getExportSnapshot(content: string): {
 
 async function exportCurrentHTML(): Promise<void> {
   const wasSourceMode = sourceModeActive
+  const sourceScrollRatio = wasSourceMode ? scrollRatio(sourceEl()) : 0
   const content = getContent()
 
   // Render the latest source text before taking the DOM snapshot, then restore
@@ -297,7 +313,7 @@ async function exportCurrentHTML(): Promise<void> {
   await window.electronAPI.exportHTML(getExportSnapshot(content))
 
   if (wasSourceMode) {
-    enterSourceMode(content)
+    enterSourceMode(content, sourceScrollRatio)
   }
 }
 
@@ -343,6 +359,7 @@ async function init(): Promise<void> {
   api.onToggleFilePanel(() => togglePanel())
 
   sourceToggleBtnEl().addEventListener('click', toggleSourceMode)
+  api.onToggleSourceMode(() => toggleSourceMode())
   // Source-mode edits update the word count and mark the doc dirty in real time
   sourceEl().addEventListener('input', () => {
     setDirty()

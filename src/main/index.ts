@@ -859,7 +859,7 @@ function buildMenu(): void {
         newFile: '新建', open: '打开...', save: '保存', saveAs: '另存为...',
         exportPDF: '导出 PDF...', exportHTML: '导出 HTML...', find: '查找',
         setDefault: '设置为默认应用...',
-        insertFormula: '插入公式', filePanel: '显示 / 隐藏文件列表',
+        insertFormula: '插入公式', filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
         light: '浅色', dark: '深色', elegant: '雅致',
         sepia: '羊皮纸', notion: '简白', bear: '熊红', writer: '作家',
         solarizedDark: '夜航', nord: '极地', gruvbox: '暖木', dracula: '德古拉', midnight: '午夜',
@@ -874,7 +874,7 @@ function buildMenu(): void {
         newFile: 'New', open: 'Open...', save: 'Save', saveAs: 'Save As...',
         exportPDF: 'Export PDF...', exportHTML: 'Export HTML...', find: 'Find',
         setDefault: 'Set as Default...',
-        insertFormula: 'Insert Formula', filePanel: 'Show / Hide File List',
+        insertFormula: 'Insert Formula', filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
         light: 'Light', dark: 'Dark', elegant: 'Elegant',
         sepia: 'Sepia', notion: 'Notion', bear: 'Bear', writer: 'Writer',
         solarizedDark: 'Solarized Dark', nord: 'Nord', gruvbox: 'Gruvbox', dracula: 'Dracula', midnight: 'Midnight',
@@ -997,6 +997,11 @@ function buildMenu(): void {
           label: labels.filePanel,
           accelerator: 'CmdOrCtrl+Shift+B',
           click: () => sendToFocused('toggle-file-panel')
+        },
+        {
+          label: labels.sourceMode,
+          accelerator: 'CmdOrCtrl+/',
+          click: () => sendToFocused('toggle-source-mode')
         },
         { type: 'separator' },
         { label: labels.fullscreen, role: 'togglefullscreen' }
