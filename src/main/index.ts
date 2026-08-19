@@ -814,18 +814,21 @@ ipcMain.handle('export-pdf', async (event) => {
   if (result.canceled || !result.filePath) return false
 
   try {
-    // Expand editor to full content height for printing
+    const background = await win.webContents.executeJavaScript('getComputedStyle(document.body).backgroundColor') as string
     const cssKey = await win.webContents.insertCSS(
-      'html, body { height: auto !important; overflow: visible !important; } #titlebar { display: none !important; } #editor { height: auto !important; overflow: visible !important; } #editor .ProseMirror { min-height: auto !important; }'
+      `@page { margin: 0; } html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; } #titlebar { display: none !important; } #editor { padding: 20mm !important; } #editor .ProseMirror { min-height: auto !important; }`
     )
-    const pdfData = await win.webContents.printToPDF({
-      margins: { marginType: 'default' },
-      printBackground: true,
-      pageSize: 'A4'
-    })
-    await win.webContents.removeInsertedCSS(cssKey)
-    await writeFile(result.filePath, pdfData)
-    return true
+    try {
+      const pdfData = await win.webContents.printToPDF({
+        margins: { marginType: 'none' },
+        printBackground: true,
+        pageSize: 'A4'
+      })
+      await writeFile(result.filePath, pdfData)
+      return true
+    } finally {
+      await win.webContents.removeInsertedCSS(cssKey)
+    }
   } catch {
     return false
   }

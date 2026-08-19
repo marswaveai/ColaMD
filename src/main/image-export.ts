@@ -1,4 +1,4 @@
-import { BrowserWindow, NativeImage } from 'electron'
+import { BrowserWindow } from 'electron'
 import { mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -18,7 +18,7 @@ const PRESETS: Record<ImageExportPreset, { width: number; height: number; paddin
 }
 
 function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): string {
-  const { width, height: pageHeight, padding } = PRESETS[preset]
+  const { width, padding } = PRESETS[preset]
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -31,10 +31,9 @@ function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): s
     #titlebar, #file-panel, #source-editor, #update-banner { display: none !important; }
     #editor { display: block !important; width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; margin: 0 !important; padding: ${padding}px !important; background: ${snapshot.background} !important; }
     #editor .ProseMirror { width: auto !important; max-width: none !important; min-height: 0 !important; }
-    #export-scroll-spacer { height: ${pageHeight}px; }
   </style>
 </head>
-<body class="${snapshot.bodyClass}"><div id="editor"><div class="ProseMirror">${snapshot.html}</div></div><div id="export-scroll-spacer"></div></body>
+<body class="${snapshot.bodyClass}"><div id="editor"><div class="ProseMirror">${snapshot.html}</div></div></body>
 </html>`
 }
 
@@ -61,21 +60,6 @@ async function waitForLayout(win: BrowserWindow): Promise<{ width: number; heigh
   })()`)
 }
 
-async function scrollToPage(win: BrowserWindow, offset: number): Promise<void> {
-  await win.webContents.executeJavaScript(`(async () => {
-    window.scrollTo(0, ${offset})
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-  })()`)
-}
-
-function capturePNG(image: NativeImage, cssWidth: number, cssHeight: number): Buffer {
-  const { width, height } = image.getSize()
-  const targetHeight = Math.min(height, Math.max(1, Math.round(cssHeight * width / cssWidth)))
-  return targetHeight === height
-    ? image.toPNG()
-    : image.crop({ x: 0, y: 0, width, height: targetHeight }).toPNG()
-}
-
 export async function renderDocumentPNGs(snapshot: ImageExportSnapshot, preset: ImageExportPreset): Promise<Buffer[]> {
   const { width, height: pageHeight } = PRESETS[preset]
   const win = new BrowserWindow({
@@ -92,18 +76,23 @@ export async function renderDocumentPNGs(snapshot: ImageExportSnapshot, preset: 
     await writeFile(exportPath, exportHTML(snapshot, preset), 'utf8')
     await win.loadFile(exportPath)
     win.webContents.beginFrameSubscription(() => {})
+    win.webContents.debugger.attach('1.3')
     const dimensions = await waitForLayout(win)
     const pages: Buffer[] = []
     for (let offset = 0; offset < dimensions.height; offset += pageHeight) {
       const height = Math.min(pageHeight, dimensions.height - offset)
-      await scrollToPage(win, offset)
-      const image = await win.webContents.capturePage(undefined, { stayHidden: true })
-      if (image.isEmpty()) throw new Error('无法捕获导出页面')
-      pages.push(capturePNG(image, dimensions.width, height))
+      const screenshot = await win.webContents.debugger.sendCommand('Page.captureScreenshot', {
+        format: 'png',
+        fromSurface: true,
+        captureBeyondViewport: true,
+        clip: { x: 0, y: offset, width: dimensions.width, height, scale: 2 },
+      }) as { data: string }
+      pages.push(Buffer.from(screenshot.data, 'base64'))
     }
     return pages
   } finally {
     if (!win.isDestroyed()) {
+      if (win.webContents.debugger.isAttached()) win.webContents.debugger.detach()
       win.webContents.endFrameSubscription()
       win.destroy()
     }
