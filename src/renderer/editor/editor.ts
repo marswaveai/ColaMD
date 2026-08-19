@@ -179,13 +179,18 @@ function createCopyButton(): HTMLButtonElement {
 function setupCodeBlockCopy(root: HTMLElement): void {
   copyButton = createCopyButton()
 
-  const sync = (): void => {
+  const sync = (event?: MouseEvent): void => {
     if (!copyButton) return
+    const related = event?.relatedTarget
+    if (related === copyButton || related instanceof Node && copyButton.contains(related)) return
+
     const pre = root.querySelector('pre:hover') as HTMLPreElement | null
     if (pre && pre.querySelector('code')) {
       copyButtonPre = pre
       copyButton.classList.add('hovering')
       positionCopyButton(pre)
+    } else if (copyButton.matches(':hover') && copyButtonPre) {
+      copyButton.classList.add('hovering')
     } else {
       copyButtonPre = null
       copyButton.classList.remove('hovering')
@@ -196,8 +201,9 @@ function setupCodeBlockCopy(root: HTMLElement): void {
   // transaction loop instead of a MutationObserver (avoids self-trigger loops).
   root.addEventListener('mouseover', sync)
   root.addEventListener('mouseout', sync)
-  window.addEventListener('scroll', sync, { passive: true })
-  const resizeObserver = new ResizeObserver(sync)
+  copyButton.addEventListener('mouseleave', sync)
+  window.addEventListener('scroll', () => sync(), { passive: true })
+  const resizeObserver = new ResizeObserver(() => sync())
   resizeObserver.observe(root)
   sync()
 }
@@ -256,8 +262,13 @@ export async function createEditor(
       const stringifyOptions = ctx.get(remarkStringifyOptionsCtx)
       ctx.set(remarkStringifyOptionsCtx, {
         ...stringifyOptions,
-        // 'mark' is a custom node type, not part of the typed Handlers map
-        handlers: { ...stringifyOptions.handlers, mark: highlightStringifyHandler } as typeof stringifyOptions.handlers,
+        // Keep the editor's smart line breaks as plain Markdown newlines.
+        // remark-breaks restores them on parse, so source mode never leaks `\`.
+        handlers: {
+          ...stringifyOptions.handlers,
+          mark: highlightStringifyHandler,
+          break: () => '\n'
+        } as typeof stringifyOptions.handlers,
       })
       if (onChange) {
         ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
