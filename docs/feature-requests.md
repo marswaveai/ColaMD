@@ -6,6 +6,8 @@ This is the holding list for requests that have a clear user need but are not co
 
 ### Recent files
 
+**Source:** [#28](https://github.com/marswaveai/ColaMD/issues/28)
+
 **Need:** Reopen recently edited Markdown files from the existing File menu.
 
 **Why it fits:** This shortens the return path to active documents without introducing tabs or a persistent workspace.
@@ -13,6 +15,8 @@ This is the holding list for requests that have a clear user need but are not co
 **Constraints:** Store only a bounded list of canonical local paths. Missing files must be skipped or clearly unavailable. Do not add a permanent sidebar section or reopen documents automatically at launch.
 
 ### Export Word (.docx)
+
+**Source:** [#31](https://github.com/marswaveai/ColaMD/issues/31)
 
 **Need:** Export the current Markdown document as an editable `.docx` file for collaborators who use office software.
 
@@ -22,6 +26,8 @@ This is the holding list for requests that have a clear user need but are not co
 
 ### Export shareable images
 
+**Source:** [#35](https://github.com/marswaveai/ColaMD/issues/35)
+
 **Need:** Export an article as an image with desktop and mobile reading presets.
 
 **Why it fits:** It supports document sharing without changing the writing surface.
@@ -29,6 +35,8 @@ This is the holding list for requests that have a clear user need but are not co
 **Constraints:** Large feature. Start only with full-document PNG and fixed width presets; validate long-document memory use and output clarity before formats, selection export, custom sizing, or resolution controls.
 
 ### Import local images into the current document
+
+**Source:** [#21](https://github.com/marswaveai/ColaMD/issues/21)
 
 **Need:** Pasting or dropping an image should copy it into a predictable folder next to the current Markdown file and insert a portable relative image reference.
 
@@ -38,6 +46,8 @@ This is the holding list for requests that have a clear user need but are not co
 
 ### Windows startup performance
 
+**Source:** [#32](https://github.com/marswaveai/ColaMD/issues/32)
+
 **Need:** Windows users report that ColaMD starts noticeably slower than Typora.
 
 **Plan:** Keep this as a performance optimization candidate for the weekly planning cycle. First measure cold and warm startup on comparable machines, then profile main-process startup, window creation, renderer loading, editor initialization, and time to first interaction.
@@ -45,6 +55,8 @@ This is the holding list for requests that have a clear user need but are not co
 **Constraints:** Optimize measured bottlenecks without adding persistent services, workspace state, or extra UI. Preserve file hot-reload, editor availability, and cross-platform behavior.
 
 ### Document outline
+
+**Source:** [#21](https://github.com/marswaveai/ColaMD/issues/21), [#27](https://github.com/marswaveai/ColaMD/issues/27)
 
 **Need:** Navigate long documents through their headings without losing the writing-focused layout.
 
@@ -54,6 +66,8 @@ This is the holding list for requests that have a clear user need but are not co
 
 ### Diagram rendering (Mermaid / mindmap)
 
+**Source:** [#26](https://github.com/marswaveai/ColaMD/issues/26)
+
 **Need:** Render Mermaid and mindmap diagrams inside Markdown documents, which are common in technical notes and planning.
 
 **Why it fits:** Diagram rendering is a frequent Markdown workflow. An earlier Mermaid integration caused high CPU usage and freezes, so it was removed in v1.8.1.
@@ -61,6 +75,8 @@ This is the holding list for requests that have a clear user need but are not co
 **Constraints:** Large feature. Reintroduce only with a stable, isolated renderer that never blocks editing or slows first launch. Native code blocks must remain editable.
 
 ### Footnote hover preview
+
+**Source:** [#25](https://github.com/marswaveai/ColaMD/issues/25)
 
 **Need:** Hover a footnote reference to preview its definition in place, instead of jumping to the document bottom.
 
