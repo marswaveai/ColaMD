@@ -913,9 +913,10 @@ function setAsDefaultApp(): void {
           $.kUTTagClassFilenameExtension,
           $(ext),
           null
-        ).takeRetainedValue();
-        $.LSSetDefaultRoleHandlerForContentType(uti, $.kLSRolesAll, $(bundleID));
-        results.push(ext + ': OK');
+        );
+        if (!uti) throw new Error('Could not resolve file type');
+        var status = String($.LSSetDefaultRoleHandlerForContentType(uti, $.kLSRolesAll, $(bundleID)));
+        results.push(ext + ': ' + (status === '0' ? 'OK' : 'error ' + status));
       } catch (e) {
         results.push(ext + ': ' + e.message);
       }
