@@ -1,4 +1,7 @@
 import { BrowserWindow } from 'electron'
+import { mkdtemp, rm, writeFile } from 'fs/promises'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { PNG } from 'pngjs'
 
 export type ImageExportPreset = 'desktop' | 'mobile'
@@ -64,8 +67,12 @@ export async function renderDocumentPNG(snapshot: ImageExportSnapshot, preset: I
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   })
 
+  let tempDir: string | undefined
   try {
-    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(exportHTML(snapshot, preset))}`)
+    tempDir = await mkdtemp(join(tmpdir(), 'colamd-image-export-'))
+    const exportPath = join(tempDir, 'document.html')
+    await writeFile(exportPath, exportHTML(snapshot, preset), 'utf8')
+    await win.loadFile(exportPath)
     win.webContents.beginFrameSubscription(() => {})
     const dimensions = await waitForLayout(win)
     const tiles: PNG[] = []
@@ -87,5 +94,6 @@ export async function renderDocumentPNG(snapshot: ImageExportSnapshot, preset: I
       win.webContents.endFrameSubscription()
       win.destroy()
     }
+    if (tempDir) await rm(tempDir, { recursive: true, force: true })
   }
 }

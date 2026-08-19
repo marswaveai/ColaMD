@@ -754,6 +754,8 @@ ipcMain.handle('export-docx', async (event, content: unknown) => {
 ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown) => {
   const win = getWinFromEvent(event)
   if (!win || (preset !== 'desktop' && preset !== 'mobile') || !snapshot || typeof snapshot !== 'object') return false
+  win.show()
+  win.focus()
   const { html, styles, bodyClass } = snapshot as { html?: unknown; styles?: unknown; bodyClass?: unknown }
   if (typeof html !== 'string' || typeof styles !== 'string' || typeof bodyClass !== 'string') return false
   const baseName = suggestFileName(win) ?? 'untitled'
@@ -768,7 +770,14 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
     await writeFile(result.filePath, await renderDocumentPNG({ html, styles, bodyClass }, preset))
     shell.showItemInFolder(result.filePath)
     return true
-  } catch {
+  } catch (error) {
+    console.error('Image export failed', error)
+    await dialog.showMessageBox(win, {
+      type: 'error',
+      buttons: ['好'],
+      message: '无法导出图片',
+      detail: error instanceof Error ? error.message : String(error),
+    })
     return false
   }
 })
