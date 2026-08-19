@@ -4,6 +4,30 @@ This is the holding list for requests that have a clear user need but are not co
 
 ## Candidates
 
+### Recent files
+
+**Need:** Reopen recently edited Markdown files from the existing File menu.
+
+**Why it fits:** This shortens the return path to active documents without introducing tabs or a persistent workspace.
+
+**Constraints:** Store only a bounded list of canonical local paths. Missing files must be skipped or clearly unavailable. Do not add a permanent sidebar section or reopen documents automatically at launch.
+
+### Export Word (.docx)
+
+**Need:** Export the current Markdown document as an editable `.docx` file for collaborators who use office software.
+
+**Why it fits:** It is a common delivery format, but requires a deliberate Markdown-to-Word mapping rather than a superficial file conversion.
+
+**Constraints:** Large feature. Keep the entry in File menu. Define supported structures, image embedding, and degradation for HTML, math, and unsupported syntax before adding a conversion dependency.
+
+### Export shareable images
+
+**Need:** Export an article as an image with desktop and mobile reading presets.
+
+**Why it fits:** It supports document sharing without changing the writing surface.
+
+**Constraints:** Large feature. Start only with full-document PNG and fixed width presets; validate long-document memory use and output clarity before formats, selection export, custom sizing, or resolution controls.
+
 ### Import local images into the current document
 
 **Need:** Pasting or dropping an image should copy it into a predictable folder next to the current Markdown file and insert a portable relative image reference.
@@ -20,7 +44,9 @@ This is the holding list for requests that have a clear user need but are not co
 
 **Constraints:** Optimize measured bottlenecks without adding persistent services, workspace state, or extra UI. Preserve file hot-reload, editor availability, and cross-platform behavior.
 
+### Document outline
 
+**Need:** Navigate long documents through their headings without losing the writing-focused layout.
 
 **Why it fits:** This is useful for long-form Markdown, but it must remain secondary to writing.
 
