@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, NativeImage } from 'electron'
 import { mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -49,6 +49,19 @@ async function waitForLayout(win: BrowserWindow): Promise<{ width: number; heigh
   })()`)
 }
 
+function nativeImageToPNG(image: NativeImage): PNG {
+  const { width, height } = image.getSize()
+  const bitmap = image.toBitmap()
+  const png = new PNG({ width, height })
+  for (let offset = 0; offset < bitmap.length; offset += 4) {
+    png.data[offset] = bitmap[offset + 2]
+    png.data[offset + 1] = bitmap[offset + 1]
+    png.data[offset + 2] = bitmap[offset]
+    png.data[offset + 3] = bitmap[offset + 3]
+  }
+  return png
+}
+
 function cropTile(tile: PNG, cssWidth: number, cssHeight: number): PNG {
   const targetHeight = Math.min(tile.height, Math.max(1, Math.round(cssHeight * tile.width / cssWidth)))
   if (tile.height === targetHeight) return tile
@@ -79,7 +92,7 @@ export async function renderDocumentPNG(snapshot: ImageExportSnapshot, preset: I
     for (let offset = 0; offset < dimensions.height; offset += tileHeight) {
       const height = Math.min(tileHeight, dimensions.height - offset)
       const image = await win.webContents.capturePage({ x: 0, y: offset, width: dimensions.width, height }, { stayHidden: true })
-      tiles.push(cropTile(PNG.sync.read(image.toPNG()), dimensions.width, height))
+      tiles.push(cropTile(nativeImageToPNG(image), dimensions.width, height))
     }
 
     const output = new PNG({ width: tiles[0]?.width ?? dimensions.width, height: tiles.reduce((sum, tile) => sum + tile.height, 0) })
