@@ -2,6 +2,40 @@
 
 This is the holding list for requests that have a clear user need but are not committed roadmap work. Entries stay here until they are accepted into a release plan or explicitly declined.
 
+## Implemented On Main
+
+These features are implemented on `main` and await release verification.
+
+### Export Word (.docx)
+
+**Sources:** [#31](https://github.com/marswaveai/ColaMD/issues/31)
+
+**Status:** Exports GFM document structure, common inline formatting, lists, tables, links, code blocks, and standalone local images to `.docx`. HTML and unsupported syntax degrade to text.
+
+### Export shareable images
+
+**Sources:** [#35](https://github.com/marswaveai/ColaMD/issues/35)
+
+**Status:** Exports a whole-document PNG using desktop (1200px) or mobile (414px) reading presets, rendered in a temporary isolated window.
+
+### Import local images
+
+**Sources:** [#21](https://github.com/marswaveai/ColaMD/issues/21)
+
+**Status:** Supports menu selection, paste, and drag-and-drop for saved Markdown documents. Files copy to `assets/` beside the document, avoid overwrite with numeric suffixes, and save as portable relative paths.
+
+### Document outline
+
+**Sources:** [#21](https://github.com/marswaveai/ColaMD/issues/21), [#27](https://github.com/marswaveai/ColaMD/issues/27)
+
+**Status:** Adds a Files / Outline switch in the existing sidebar. Headings navigate in both visual and Markdown source modes.
+
+### Windows startup performance
+
+**Sources:** [#32](https://github.com/marswaveai/ColaMD/issues/32)
+
+**Status:** Adds opt-in `COLAMD_STARTUP_TRACE=1` timing from main-process load through editor readiness. Export dependencies are dynamically loaded, reducing the main startup bundle from about 1.73 MB to 604 KB.
+
 ## Candidates
 
 ### Recent files
@@ -13,56 +47,6 @@ This is the holding list for requests that have a clear user need but are not co
 **Why it fits:** This shortens the return path to active documents without introducing tabs or a persistent workspace.
 
 **Constraints:** Store only a bounded list of canonical local paths. Missing files must be skipped or clearly unavailable. Do not add a permanent sidebar section or reopen documents automatically at launch.
-
-### Export Word (.docx)
-
-**Source:** [#31](https://github.com/marswaveai/ColaMD/issues/31)
-
-**Need:** Export the current Markdown document as an editable `.docx` file for collaborators who use office software.
-
-**Why it fits:** It is a common delivery format, but requires a deliberate Markdown-to-Word mapping rather than a superficial file conversion.
-
-**Constraints:** Large feature. Keep the entry in File menu. Define supported structures, image embedding, and degradation for HTML, math, and unsupported syntax before adding a conversion dependency.
-
-### Export shareable images
-
-**Source:** [#35](https://github.com/marswaveai/ColaMD/issues/35)
-
-**Need:** Export an article as an image with desktop and mobile reading presets.
-
-**Why it fits:** It supports document sharing without changing the writing surface.
-
-**Constraints:** Large feature. Start only with full-document PNG and fixed width presets; validate long-document memory use and output clarity before formats, selection export, custom sizing, or resolution controls.
-
-### Import local images into the current document
-
-**Source:** [#21](https://github.com/marswaveai/ColaMD/issues/21)
-
-**Need:** Pasting or dropping an image should copy it into a predictable folder next to the current Markdown file and insert a portable relative image reference.
-
-**Why it fits:** ColaMD already renders local images and restores portable relative paths on save. This fills the missing creation workflow without changing the editor's content-first layout.
-
-**Constraints:** Use an existing menu command or keyboard shortcut. Do not add a persistent toolbar control. Define collision handling, image naming, clipboard behavior, and the destination folder before implementation.
-
-### Windows startup performance
-
-**Source:** [#32](https://github.com/marswaveai/ColaMD/issues/32)
-
-**Need:** Windows users report that ColaMD starts noticeably slower than Typora.
-
-**Plan:** Keep this as a performance optimization candidate for the weekly planning cycle. First measure cold and warm startup on comparable machines, then profile main-process startup, window creation, renderer loading, editor initialization, and time to first interaction.
-
-**Constraints:** Optimize measured bottlenecks without adding persistent services, workspace state, or extra UI. Preserve file hot-reload, editor availability, and cross-platform behavior.
-
-### Document outline
-
-**Source:** [#21](https://github.com/marswaveai/ColaMD/issues/21), [#27](https://github.com/marswaveai/ColaMD/issues/27)
-
-**Need:** Navigate long documents through their headings without losing the writing-focused layout.
-
-**Why it fits:** This is useful for long-form Markdown, but it must remain secondary to writing.
-
-**Constraints:** Do not add a permanent outline panel. Explore an on-demand, lightweight interaction only after validating that heading navigation cannot be served by existing editor behavior.
 
 ### Diagram rendering (Mermaid / mindmap)
 
