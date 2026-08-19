@@ -95,23 +95,24 @@ async function runAutosave(): Promise<void> {
   }
 }
 
-async function saveCurrent(saveAs = false): Promise<void> {
+async function saveCurrent(saveAs = false): Promise<boolean> {
   const revision = documentRevision
   const content = getContent()
   const expectedPath = currentFilePath
   const path = await enqueueSave(() => saveAs
     ? window.electronAPI.saveFileAs(content, expectedPath ?? undefined)
     : window.electronAPI.saveFile(content, expectedPath ?? undefined))
-  if (!path || currentFilePath !== expectedPath) return
+  if (!path || currentFilePath !== expectedPath) return false
 
   currentFilePath = path
   updateFileTitle()
   refreshSiblings()
   if (revision === documentRevision) {
     clearDirty()
-  } else if (dirty) {
-    scheduleAutosave()
+    return true
   }
+  if (dirty) scheduleAutosave()
+  return false
 }
 
 function applyContent(content: string): void {
@@ -328,12 +329,13 @@ async function init(): Promise<void> {
   })
   api.reportRendererReady()
 
-  // File panel: switch to a sibling file (confirm if there are unsaved edits)
+  // Save before switching files. If saving is cancelled or fails, preserve the
+  // current document rather than opening another file over it.
   fileListEl().addEventListener('click', async (e) => {
     const btn = (e.target as HTMLElement).closest('button[data-path]') as HTMLButtonElement | null
     if (!btn || !btn.dataset.path) return
     if (btn.dataset.path === currentFilePath) return
-    if (btn.dataset.kind === 'file' && dirty && !window.confirm('当前文件有未保存的修改，切换文件会丢失这些修改。是否继续？')) return
+    if (btn.dataset.kind === 'file' && dirty && !await saveCurrent()) return
     await api.openSibling(btn.dataset.path)
   })
 
