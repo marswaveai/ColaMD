@@ -726,6 +726,8 @@ ipcMain.handle('select-images-for-insert', async (event) => {
 ipcMain.handle('export-docx', async (event, content: unknown) => {
   const win = getWinFromEvent(event)
   if (!win || typeof content !== 'string') return false
+  win.show()
+  win.focus()
   const baseName = suggestFileName(win, content) ?? 'untitled'
   const result = await dialog.showSaveDialog(win, {
     defaultPath: `${baseName}.docx`,
@@ -737,7 +739,14 @@ ipcMain.handle('export-docx', async (event, content: unknown) => {
     await writeFile(result.filePath, await markdownToDocx({ content, sourcePath: getState(win).filePath }))
     shell.showItemInFolder(result.filePath)
     return true
-  } catch {
+  } catch (error) {
+    console.error('Word export failed', error)
+    await dialog.showMessageBox(win, {
+      type: 'error',
+      buttons: ['好'],
+      message: '无法导出 Word 文档',
+      detail: error instanceof Error ? error.message : String(error),
+    })
     return false
   }
 })
@@ -971,7 +980,7 @@ function getPreferredCheatsheetLanguage(): 'zh' | 'en' {
 let latestVersion: string | null = null
 
 function sendToFocused(channel: string, ...args: unknown[]): void {
-  const win = getFocusedWindow()
+  const win = getFocusedWindow() ?? BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed())
   if (win) win.webContents.send(channel, ...args)
 }
 

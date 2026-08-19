@@ -22,8 +22,9 @@ function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): s
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: file:; style-src 'unsafe-inline'; img-src 'self' data: blob: https: http: file:; font-src 'self' data:">
   <style>${snapshot.styles}
-    html, body { width: ${width}px !important; min-width: ${width}px !important; height: auto !important; overflow: visible !important; }
+    html, body { width: ${width}px !important; min-width: ${width}px !important; height: auto !important; overflow: hidden !important; }
     body { margin: 0 !important; }
+    *::-webkit-scrollbar { display: none !important; }
     #titlebar, #file-panel, #source-editor, #update-banner { display: none !important; }
     #editor { display: block !important; width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; margin: 0 !important; padding: ${padding}px !important; }
     #editor .ProseMirror { width: auto !important; max-width: none !important; min-height: 0 !important; }
@@ -45,6 +46,14 @@ async function waitForLayout(win: BrowserWindow): Promise<{ width: number; heigh
   })()`)
 }
 
+function cropTile(tile: PNG, cssWidth: number, cssHeight: number): PNG {
+  const targetHeight = Math.min(tile.height, Math.max(1, Math.round(cssHeight * tile.width / cssWidth)))
+  if (tile.height === targetHeight) return tile
+  const cropped = new PNG({ width: tile.width, height: targetHeight })
+  PNG.bitblt(tile, cropped, 0, 0, tile.width, targetHeight, 0, 0)
+  return cropped
+}
+
 export async function renderDocumentPNG(snapshot: ImageExportSnapshot, preset: ImageExportPreset): Promise<Buffer> {
   const { width } = PRESETS[preset]
   const tileHeight = 1600
@@ -62,9 +71,8 @@ export async function renderDocumentPNG(snapshot: ImageExportSnapshot, preset: I
     const tiles: PNG[] = []
     for (let offset = 0; offset < dimensions.height; offset += tileHeight) {
       const height = Math.min(tileHeight, dimensions.height - offset)
-      await win.webContents.executeJavaScript(`window.scrollTo(0, ${offset}); new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
-      const image = await win.webContents.capturePage({ x: 0, y: 0, width: dimensions.width, height }, { stayHidden: true })
-      tiles.push(PNG.sync.read(image.toPNG()))
+      const image = await win.webContents.capturePage({ x: 0, y: offset, width: dimensions.width, height }, { stayHidden: true })
+      tiles.push(cropTile(PNG.sync.read(image.toPNG()), dimensions.width, height))
     }
 
     const output = new PNG({ width: tiles[0]?.width ?? dimensions.width, height: tiles.reduce((sum, tile) => sum + tile.height, 0) })

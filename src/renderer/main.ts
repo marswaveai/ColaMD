@@ -230,16 +230,7 @@ function renderOutline(): void {
   const list = outlineListEl()
   const items = sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline()
   list.innerHTML = ''
-  if (items.length === 0) {
-    const empty = document.createElement('li')
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'empty'
-    button.textContent = '没有标题'
-    empty.appendChild(button)
-    list.appendChild(empty)
-    return
-  }
+  if (items.length === 0) return
   for (const item of items) {
     const entry = document.createElement('li')
     const button = document.createElement('button')

@@ -1,14 +1,13 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
-import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
-import type { Node as ProseMirrorNode, Schema } from '@milkdown/kit/prose/model'
+import { DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
+import { Fragment } from '@milkdown/kit/prose/model'
 import remarkBreaks from 'remark-breaks'
 import { commonmark } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
 import { history } from '@milkdown/kit/plugin/history'
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
-import { upload, uploadConfig } from '@milkdown/kit/plugin/upload'
 import { replaceAll, $prose } from '@milkdown/kit/utils'
 import { remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema } from '@milkdown/plugin-math'
 import { htmlView } from './html-view'
@@ -65,26 +64,34 @@ let editorInstance: Editor | null = null
 
 type ImportedImage = { src: string; alt: string }
 
-async function importLocalImages(files: FileList, schema: Schema): Promise<ProseMirrorNode[]> {
-  const image = schema.nodes.image
-  if (!image) return []
+async function importLocalImages(files: FileList): Promise<void> {
+  if (!editorInstance) return
   const requested = Array.from(files)
     .filter((file) => file.type.startsWith('image/'))
     .map((file) => ({ path: window.electronAPI.getPathForFile(file), name: file.name }))
     .filter((file) => file.path)
-  if (requested.length === 0) return []
+  if (requested.length === 0) return
+
+  let selection: { from: number; to: number } | null = null
+  editorInstance.action((ctx) => {
+    const view = ctx.get(editorViewCtx)
+    selection = { from: view.state.selection.from, to: view.state.selection.to }
+  })
   const imported = await window.electronAPI.importImages(requested)
-  return (imported ?? []).map(({ src, alt }) => image.create({ src, alt }))
+  insertImportedImages(imported ?? [], selection ?? undefined)
 }
 
-export function insertImportedImages(images: ImportedImage[]): void {
+export function insertImportedImages(images: ImportedImage[], selection?: { from: number; to: number }): void {
   if (!editorInstance || images.length === 0) return
   editorInstance.action((ctx) => {
     const view = ctx.get(editorViewCtx)
     const image = view.state.schema.nodes.image
     if (!image) return
     const nodes = images.map(({ src, alt }) => image.create({ src, alt }))
-    view.dispatch(view.state.tr.replaceWith(view.state.selection.from, view.state.selection.to, nodes))
+    const size = view.state.doc.content.size
+    const from = Math.max(0, Math.min(selection?.from ?? view.state.selection.from, size))
+    const to = Math.max(from, Math.min(selection?.to ?? view.state.selection.to, size))
+    view.dispatch(view.state.tr.replaceWith(from, to, Fragment.fromArray(nodes)))
   })
 }
 
@@ -285,15 +292,6 @@ export async function createEditor(
         { plugin: remarkHighlight, options: {} },
       ])
       ctx.set(katexOptionsCtx.key, { throwOnError: false })
-      ctx.set(uploadConfig.key, {
-        uploader: importLocalImages,
-        enableHtmlFileUploader: true,
-        uploadWidgetFactory: (pos, spec) => {
-          const placeholder = document.createElement('span')
-          placeholder.textContent = '正在导入图片...'
-          return Decoration.widget(pos, placeholder, spec)
-        },
-      })
       // Teach remark-stringify how to emit our custom ==highlight== node
       const stringifyOptions = ctx.get(remarkStringifyOptionsCtx)
       ctx.set(remarkStringifyOptionsCtx, {
@@ -318,7 +316,6 @@ export async function createEditor(
     .use(history)
     .use(listener)
     .use(clipboard)
-    .use(upload)
     .use(htmlView)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
@@ -330,6 +327,24 @@ export async function createEditor(
   // Enhance clipboard with inline styles for rich text paste (e.g. WeChat)
   root.addEventListener('copy', enhanceClipboard)
   root.addEventListener('cut', enhanceClipboard)
+
+  const hasLocalImage = (files: FileList): boolean => Array.from(files).some((file) => file.type.startsWith('image/') && !!window.electronAPI.getPathForFile(file))
+  root.addEventListener('paste', (event) => {
+    const files = event.clipboardData?.files
+    if (!files || !hasLocalImage(files)) return
+    event.preventDefault()
+    void importLocalImages(files)
+  }, true)
+  root.addEventListener('dragover', (event) => {
+    const files = event.dataTransfer?.files
+    if (files && hasLocalImage(files)) event.preventDefault()
+  }, true)
+  root.addEventListener('drop', (event) => {
+    const files = event.dataTransfer?.files
+    if (!files || !hasLocalImage(files)) return
+    event.preventDefault()
+    void importLocalImages(files)
+  }, true)
 
   // Cmd/Ctrl+B toggles the strong mark for an existing selection. This keeps
   // basic formatting editable without adding a permanent toolbar.
