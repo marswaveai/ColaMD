@@ -325,6 +325,7 @@ body {
   gap: 1px;
 }
 
+#file-list[hidden],
 #outline-list[hidden] {
   display: none;
 }

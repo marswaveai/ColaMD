@@ -16,13 +16,7 @@ These features are implemented on `main` and await release verification.
 
 **Sources:** [#35](https://github.com/marswaveai/ColaMD/issues/35)
 
-**Status:** Exports a whole-document PNG using desktop (1200px) or mobile (414px) reading presets, rendered in a temporary isolated window.
-
-### Import local images
-
-**Sources:** [#21](https://github.com/marswaveai/ColaMD/issues/21)
-
-**Status:** Supports menu selection, paste, and drag-and-drop for saved Markdown documents. Files copy to `assets/` beside the document, avoid overwrite with numeric suffixes, and save as portable relative paths.
+**Status:** Exports desktop and mobile reading pages as separate PNG files. Longer documents continue as numbered pages, with the final page trimmed to its content.
 
 ### Document outline
 
@@ -37,6 +31,14 @@ These features are implemented on `main` and await release verification.
 **Status:** Adds opt-in `COLAMD_STARTUP_TRACE=1` timing from main-process load through editor readiness. Export dependencies are dynamically loaded, reducing the main startup bundle from about 1.73 MB to 604 KB.
 
 ## Candidates
+
+### Import local images
+
+**Source:** [#21](https://github.com/marswaveai/ColaMD/issues/21)
+
+**Need:** Insert local images into Markdown without compromising editor stability or document content.
+
+**Status:** Deferred. The initial menu, paste, and drag-and-drop implementation was removed before `v1.9.0` after it proved unreliable.
 
 ### Recent files
 

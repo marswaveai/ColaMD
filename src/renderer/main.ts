@@ -1,4 +1,4 @@
-import { createEditor, getMarkdown, insertImportedImages, setMarkdown, showMathModal } from './editor/editor'
+import { createEditor, getMarkdown, setMarkdown, showMathModal } from './editor/editor'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import './themes/base.css'
@@ -412,18 +412,6 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
   if (wasSourceMode) enterSourceMode(content, sourceScrollRatio)
 }
 
-function insertImages(images: Array<{ src: string; alt: string }>): void {
-  if (images.length === 0) return
-  if (!sourceModeActive) {
-    insertImportedImages(images)
-    return
-  }
-  const source = sourceEl()
-  const markdown = images.map(({ src, alt }) => `![${alt}](${src})`).join('\n')
-  source.setRangeText(markdown, source.selectionStart, source.selectionEnd, 'end')
-  source.dispatchEvent(new Event('input', { bubbles: true }))
-}
-
 async function init(): Promise<void> {
   const api = window.electronAPI
   const savedTheme = loadSavedTheme()
@@ -492,9 +480,6 @@ async function init(): Promise<void> {
   api.onMenuExportHTML(() => { void exportCurrentHTML() })
   api.onMenuExportDOCX(() => { void api.exportDOCX(getContent()) })
   api.onMenuExportImage((preset) => { void exportCurrentImage(preset) })
-  api.onMenuInsertImage(() => {
-    void api.selectImagesForInsert().then((images) => insertImages(images ?? []))
-  })
 
   api.onNewFile(() => { exitSourceMode(); applyContent('') })
   api.onFileOpened((data) => {

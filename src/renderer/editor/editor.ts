@@ -1,7 +1,6 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
-import { Fragment } from '@milkdown/kit/prose/model'
 import remarkBreaks from 'remark-breaks'
 import { commonmark } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
@@ -61,39 +60,6 @@ export function showMathModal(): void {
 }
 
 let editorInstance: Editor | null = null
-
-type ImportedImage = { src: string; alt: string }
-
-async function importLocalImages(files: FileList): Promise<void> {
-  if (!editorInstance) return
-  const requested = Array.from(files)
-    .filter((file) => file.type.startsWith('image/'))
-    .map((file) => ({ path: window.electronAPI.getPathForFile(file), name: file.name }))
-    .filter((file) => file.path)
-  if (requested.length === 0) return
-
-  let selection: { from: number; to: number } | null = null
-  editorInstance.action((ctx) => {
-    const view = ctx.get(editorViewCtx)
-    selection = { from: view.state.selection.from, to: view.state.selection.to }
-  })
-  const imported = await window.electronAPI.importImages(requested)
-  insertImportedImages(imported ?? [], selection ?? undefined)
-}
-
-export function insertImportedImages(images: ImportedImage[], selection?: { from: number; to: number }): void {
-  if (!editorInstance || images.length === 0) return
-  editorInstance.action((ctx) => {
-    const view = ctx.get(editorViewCtx)
-    const image = view.state.schema.nodes.image
-    if (!image) return
-    const nodes = images.map(({ src, alt }) => image.create({ src, alt }))
-    const size = view.state.doc.content.size
-    const from = Math.max(0, Math.min(selection?.from ?? view.state.selection.from, size))
-    const to = Math.max(from, Math.min(selection?.to ?? view.state.selection.to, size))
-    view.dispatch(view.state.tr.replaceWith(from, to, Fragment.fromArray(nodes)))
-  })
-}
 
 const inlineStyles: Record<string, string> = {
   'h1': 'font-size:1.8em;margin:1em 0 .5em;padding-bottom:.3em;border-bottom:1px solid #eee;',
@@ -327,24 +293,6 @@ export async function createEditor(
   // Enhance clipboard with inline styles for rich text paste (e.g. WeChat)
   root.addEventListener('copy', enhanceClipboard)
   root.addEventListener('cut', enhanceClipboard)
-
-  const hasLocalImage = (files: FileList): boolean => Array.from(files).some((file) => file.type.startsWith('image/') && !!window.electronAPI.getPathForFile(file))
-  root.addEventListener('paste', (event) => {
-    const files = event.clipboardData?.files
-    if (!files || !hasLocalImage(files)) return
-    event.preventDefault()
-    void importLocalImages(files)
-  }, true)
-  root.addEventListener('dragover', (event) => {
-    const files = event.dataTransfer?.files
-    if (files && hasLocalImage(files)) event.preventDefault()
-  }, true)
-  root.addEventListener('drop', (event) => {
-    const files = event.dataTransfer?.files
-    if (!files || !hasLocalImage(files)) return
-    event.preventDefault()
-    void importLocalImages(files)
-  }, true)
 
   // Cmd/Ctrl+B toggles the strong mark for an existing selection. This keeps
   // basic formatting editable without adding a permanent toolbar.
