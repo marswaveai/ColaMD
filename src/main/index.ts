@@ -989,7 +989,7 @@ function buildMenu(): void {
         sepia: '羊皮纸', notion: '简白', bear: '熊红', writer: '作家',
         solarizedDark: '夜航', nord: '极地', gruvbox: '暖木', dracula: '德古拉', midnight: '午夜',
         importTheme: '导入主题...', whatsNew: '新功能演示',
-        cheatsheet: 'Markdown 语法', about: '关于 ColaMD', updateAvailable: '发现新版本', close: '关闭窗口',
+        cheatsheet: 'Markdown 语法', about: '关于 ColaMD', checkForUpdates: '检查更新...', updateAvailable: '发现新版本', close: '关闭窗口',
         undo: '撤销', redo: '重做', cut: '剪切', copy: '复制', paste: '粘贴', selectAll: '全选',
         actualSize: '实际大小', zoomIn: '放大', zoomOut: '缩小', fullscreen: '切换全屏',
         hide: '隐藏 ColaMD', hideOthers: '隐藏其他应用', showAll: '显示全部', quit: '退出 ColaMD',
@@ -1004,7 +1004,7 @@ function buildMenu(): void {
         sepia: 'Sepia', notion: 'Notion', bear: 'Bear', writer: 'Writer',
         solarizedDark: 'Solarized Dark', nord: 'Nord', gruvbox: 'Gruvbox', dracula: 'Dracula', midnight: 'Midnight',
         importTheme: 'Import Theme...', whatsNew: "What's New",
-        cheatsheet: 'Markdown Syntax', about: 'About ColaMD', updateAvailable: 'Update Available', close: 'Close Window',
+        cheatsheet: 'Markdown Syntax', about: 'About ColaMD', checkForUpdates: 'Check for Updates...', updateAvailable: 'Update Available', close: 'Close Window',
         undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
         actualSize: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
         hide: 'Hide ColaMD', hideOthers: 'Hide Others', showAll: 'Show All', quit: 'Quit ColaMD',
@@ -1162,9 +1162,16 @@ function buildMenu(): void {
           click: () => { void openCheatsheet(preferredCheatsheetLanguage) }
         },
         {
-          label: latestVersion ? `${labels.updateAvailable} v${latestVersion}` : labels.about,
-          click: () => shell.openExternal(latestVersion ? 'https://colamd.com/' : 'https://github.com/marswaveai/colamd')
-        }
+          label: labels.checkForUpdates,
+          enabled: app.isPackaged,
+          click: () => { void checkForUpdates(true) }
+        },
+        ...(latestVersion ? [{
+          label: `${labels.updateAvailable} v${latestVersion}`,
+          click: () => { void autoUpdater.downloadUpdate() }
+        }] : []),
+        { type: 'separator' },
+        { label: labels.about, role: 'about' }
       ]
     }
   ]
@@ -1173,6 +1180,31 @@ function buildMenu(): void {
 }
 
 // --- Auto update (weak, non-blocking) ---
+let manualUpdateCheck = false
+
+function showUpdateMessage(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
+  const win = getFocusedWindow()
+  return win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options)
+}
+
+async function checkForUpdates(manual = false): Promise<void> {
+  if (!app.isPackaged) return
+  manualUpdateCheck = manual
+  try {
+    await autoUpdater.checkForUpdates()
+  } catch (error) {
+    if (!manualUpdateCheck) return
+    manualUpdateCheck = false
+    const chinese = getPreferredCheatsheetLanguage() === 'zh'
+    await showUpdateMessage({
+      type: 'error',
+      buttons: [chinese ? '好' : 'OK'],
+      message: chinese ? '无法检查更新' : 'Unable to check for updates',
+      detail: error instanceof Error ? error.message : String(error)
+    })
+  }
+}
+
 function setupAutoUpdater(): void {
   if (!app.isPackaged) return
 
@@ -1186,16 +1218,28 @@ function setupAutoUpdater(): void {
   }
 
   autoUpdater.on('update-available', (info) => {
+    manualUpdateCheck = false
     latestVersion = info.version
     buildMenu()
     broadcast('update-available', info.version)
+  })
+  autoUpdater.on('update-not-available', () => {
+    if (!manualUpdateCheck) return
+    manualUpdateCheck = false
+    const chinese = getPreferredCheatsheetLanguage() === 'zh'
+    void showUpdateMessage({
+      type: 'info',
+      buttons: [chinese ? '好' : 'OK'],
+      message: chinese ? 'ColaMD 已是最新版本' : 'ColaMD is up to date',
+      detail: chinese ? `当前版本：v${app.getVersion()}` : `Current version: v${app.getVersion()}`
+    })
   })
   autoUpdater.on('update-downloaded', (info) => broadcast('update-downloaded', info.version))
   autoUpdater.on('error', (err) => console.error('autoUpdater:', err.message))
 
   // Defer the first check so it never delays startup.
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => {})
+    void checkForUpdates()
   }, 8000)
 }
 
