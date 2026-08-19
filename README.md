@@ -47,6 +47,7 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 - **Smart Line Breaks** — Single newlines render as line breaks, matching how people and AI tools write Markdown.
 - **Rich Text Copy** — Copy content with formatting preserved into WeChat, email, and other rich-text editors.
 - **Themes** — Twelve built-in themes for focused writing in light or dark environments.
+- **Version Changelog** — The first launch after an update opens the built-in changelog once, so you can see what changed without repeated prompts.
 - **PDF, HTML & Word Export** — Turn your Markdown document into a themed PDF, self-contained HTML, or editable Word document.
 - **Reading-Page Image Export** — Share Markdown as desktop or mobile PNG pages; longer documents continue as numbered pages.
 - **Portable Image Paths** — Local images use safe `file://` URLs for display and return to relative paths when saved.

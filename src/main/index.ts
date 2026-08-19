@@ -26,6 +26,7 @@ function writeStartupTrace(): void {
 
 
 const themesDir = join(app.getPath('home'), '.colamd', 'themes')
+const releaseNoticePath = join(app.getPath('userData'), 'release-notice.json')
 
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdown', '.mkd']
 
@@ -820,6 +821,25 @@ async function openBundledDocument(fileName: string): Promise<void> {
   }
 }
 
+async function openChangelogOnceForVersion(): Promise<void> {
+  if (!app.isPackaged) return
+  const version = app.getVersion()
+  try {
+    const saved = JSON.parse(await readFile(releaseNoticePath, 'utf-8')) as { changelogVersion?: unknown }
+    if (saved.changelogVersion === version) return
+  } catch {
+    // First launch or an invalid marker: show the changelog and rewrite it.
+  }
+
+  try {
+    const content = await readFile(join(demoDir, 'changelog.md'), 'utf-8')
+    createWindow(undefined, content, demoDir)
+    await writeFile(releaseNoticePath, JSON.stringify({ changelogVersion: version }), 'utf-8')
+  } catch {
+    // Do not mark the version as seen if the bundled changelog could not open.
+  }
+}
+
 async function openCheatsheet(language: 'zh' | 'en' = 'zh'): Promise<void> {
   try {
     const fileName = language === 'en' ? 'cheatsheet-en.md' : 'cheatsheet.md'
@@ -1213,6 +1233,7 @@ app.whenReady().then(() => {
   }
 
   setupAutoUpdater()
+  void openChangelogOnceForVersion()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
