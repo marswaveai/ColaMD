@@ -97,17 +97,20 @@ ColaMD 是轻量 Markdown 编辑器，不追求功能堆叠。每增加一个按
 | --- | --- |
 | 背景 | `--bg-color` |
 | 正文 | `--text-color` |
-| 次要文字 / 图标 | `--text-muted` |
+| 次要文字 | `--text-secondary` |
+| 弱化图标 / 禁用状态 | `--text-muted` |
 | 边框 | `--border-color` |
 | 链接 / 选中 | `--link-color` |
 | 代码背景 | `--code-bg` / `--code-block-bg` |
+| 搜索匹配 | `--search-match-bg` / `--search-match-current-bg` |
 
 约定：
 
 - 默认控件背景为透明。
 - hover 使用低透明度的中性色背景，不制造新的色块。
 - active 状态可以使用主题强调色，但必须克制。
-- 次要图标使用 `--text-muted`，不要使用纯黑或纯白。
+- 次要文字使用 `--text-secondary`，与主题背景至少保持 WCAG AA 对比度。
+- 次要图标使用 `--text-muted`，不要借给需要阅读的文字。
 - tooltip 使用主题背景、边框和轻微阴影，不使用高饱和气泡。
 
 ## 5. 尺寸与动效

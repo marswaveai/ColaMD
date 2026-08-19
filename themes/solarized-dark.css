@@ -6,10 +6,11 @@
 
 :root {
   --bg-color: #002b36;
-  --text-color: #839496;
+  --text-color: #c2d5d7;
+  --text-secondary: #a4bbc3;
   --text-muted: #586e75;
   --border-color: #0d3d4a;
-  --link-color: #268bd2;
+  --link-color: #3093da;
   --code-bg: rgba(88, 110, 117, 0.22);
   --code-block-bg: #073642;
   --blockquote-border: #2aa198;

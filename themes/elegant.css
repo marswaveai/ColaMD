@@ -7,9 +7,10 @@
 :root {
   --bg-color: #f0edea;
   --text-color: #2c2c2c;
+  --text-secondary: #6c6c6c;
   --text-muted: #777;
   --border-color: #d8d3ce;
-  --link-color: #c44b2b;
+  --link-color: #bc4424;
   --code-bg: #e8e4df;
   --code-block-bg: #2c2c2c;
   --code-block-text: #e0dcd7;

@@ -36,6 +36,7 @@ ColaMD custom themes are plain CSS files. You can style the editor by targeting 
 body {
   --bg-color: #ffffff;
   --text-color: #24292f;
+  --text-secondary: #656d76;
   --text-muted: #656d76;
   --border-color: #d0d7de;
   --link-color: #0969da;
@@ -48,6 +49,11 @@ body {
   --selection-bg: rgba(0,0,0,0.1);
 }
 ```
+
+`--text-secondary` is for readable labels and secondary copy. `--text-muted`
+is reserved for subdued icons and disabled states. Search highlights derive
+from `--link-color` automatically and can be overridden with
+`--search-match-bg` and `--search-match-current-bg` when needed.
 
 ### Direct Selectors
 
@@ -62,5 +68,5 @@ For more control, target elements directly:
 ### Tips
 
 - Theme files should be self-contained (no external imports)
-- Test that all variables are defined to avoid invisible text
+- Omitted variables inherit ColaMD's Light defaults, so override only the tokens your theme needs
 - Name the file descriptively: `dark-ocean.css`, `solarized-light.css`, etc.

@@ -10,9 +10,10 @@
 body.theme-sepia {
   --bg-color: #f6efe0;
   --text-color: #4f4032;
+  --text-secondary: #7b6b54;
   --text-muted: #9a8a72;
   --border-color: #e2d7bf;
-  --link-color: #a0622d;
+  --link-color: #9c5e29;
   --code-bg: rgba(122, 90, 51, 0.1);
   --code-block-bg: #ece2cb;
   --blockquote-border: #c9a86a;
@@ -52,6 +53,7 @@ body.theme-sepia #editor .ProseMirror code {
 body.theme-notion {
   --bg-color: #ffffff;
   --text-color: #37352f;
+  --text-secondary: #777674;
   --text-muted: #9b9a97;
   --border-color: #e9e9e7;
   --link-color: #37352f;
@@ -97,6 +99,7 @@ body.theme-notion #editor .ProseMirror table td {
 body.theme-bear {
   --bg-color: #ffffff;
   --text-color: #262626;
+  --text-secondary: #767676;
   --text-muted: #8a8a8a;
   --border-color: #e8e6e3;
   --link-color: #d43d2a;
@@ -132,6 +135,7 @@ body.theme-bear #editor .ProseMirror hr {
 body.theme-writer {
   --bg-color: #fcfcfa;
   --text-color: #1a1a1a;
+  --text-secondary: #757571;
   --text-muted: #8e8e8a;
   --border-color: #e3e3de;
   --link-color: #3b6ec4;
@@ -172,10 +176,11 @@ body.theme-writer #editor .ProseMirror table td {
    muted cyan text, stars of orange and blue. */
 body.theme-solarized-dark {
   --bg-color: #002b36;
-  --text-color: #839496;
+  --text-color: #c2d5d7;
+  --text-secondary: #a4bbc3;
   --text-muted: #586e75;
   --border-color: #0d3d4a;
-  --link-color: #268bd2;
+  --link-color: #3093da;
   --code-bg: rgba(88, 110, 117, 0.22);
   --code-block-bg: #073642;
   --blockquote-border: #2aa198;
@@ -205,6 +210,7 @@ body.theme-solarized-dark #editor .ProseMirror code {
 body.theme-nord {
   --bg-color: #2e3440;
   --text-color: #d8dee9;
+  --text-secondary: #aebdd4;
   --text-muted: #7d8ba1;
   --border-color: #3b4252;
   --link-color: #88c0d0;
@@ -240,6 +246,7 @@ body.theme-nord #editor .ProseMirror blockquote {
 body.theme-gruvbox {
   --bg-color: #282828;
   --text-color: #ebdbb2;
+  --text-secondary: #c5b5a5;
   --text-muted: #928374;
   --border-color: #3c3836;
   --link-color: #83a598;
@@ -279,6 +286,7 @@ body.theme-gruvbox #editor .ProseMirror hr {
 body.theme-dracula {
   --bg-color: #282a36;
   --text-color: #f8f8f2;
+  --text-secondary: #afb7db;
   --text-muted: #7f86a8;
   --border-color: #44475a;
   --link-color: #bd93f9;
@@ -314,6 +322,7 @@ body.theme-dracula #editor .ProseMirror blockquote {
 body.theme-midnight {
   --bg-color: #000000;
   --text-color: #d6d6d6;
+  --text-secondary: #b1b1b1;
   --text-muted: #7a7a7a;
   --border-color: #262626;
   --link-color: #0a84ff;
