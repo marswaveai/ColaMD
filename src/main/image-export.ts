@@ -47,9 +47,16 @@ async function waitForLayout(win: BrowserWindow): Promise<{ width: number; heigh
     })))
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     const editor = document.getElementById('editor')
+    const content = editor?.querySelector('.ProseMirror')
+    const editorBounds = editor?.getBoundingClientRect()
+    const contentBounds = content?.getBoundingClientRect()
+    const editorStyle = editor ? getComputedStyle(editor) : null
+    const paddingBottom = editorStyle ? Number.parseFloat(editorStyle.paddingBottom) || 0 : 0
     return {
-      width: editor?.scrollWidth ?? document.documentElement.scrollWidth,
-      height: editor?.scrollHeight ?? document.documentElement.scrollHeight,
+      width: Math.ceil(editorBounds?.width ?? document.documentElement.scrollWidth),
+      height: Math.ceil(contentBounds && editorBounds
+        ? contentBounds.bottom - editorBounds.top + paddingBottom
+        : editor?.scrollHeight ?? document.documentElement.scrollHeight),
     }
   })()`)
 }
