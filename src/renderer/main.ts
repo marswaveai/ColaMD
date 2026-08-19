@@ -351,6 +351,7 @@ function getExportSnapshot(content: string): {
   html: string
   styles: string
   bodyClass: string
+  background: string
 } {
   let styles = ''
   for (const sheet of Array.from(document.styleSheets)) {
@@ -365,6 +366,7 @@ function getExportSnapshot(content: string): {
     html: document.querySelector('#editor .ProseMirror')?.innerHTML ?? '',
     styles,
     bodyClass: Array.from(document.body.classList).filter((name) => name !== 'show-file-panel').join(' '),
+    background: getComputedStyle(document.body).backgroundColor,
   }
 }
 

@@ -756,8 +756,8 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
   if (!win || (preset !== 'desktop' && preset !== 'mobile') || !snapshot || typeof snapshot !== 'object') return false
   win.show()
   win.focus()
-  const { html, styles, bodyClass } = snapshot as { html?: unknown; styles?: unknown; bodyClass?: unknown }
-  if (typeof html !== 'string' || typeof styles !== 'string' || typeof bodyClass !== 'string') return false
+  const { html, styles, bodyClass, background } = snapshot as { html?: unknown; styles?: unknown; bodyClass?: unknown; background?: unknown }
+  if (typeof html !== 'string' || typeof styles !== 'string' || typeof bodyClass !== 'string' || typeof background !== 'string') return false
   const baseName = suggestFileName(win) ?? 'untitled'
   const suffix = preset === 'desktop' ? 'desktop' : 'mobile'
   const result = await dialog.showSaveDialog(win, {
@@ -767,7 +767,7 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
   if (result.canceled || !result.filePath) return false
   try {
     const { renderDocumentPNG } = await import('./image-export')
-    await writeFile(result.filePath, await renderDocumentPNG({ html, styles, bodyClass }, preset))
+    await writeFile(result.filePath, await renderDocumentPNG({ html, styles, bodyClass, background }, preset))
     shell.showItemInFolder(result.filePath)
     return true
   } catch (error) {

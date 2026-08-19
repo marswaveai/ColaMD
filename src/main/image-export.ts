@@ -10,6 +10,7 @@ export interface ImageExportSnapshot {
   html: string
   styles: string
   bodyClass: string
+  background: string
 }
 
 const PRESETS: Record<ImageExportPreset, { width: number; padding: number }> = {
@@ -25,11 +26,11 @@ function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): s
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: file:; style-src 'unsafe-inline'; img-src 'self' data: blob: https: http: file:; font-src 'self' data:">
   <style>${snapshot.styles}
-    html, body { width: ${width}px !important; min-width: ${width}px !important; height: auto !important; overflow: hidden !important; }
+    html, body { width: ${width}px !important; min-width: ${width}px !important; height: fit-content !important; min-height: 0 !important; overflow: hidden !important; background: ${snapshot.background} !important; }
     body { margin: 0 !important; }
     *::-webkit-scrollbar { display: none !important; }
     #titlebar, #file-panel, #source-editor, #update-banner { display: none !important; }
-    #editor { display: block !important; width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; margin: 0 !important; padding: ${padding}px !important; }
+    #editor { display: block !important; width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; margin: 0 !important; padding: ${padding}px !important; background: ${snapshot.background} !important; }
     #editor .ProseMirror { width: auto !important; max-width: none !important; min-height: 0 !important; }
   </style>
 </head>
@@ -45,7 +46,11 @@ async function waitForLayout(win: BrowserWindow): Promise<{ width: number; heigh
       image.addEventListener('error', resolve, { once: true })
     })))
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-    return { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight }
+    const editor = document.getElementById('editor')
+    return {
+      width: editor?.scrollWidth ?? document.documentElement.scrollWidth,
+      height: editor?.scrollHeight ?? document.documentElement.scrollHeight,
+    }
   })()`)
 }
 

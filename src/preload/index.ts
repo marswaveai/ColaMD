@@ -9,7 +9,7 @@ export interface SiblingFile {
 type FileOpenedData = { path: string | null; content: string }
 type ImageImportResult = { src: string; alt: string }
 type ImageExportPreset = 'desktop' | 'mobile'
-type ImageExportSnapshot = { html: string; styles: string; bodyClass: string }
+type ImageExportSnapshot = { html: string; styles: string; bodyClass: string; background: string }
 
 const pendingFileOpened: FileOpenedData[] = []
 let fileOpenedHandler: ((data: FileOpenedData) => void) | null = null
