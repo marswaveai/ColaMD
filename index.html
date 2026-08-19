@@ -31,7 +31,6 @@
   "applicationCategory": "ProductivityApplication",
   "operatingSystem": "macOS, Windows, Linux",
   "url": "https://colamd.com/",
-  "softwareVersion": "1.8.1",
   "license": "https://opensource.org/licenses/MIT",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Organization", "name": "Marswave AI", "url": "https://github.com/marswaveai" },
@@ -88,33 +87,33 @@
 
   .editor-window { position: relative; transform: translateY(24px) rotate(1.2deg); }
   .editor-window::before { content: ''; position: absolute; inset: 24px -18px -22px 22px; border: 1px solid var(--line); border-radius: 14px; transform: rotate(-2.4deg); }
-  .window { position: relative; overflow: hidden; border: 1px solid #d0c7bd; border-radius: 12px; background: var(--paper-light); box-shadow: 0 26px 55px var(--shadow); }
-  .window-bar { height: 43px; display: flex; align-items: center; gap: 7px; padding: 0 16px; border-bottom: 1px solid #e3ddd6; background: #eee9e3; }
+  .window { position: relative; overflow: hidden; border: 1px solid #d8d3ce; border-radius: 12px; background: #f0edea; box-shadow: 0 26px 55px var(--shadow); }
+  .window-bar { height: 43px; display: flex; align-items: center; gap: 7px; padding: 0 16px; border-bottom: 1px solid #d8d3ce; background: #e8e4df; }
   .window-dot { width: 8px; height: 8px; border-radius: 50%; background: #cfc6bd; }
   .window-dot:first-child { background: #d38168; }
   .window-title { margin-left: 9px; color: var(--faint); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.68rem; }
-  .window-body { min-height: 350px; display: grid; grid-template-columns: 145px 1fr; }
-  .file-list { padding: 23px 14px; border-right: 1px solid #e3ddd6; background: #f0ebe5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .window-body { min-height: 350px; display: grid; grid-template-columns: 145px 1fr; background: #f0edea; }
+  .file-list { padding: 23px 14px; border-right: 1px solid #d8d3ce; background: #eae6e1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
   .file-label { margin: 0 8px 14px; color: var(--faint); font-size: 0.61rem; font-weight: 700; letter-spacing: 0.12em; }
   .file { overflow: hidden; margin: 3px 0; padding: 7px 8px; border-radius: 5px; color: var(--muted); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
-  .file.active { background: #e3d8cf; color: var(--ink); font-weight: 600; }
+  .file.active { background: #f0d9a8; color: #2c2c2c; font-weight: 600; }
   .file::before { content: '·'; margin-right: 7px; color: var(--accent); font-weight: 700; }
-  .document { padding: 26px 31px 28px; }
-  .document-meta { display: flex; align-items: center; justify-content: space-between; color: var(--faint); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.63rem; }
-  .sync { color: #709070; font-weight: 700; letter-spacing: 0.04em; }
+  .document { padding: 26px 31px 28px; color: #2c2c2c; font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif; }
+  .document-meta { display: flex; align-items: center; justify-content: space-between; color: #777; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.63rem; }
+  .sync { color: #6f8d6d; font-weight: 700; letter-spacing: 0.04em; }
   .sync::before { content: '●'; margin-right: 5px; font-size: 0.55rem; }
-  .document h2 { margin-top: 29px; font-size: 1.72rem; letter-spacing: -0.04em; line-height: 1.15; }
-  .document .lead { margin-top: 12px; color: var(--muted); font-size: 0.82rem; line-height: 1.75; }
-  .document h3 { margin-top: 20px; color: var(--accent); font-size: 0.87rem; }
-  .document ul { margin: 8px 0 0 17px; color: var(--muted); font-size: 0.78rem; line-height: 1.75; }
+  .document h2 { margin-top: 29px; color: #2c2c2c; font-size: 1.72rem; letter-spacing: -0.04em; line-height: 1.15; }
+  .document .lead { margin-top: 12px; color: #777; font-size: 0.82rem; line-height: 1.9; }
+  .document h3 { margin-top: 20px; color: #c44b2b; font-size: 0.87rem; }
+  .document ul { margin: 8px 0 0 17px; color: #777; font-size: 0.78rem; line-height: 1.9; }
   .heading-sample { margin-top: 8px; line-height: 1.3; }
   .heading-sample .sample-h1 { font-size: 0.98rem; font-weight: 700; }
   .heading-sample .sample-h2 { font-size: 0.86rem; font-weight: 700; }
   .heading-sample .sample-h3 { color: var(--accent); font-size: 0.76rem; font-weight: 700; }
-  .source { margin-top: 4px; color: var(--faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.58rem; line-height: 1.45; }
-  .sample-render { margin-top: 8px; color: var(--muted); font-size: 0.78rem; }
-  .sample-render strong { color: var(--ink); }
-  .sample-render mark { padding: 0 2px; background: #eadb8f; color: var(--ink); }
+  .source { display: inline-block; margin-top: 7px; border-radius: 5px; padding: 3px 7px; color: #777; background: #e8e4df; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.58rem; line-height: 1.45; }
+  .sample-render { margin-top: 8px; color: #777; font-size: 0.78rem; }
+  .sample-render strong { color: #c44b2b; }
+  .sample-render mark { padding: 0 2px; background: #f0d9a8; color: #2c2c2c; }
   .document .cursor { display: inline-block; width: 1px; height: 0.9em; margin-left: 2px; vertical-align: -0.1em; background: var(--accent); animation: blink 1.2s infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
@@ -151,7 +150,6 @@
 
   .download { padding: 76px 0 86px; }
   .download-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 28px; }
-  .version { color: var(--accent); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.72rem; letter-spacing: 0.04em; }
   .download-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
   .download-card { padding: 22px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); display: flex; justify-content: space-between; align-items: center; background: var(--paper-deep); }
   .download-card:hover { color: var(--ink); border-color: var(--accent); background: #e1d8ce; }
@@ -191,7 +189,6 @@
     .feature-list, .download-grid { grid-template-columns: 1fr; }
     .theme-grid { grid-template-columns: repeat(2, 1fr); }
     .download-head { display: block; }
-    .version { display: block; margin-top: 8px; }
     footer { flex-direction: column; gap: 15px; text-align: center; }
   }
 </style>
@@ -210,7 +207,7 @@
       <div class="subtitle" data-en="An elegant Markdown editor for humans and AI agents." data-zh="一款优雅的 Markdown 编辑器，适合人类与 AI Agent。">An elegant Markdown editor for humans and AI agents.</div>
       <p class="desc" data-en="Markdown is the common language of writing, notes, documentation, and collaboration. ColaMD gives it a quiet, focused home — with real-time sync for every change your AI agent makes." data-zh="Markdown 已经成为写作、记录、文档和协作的共同语言。ColaMD 给它一个安静、专注的家，同时实时同步 AI Agent 做出的每一次改动。">Markdown is the common language of writing, notes, documentation, and collaboration. ColaMD gives it a quiet, focused home — with real-time sync for every change your AI agent makes.</p>
       <div class="actions"><a href="https://github.com/marswaveai/ColaMD/releases" class="btn-primary" data-en="Download for free" data-zh="免费下载">Download for free</a><a href="https://github.com/marswaveai/ColaMD" class="btn-ghost" data-en="View on GitHub" data-zh="查看 GitHub">View on GitHub</a></div>
-      <div class="hero-meta" data-en="macOS · Windows · Linux · MIT License · v1.8.1" data-zh="macOS · Windows · Linux · MIT 协议 · v1.8.1">macOS · Windows · Linux · MIT License · v1.8.1</div>
+      <div class="hero-meta" data-en="macOS · Windows · Linux · MIT License" data-zh="macOS · Windows · Linux · MIT 协议">macOS · Windows · Linux · MIT License</div>
     </div>
 
     <div class="editor-window" aria-label="ColaMD editor preview">
@@ -257,7 +254,7 @@
   </section>
 
   <section class="download" id="download">
-    <div class="download-head"><h2 data-en="Download ColaMD" data-zh="下载 ColaMD">Download ColaMD</h2><span class="version" data-en="Latest release: v1.8.1" data-zh="最新版本：v1.8.1">Latest release: v1.8.1</span></div>
+    <div class="download-head"><h2 data-en="Download ColaMD" data-zh="下载 ColaMD">Download ColaMD</h2></div>
     <div class="download-grid"><a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">macOS</span><span class="format">.dmg</span></a><a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">Windows</span><span class="format">.exe</span></a><a href="https://github.com/marswaveai/ColaMD/releases" class="download-card"><span class="platform">Linux</span><span class="format">.AppImage / .deb</span></a></div>
   </section>
 
