@@ -1,12 +1,14 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
-import { DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
+import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
+import type { Node as ProseMirrorNode, Schema } from '@milkdown/kit/prose/model'
 import remarkBreaks from 'remark-breaks'
 import { commonmark } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
 import { history } from '@milkdown/kit/plugin/history'
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
+import { upload, uploadConfig } from '@milkdown/kit/plugin/upload'
 import { replaceAll, $prose } from '@milkdown/kit/utils'
 import { remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema } from '@milkdown/plugin-math'
 import { htmlView } from './html-view'
@@ -60,6 +62,31 @@ export function showMathModal(): void {
 }
 
 let editorInstance: Editor | null = null
+
+type ImportedImage = { src: string; alt: string }
+
+async function importLocalImages(files: FileList, schema: Schema): Promise<ProseMirrorNode[]> {
+  const image = schema.nodes.image
+  if (!image) return []
+  const requested = Array.from(files)
+    .filter((file) => file.type.startsWith('image/'))
+    .map((file) => ({ path: window.electronAPI.getPathForFile(file), name: file.name }))
+    .filter((file) => file.path)
+  if (requested.length === 0) return []
+  const imported = await window.electronAPI.importImages(requested)
+  return (imported ?? []).map(({ src, alt }) => image.create({ src, alt }))
+}
+
+export function insertImportedImages(images: ImportedImage[]): void {
+  if (!editorInstance || images.length === 0) return
+  editorInstance.action((ctx) => {
+    const view = ctx.get(editorViewCtx)
+    const image = view.state.schema.nodes.image
+    if (!image) return
+    const nodes = images.map(({ src, alt }) => image.create({ src, alt }))
+    view.dispatch(view.state.tr.replaceWith(view.state.selection.from, view.state.selection.to, nodes))
+  })
+}
 
 const inlineStyles: Record<string, string> = {
   'h1': 'font-size:1.8em;margin:1em 0 .5em;padding-bottom:.3em;border-bottom:1px solid #eee;',
@@ -258,6 +285,15 @@ export async function createEditor(
         { plugin: remarkHighlight, options: {} },
       ])
       ctx.set(katexOptionsCtx.key, { throwOnError: false })
+      ctx.set(uploadConfig.key, {
+        uploader: importLocalImages,
+        enableHtmlFileUploader: true,
+        uploadWidgetFactory: (pos, spec) => {
+          const placeholder = document.createElement('span')
+          placeholder.textContent = '正在导入图片...'
+          return Decoration.widget(pos, placeholder, spec)
+        },
+      })
       // Teach remark-stringify how to emit our custom ==highlight== node
       const stringifyOptions = ctx.get(remarkStringifyOptionsCtx)
       ctx.set(remarkStringifyOptionsCtx, {
@@ -282,6 +318,7 @@ export async function createEditor(
     .use(history)
     .use(listener)
     .use(clipboard)
+    .use(upload)
     .use(htmlView)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)

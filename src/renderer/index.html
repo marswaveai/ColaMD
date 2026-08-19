@@ -51,8 +51,12 @@
     </button>
   </div>
   <aside id="file-panel" hidden>
-    <div class="file-panel-header">文件</div>
+    <div class="file-panel-tabs" role="tablist" aria-label="侧栏内容">
+      <button id="file-panel-files" class="active" type="button" role="tab" aria-selected="true">文件</button>
+      <button id="file-panel-outline" type="button" role="tab" aria-selected="false">大纲</button>
+    </div>
     <ul id="file-list"></ul>
+    <ul id="outline-list" hidden></ul>
   </aside>
   <div id="editor"></div>
   <textarea id="source-editor" spellcheck="false"></textarea>

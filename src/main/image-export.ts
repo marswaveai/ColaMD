@@ -1,0 +1,83 @@
+import { BrowserWindow } from 'electron'
+import { PNG } from 'pngjs'
+
+export type ImageExportPreset = 'desktop' | 'mobile'
+
+export interface ImageExportSnapshot {
+  html: string
+  styles: string
+  bodyClass: string
+}
+
+const PRESETS: Record<ImageExportPreset, { width: number; padding: number }> = {
+  desktop: { width: 1200, padding: 64 },
+  mobile: { width: 414, padding: 28 },
+}
+
+function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): string {
+  const { width, padding } = PRESETS[preset]
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: file:; style-src 'unsafe-inline'; img-src 'self' data: blob: https: http: file:; font-src 'self' data:">
+  <style>${snapshot.styles}
+    html, body { width: ${width}px !important; min-width: ${width}px !important; height: auto !important; overflow: visible !important; }
+    body { margin: 0 !important; }
+    #titlebar, #file-panel, #source-editor, #update-banner { display: none !important; }
+    #editor { display: block !important; width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; margin: 0 !important; padding: ${padding}px !important; }
+    #editor .ProseMirror { width: auto !important; max-width: none !important; min-height: 0 !important; }
+  </style>
+</head>
+<body class="${snapshot.bodyClass}"><div id="editor"><div class="ProseMirror">${snapshot.html}</div></div></body>
+</html>`
+}
+
+async function waitForLayout(win: BrowserWindow): Promise<{ width: number; height: number }> {
+  return win.webContents.executeJavaScript(`(async () => {
+    await document.fonts.ready
+    await Promise.all(Array.from(document.images).map((image) => image.complete ? undefined : new Promise((resolve) => {
+      image.addEventListener('load', resolve, { once: true })
+      image.addEventListener('error', resolve, { once: true })
+    })))
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    return { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight }
+  })()`)
+}
+
+export async function renderDocumentPNG(snapshot: ImageExportSnapshot, preset: ImageExportPreset): Promise<Buffer> {
+  const { width } = PRESETS[preset]
+  const tileHeight = 1600
+  const win = new BrowserWindow({
+    show: false,
+    width,
+    height: tileHeight,
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+  })
+
+  try {
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(exportHTML(snapshot, preset))}`)
+    win.webContents.beginFrameSubscription(() => {})
+    const dimensions = await waitForLayout(win)
+    const tiles: PNG[] = []
+    for (let offset = 0; offset < dimensions.height; offset += tileHeight) {
+      const height = Math.min(tileHeight, dimensions.height - offset)
+      await win.webContents.executeJavaScript(`window.scrollTo(0, ${offset}); new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
+      const image = await win.webContents.capturePage({ x: 0, y: 0, width: dimensions.width, height }, { stayHidden: true })
+      tiles.push(PNG.sync.read(image.toPNG()))
+    }
+
+    const output = new PNG({ width: tiles[0]?.width ?? dimensions.width, height: tiles.reduce((sum, tile) => sum + tile.height, 0) })
+    let top = 0
+    for (const tile of tiles) {
+      PNG.bitblt(tile, output, 0, 0, tile.width, tile.height, 0, top)
+      top += tile.height
+    }
+    return PNG.sync.write(output)
+  } finally {
+    if (!win.isDestroyed()) {
+      win.webContents.endFrameSubscription()
+      win.destroy()
+    }
+  }
+}

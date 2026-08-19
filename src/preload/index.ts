@@ -7,6 +7,9 @@ export interface SiblingFile {
 }
 
 type FileOpenedData = { path: string | null; content: string }
+type ImageImportResult = { src: string; alt: string }
+type ImageExportPreset = 'desktop' | 'mobile'
+type ImageExportSnapshot = { html: string; styles: string; bodyClass: string }
 
 const pendingFileOpened: FileOpenedData[] = []
 let fileOpenedHandler: ((data: FileOpenedData) => void) | null = null
@@ -30,6 +33,10 @@ export interface ElectronAPI {
   saveFileAs: (content: string, expectedPath?: string) => Promise<string | null>
   exportPDF: () => Promise<boolean>
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => Promise<boolean>
+  exportDOCX: (content: string) => Promise<boolean>
+  exportImage: (snapshot: ImageExportSnapshot, preset: ImageExportPreset) => Promise<boolean>
+  importImages: (images: Array<{ path: string; name: string }>) => Promise<ImageImportResult[] | null>
+  selectImagesForInsert: () => Promise<ImageImportResult[] | null>
   loadCustomTheme: () => Promise<{ name: string; css: string } | null>
   loadThemeCSS: (fileName: string) => Promise<string | null>
   getPathForFile: (file: File) => string
@@ -42,6 +49,9 @@ export interface ElectronAPI {
   onMenuSaveAs: (callback: () => void) => void
   onMenuExportPDF: (callback: () => void) => void
   onMenuExportHTML: (callback: () => void) => void
+  onMenuExportDOCX: (callback: () => void) => void
+  onMenuExportImage: (callback: (preset: ImageExportPreset) => void) => void
+  onMenuInsertImage: (callback: () => void) => void
   onSetTheme: (callback: (theme: string) => void) => void
   onSetCustomCSS: (callback: (css: string) => void) => void
   onMenuImportTheme: (callback: () => void) => void
@@ -70,6 +80,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFileAs: (content: string, expectedPath?: string) => ipcRenderer.invoke('save-file-as', content, expectedPath),
   exportPDF: () => ipcRenderer.invoke('export-pdf'),
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => ipcRenderer.invoke('export-html', snapshot),
+  exportDOCX: (content: string) => ipcRenderer.invoke('export-docx', content),
+  exportImage: (snapshot: ImageExportSnapshot, preset: ImageExportPreset) => ipcRenderer.invoke('export-image', snapshot, preset),
+  importImages: (images: Array<{ path: string; name: string }>) => ipcRenderer.invoke('import-images', images),
+  selectImagesForInsert: () => ipcRenderer.invoke('select-images-for-insert'),
   loadCustomTheme: () => ipcRenderer.invoke('load-custom-theme'),
   loadThemeCSS: (fileName: string) => ipcRenderer.invoke('load-theme-css', fileName),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
@@ -98,6 +112,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onMenuExportHTML: (callback: () => void) => {
     ipcRenderer.on('menu-export-html', () => callback())
+  },
+  onMenuExportDOCX: (callback: () => void) => {
+    ipcRenderer.on('menu-export-docx', () => callback())
+  },
+  onMenuExportImage: (callback: (preset: ImageExportPreset) => void) => {
+    ipcRenderer.on('menu-export-image', (_event, preset) => {
+      if (preset === 'desktop' || preset === 'mobile') callback(preset)
+    })
+  },
+  onMenuInsertImage: (callback: () => void) => {
+    ipcRenderer.on('menu-insert-image', () => callback())
   },
   onSetTheme: (callback: (theme: string) => void) => {
     ipcRenderer.on('set-theme', (_event, theme) => callback(theme))

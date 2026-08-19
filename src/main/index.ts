@@ -1,11 +1,30 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
+import { execFile } from 'child_process'
 import { autoUpdater } from 'electron-updater'
 import { join, basename, dirname, extname, isAbsolute, resolve, relative } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
-import { readFile, writeFile, readdir, copyFile, mkdir, stat } from 'fs/promises'
-import { watch, FSWatcher, existsSync, readdirSync } from 'fs'
+import { appendFile, readFile, writeFile, readdir, copyFile, mkdir, stat } from 'fs/promises'
+import { constants as fsConstants, watch, FSWatcher, existsSync, readdirSync } from 'fs'
 
-// Custom themes directory
+const startupStartedAt = performance.now()
+const startupTraceEnabled = process.env.COLAMD_STARTUP_TRACE === '1'
+const startupMarks: Record<string, number> = { 'main-loaded': 0 }
+let startupTraceWritten = false
+
+function markStartup(name: string): void {
+  if (!startupTraceEnabled || startupTraceWritten) return
+  startupMarks[name] = Math.round(performance.now() - startupStartedAt)
+}
+
+function writeStartupTrace(): void {
+  if (!startupTraceEnabled || startupTraceWritten || !('renderer-ready' in startupMarks)) return
+  startupTraceWritten = true
+  const trace = JSON.stringify({ platform: process.platform, electron: process.versions.electron, ...startupMarks })
+  void appendFile(join(app.getPath('userData'), 'startup-trace.jsonl'), `${trace}\n`).catch(() => {})
+  console.info(`ColaMD startup trace: ${trace}`)
+}
+
+
 const themesDir = join(app.getPath('home'), '.colamd', 'themes')
 
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdown', '.mkd']
@@ -136,6 +155,7 @@ function createWindow(filePath?: string, initialContent?: string, initialBrowseP
       spellcheck: false
     }
   })
+  markStartup('window-created')
 
   const state = getState(win)
   if (initialBrowsePath) state.browsePath = initialBrowsePath
@@ -147,6 +167,7 @@ function createWindow(filePath?: string, initialContent?: string, initialBrowseP
   }
 
   win.webContents.on('did-finish-load', () => {
+    markStartup('renderer-loaded')
     if (filePath) {
       loadFileInWindow(win, filePath)
     } else if (initialContent) {
@@ -393,6 +414,66 @@ function restoreImagePaths(content: string, filePath: string): string {
   })
 }
 
+interface ImageImportRequest {
+  path: string
+  name: string
+}
+
+interface ImageImportResult {
+  src: string
+  alt: string
+}
+
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'])
+
+async function importImagesForWindow(win: BrowserWindow, requested: ImageImportRequest[]): Promise<ImageImportResult[] | null> {
+  const state = getState(win)
+  if (!state.filePath) {
+    await dialog.showMessageBox(win, {
+      type: 'info',
+      buttons: ['好'],
+      message: '请先保存文档',
+      detail: '图片会复制到当前 Markdown 文档旁的 assets 文件夹。'
+    })
+    return null
+  }
+
+  const destinationDir = join(dirname(state.filePath), 'assets')
+  try {
+    await mkdir(destinationDir, { recursive: true })
+  } catch {
+    return null
+  }
+
+  const imported: ImageImportResult[] = []
+  for (const image of requested) {
+    const extension = extname(image.path).toLowerCase()
+    if (!IMAGE_EXTENSIONS.has(extension)) continue
+    try {
+      const source = await stat(image.path)
+      if (!source.isFile()) continue
+      const rawName = basename(image.path, extension).replace(/[\\/:*?"<>|]/g, '-').trim() || 'image'
+      let suffix = 1
+      let target: string
+      while (true) {
+        const fileName = suffix === 1 ? `${rawName}${extension}` : `${rawName}-${suffix}${extension}`
+        target = join(destinationDir, fileName)
+        try {
+          await copyFile(image.path, target, fsConstants.COPYFILE_EXCL)
+          break
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+          suffix += 1
+        }
+      }
+      imported.push({ src: pathToFileURL(target).href, alt: image.name || rawName })
+    } catch {
+      // Keep a failed file out of the document; other selected images may still import.
+    }
+  }
+  return imported
+}
+
 function loadFileInWindow(win: BrowserWindow, filePath: string): void {
   const state = getState(win)
   const operation = async (): Promise<void> => {
@@ -618,6 +699,69 @@ ipcMain.handle('save-file-as', async (event, content: string, expectedPath?: str
   if (result.canceled || !result.filePath) return null
   const ok = await saveToPath(win, result.filePath, content, sourcePath)
   return ok ? result.filePath : null
+})
+
+ipcMain.handle('import-images', async (event, images: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || !Array.isArray(images)) return null
+  const requested = images.flatMap((image): ImageImportRequest[] => {
+    if (!image || typeof image !== 'object') return []
+    const { path, name } = image as { path?: unknown; name?: unknown }
+    return typeof path === 'string' && typeof name === 'string' ? [{ path, name }] : []
+  })
+  return importImagesForWindow(win, requested)
+})
+
+ipcMain.handle('select-images-for-insert', async (event) => {
+  const win = getWinFromEvent(event)
+  if (!win) return null
+  const selected = await dialog.showOpenDialog(win, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Images', extensions: [...IMAGE_EXTENSIONS].map((extension) => extension.slice(1)) }]
+  })
+  if (selected.canceled || selected.filePaths.length === 0) return []
+  return importImagesForWindow(win, selected.filePaths.map((path) => ({ path, name: basename(path) })))
+})
+
+ipcMain.handle('export-docx', async (event, content: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof content !== 'string') return false
+  const baseName = suggestFileName(win, content) ?? 'untitled'
+  const result = await dialog.showSaveDialog(win, {
+    defaultPath: `${baseName}.docx`,
+    filters: [{ name: 'Word Document', extensions: ['docx'] }]
+  })
+  if (result.canceled || !result.filePath) return false
+  try {
+    const { markdownToDocx } = await import('./docx-export')
+    await writeFile(result.filePath, await markdownToDocx({ content, sourcePath: getState(win).filePath }))
+    shell.showItemInFolder(result.filePath)
+    return true
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || (preset !== 'desktop' && preset !== 'mobile') || !snapshot || typeof snapshot !== 'object') return false
+  const { html, styles, bodyClass } = snapshot as { html?: unknown; styles?: unknown; bodyClass?: unknown }
+  if (typeof html !== 'string' || typeof styles !== 'string' || typeof bodyClass !== 'string') return false
+  const baseName = suggestFileName(win) ?? 'untitled'
+  const suffix = preset === 'desktop' ? 'desktop' : 'mobile'
+  const result = await dialog.showSaveDialog(win, {
+    defaultPath: `${baseName}-${suffix}.png`,
+    filters: [{ name: 'PNG Image', extensions: ['png'] }]
+  })
+  if (result.canceled || !result.filePath) return false
+  try {
+    const { renderDocumentPNG } = await import('./image-export')
+    await writeFile(result.filePath, await renderDocumentPNG({ html, styles, bodyClass }, preset))
+    shell.showItemInFolder(result.filePath)
+    return true
+  } catch {
+    return false
+  }
 })
 
 ipcMain.handle('export-pdf', async (event) => {
@@ -857,9 +1001,9 @@ function buildMenu(): void {
     ? {
         file: '文件', edit: '编辑', view: '视图', theme: '主题', help: '帮助',
         newFile: '新建', open: '打开...', save: '保存', saveAs: '另存为...',
-        exportPDF: '导出 PDF...', exportHTML: '导出 HTML...', find: '查找',
+        exportPDF: '导出 PDF...', exportHTML: '导出 HTML...', exportWord: '导出 Word...', exportImageDesktop: '导出图片（电脑阅读）...', exportImageMobile: '导出图片（手机阅读）...', find: '查找',
         setDefault: '设置为默认应用...',
-        insertFormula: '插入公式', filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
+        insertFormula: '插入公式', insertImage: '插入本地图片...', filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
         light: '浅色', dark: '深色', elegant: '雅致',
         sepia: '羊皮纸', notion: '简白', bear: '熊红', writer: '作家',
         solarizedDark: '夜航', nord: '极地', gruvbox: '暖木', dracula: '德古拉', midnight: '午夜',
@@ -872,9 +1016,9 @@ function buildMenu(): void {
     : {
         file: 'File', edit: 'Edit', view: 'View', theme: 'Theme', help: 'Help',
         newFile: 'New', open: 'Open...', save: 'Save', saveAs: 'Save As...',
-        exportPDF: 'Export PDF...', exportHTML: 'Export HTML...', find: 'Find',
+        exportPDF: 'Export PDF...', exportHTML: 'Export HTML...', exportWord: 'Export Word...', exportImageDesktop: 'Export Image (Desktop)...', exportImageMobile: 'Export Image (Mobile)...', find: 'Find',
         setDefault: 'Set as Default...',
-        insertFormula: 'Insert Formula', filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
+        insertFormula: 'Insert Formula', insertImage: 'Insert Local Image...', filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
         light: 'Light', dark: 'Dark', elegant: 'Elegant',
         sepia: 'Sepia', notion: 'Notion', bear: 'Bear', writer: 'Writer',
         solarizedDark: 'Solarized Dark', nord: 'Nord', gruvbox: 'Gruvbox', dracula: 'Dracula', midnight: 'Midnight',
@@ -954,6 +1098,18 @@ function buildMenu(): void {
           label: labels.exportHTML,
           click: () => sendToFocused('menu-export-html')
         },
+        {
+          label: labels.exportWord,
+          click: () => sendToFocused('menu-export-docx')
+        },
+        {
+          label: labels.exportImageDesktop,
+          click: () => sendToFocused('menu-export-image', 'desktop')
+        },
+        {
+          label: labels.exportImageMobile,
+          click: () => sendToFocused('menu-export-image', 'mobile')
+        },
         { type: 'separator' },
         {
           label: labels.setDefault,
@@ -983,6 +1139,11 @@ function buildMenu(): void {
           label: labels.insertFormula,
           accelerator: 'CmdOrCtrl+Shift+E',
           click: () => sendToFocused('editor:math')
+        },
+        {
+          label: labels.insertImage,
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: () => sendToFocused('menu-insert-image')
         }
       ]
     },
@@ -1073,6 +1234,7 @@ ipcMain.handle('install-update', () => {
 // App lifecycle
 
 app.whenReady().then(() => {
+  markStartup('app-ready')
   ensureThemesDir()
   buildMenu()
 
@@ -1133,6 +1295,8 @@ ipcMain.on('document-state-response', (event, requestId: unknown, snapshot: unkn
 ipcMain.on('renderer-ready', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   if (win) getState(win).rendererReady = true
+  markStartup('renderer-ready')
+  writeStartupTrace()
 })
 
 // Renderer reports its unsaved state as a fast path for quit coordination.

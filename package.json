@@ -26,12 +26,15 @@
   "dependencies": {
     "@milkdown/kit": "^7.19.2",
     "@milkdown/plugin-math": "^7.5.9",
+    "docx": "^9.7.1",
     "electron-updater": "^6.8.9",
     "katex": "^0.16.47",
+    "pngjs": "^7.0.0",
     "remark-breaks": "^4.0.0"
   },
   "devDependencies": {
     "@types/katex": "^0.16.8",
+    "@types/pngjs": "^6.0.5",
     "electron": "^34.0.0",
     "electron-builder": "^26.0.0",
     "electron-vite": "^3.0.0",

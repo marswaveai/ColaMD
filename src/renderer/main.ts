@@ -1,4 +1,4 @@
-import { createEditor, getMarkdown, setMarkdown, showMathModal } from './editor/editor'
+import { createEditor, getMarkdown, insertImportedImages, setMarkdown, showMathModal } from './editor/editor'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import './themes/base.css'
@@ -9,6 +9,9 @@ const editorEl = () => document.getElementById('editor') as HTMLElement
 const sourceEl = () => document.getElementById('source-editor') as HTMLTextAreaElement
 const filePanelEl = () => document.getElementById('file-panel') as HTMLElement
 const fileListEl = () => document.getElementById('file-list') as HTMLElement
+const outlineListEl = () => document.getElementById('outline-list') as HTMLElement
+const fileTabEl = () => document.getElementById('file-panel-files') as HTMLButtonElement
+const outlineTabEl = () => document.getElementById('file-panel-outline') as HTMLButtonElement
 const fileToggleBtnEl = () => document.getElementById('file-toggle-btn') as HTMLButtonElement
 const sourceToggleBtnEl = () => document.getElementById('source-toggle-btn') as HTMLButtonElement
 const wordCountEl = () => document.getElementById('word-count') as HTMLElement
@@ -26,6 +29,8 @@ let applyingProgrammaticChange = false
 // Fresh installs start focused on the document. Once changed, the user's
 // explicit panel preference is preserved.
 let manualHidden = localStorage.getItem('file-panel-hidden') !== '0'
+let panelMode: 'files' | 'outline' = 'files'
+let outlineUpdateQueued = false
 
 function setMarkdownProgrammatically(content: string): void {
   applyingProgrammaticChange = true
@@ -177,6 +182,7 @@ function toggleSourceMode(): void {
     enterSourceMode(getMarkdown(), scrollRatio(editorEl()))
   }
   updateWordCount()
+  scheduleOutlineUpdate()
 }
 
 function updatePanelVisibility(): void {
@@ -184,6 +190,84 @@ function updatePanelVisibility(): void {
   filePanelEl().hidden = !show
   document.body.classList.toggle('show-file-panel', show)
   fileToggleBtnEl().classList.toggle('active', show)
+  fileListEl().hidden = panelMode !== 'files'
+  outlineListEl().hidden = panelMode !== 'outline'
+  fileTabEl().classList.toggle('active', panelMode === 'files')
+  fileTabEl().setAttribute('aria-selected', String(panelMode === 'files'))
+  outlineTabEl().classList.toggle('active', panelMode === 'outline')
+  outlineTabEl().setAttribute('aria-selected', String(panelMode === 'outline'))
+}
+
+function setPanelMode(mode: 'files' | 'outline'): void {
+  panelMode = mode
+  updatePanelVisibility()
+  if (mode === 'outline') renderOutline()
+}
+
+interface OutlineItem {
+  level: number
+  title: string
+  element?: HTMLElement
+  line?: number
+}
+
+function sourceOutline(content: string): OutlineItem[] {
+  return content.split(/\r?\n/).flatMap((line, index) => {
+    const match = /^(#{1,6})\s+(.+?)(?:\s+#+)?\s*$/.exec(line)
+    if (!match) return []
+    const title = match[2].replace(/!?(?:\[([^\]]*)\])\([^)]*\)/g, '$1').replace(/[*_`]/g, '').trim()
+    return title ? [{ level: match[1].length, title, line: index }] : []
+  })
+}
+
+function visualOutline(): OutlineItem[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('#editor .ProseMirror h1, #editor .ProseMirror h2, #editor .ProseMirror h3, #editor .ProseMirror h4, #editor .ProseMirror h5, #editor .ProseMirror h6'))
+    .map((element) => ({ level: Number(element.tagName.slice(1)), title: element.textContent?.trim() ?? '', element }))
+    .filter((item) => item.title)
+}
+
+function renderOutline(): void {
+  const list = outlineListEl()
+  const items = sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline()
+  list.innerHTML = ''
+  if (items.length === 0) {
+    const empty = document.createElement('li')
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'empty'
+    button.textContent = '没有标题'
+    empty.appendChild(button)
+    list.appendChild(empty)
+    return
+  }
+  for (const item of items) {
+    const entry = document.createElement('li')
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = item.title
+    button.style.paddingLeft = `${8 + (item.level - 1) * 12}px`
+    button.addEventListener('click', () => {
+      if (item.element) {
+        item.element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else if (item.line !== undefined) {
+        const source = sourceEl()
+        const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight) || 24
+        source.scrollTop = Math.max(0, item.line * lineHeight - lineHeight)
+        source.focus()
+      }
+    })
+    entry.appendChild(button)
+    list.appendChild(entry)
+  }
+}
+
+function scheduleOutlineUpdate(): void {
+  if (outlineUpdateQueued) return
+  outlineUpdateQueued = true
+  requestAnimationFrame(() => {
+    outlineUpdateQueued = false
+    renderOutline()
+  })
 }
 
 function togglePanel(): void {
@@ -317,6 +401,36 @@ async function exportCurrentHTML(): Promise<void> {
   }
 }
 
+async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
+  const wasSourceMode = sourceModeActive
+  const sourceScrollRatio = wasSourceMode ? scrollRatio(sourceEl()) : 0
+  const content = getContent()
+
+  if (wasSourceMode) {
+    exitSourceMode()
+    setMarkdownProgrammatically(content)
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+  }
+
+  await window.electronAPI.exportImage(getExportSnapshot(content), preset)
+
+  if (wasSourceMode) enterSourceMode(content, sourceScrollRatio)
+}
+
+function insertImages(images: Array<{ src: string; alt: string }>): void {
+  if (images.length === 0) return
+  if (!sourceModeActive) {
+    insertImportedImages(images)
+    return
+  }
+  const source = sourceEl()
+  const markdown = images.map(({ src, alt }) => `![${alt}](${src})`).join('\n')
+  source.setRangeText(markdown, source.selectionStart, source.selectionEnd, 'end')
+  source.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 async function init(): Promise<void> {
   const api = window.electronAPI
   const savedTheme = loadSavedTheme()
@@ -336,6 +450,7 @@ async function init(): Promise<void> {
     updateWordCount(markdown)
   }, () => {
     if (!applyingProgrammaticChange) setDirty()
+    scheduleOutlineUpdate()
   })
   updateWordCount()
 
@@ -356,6 +471,8 @@ async function init(): Promise<void> {
   })
 
   fileToggleBtnEl().addEventListener('click', togglePanel)
+  fileTabEl().addEventListener('click', () => setPanelMode('files'))
+  outlineTabEl().addEventListener('click', () => setPanelMode('outline'))
   api.onToggleFilePanel(() => togglePanel())
 
   sourceToggleBtnEl().addEventListener('click', toggleSourceMode)
@@ -364,6 +481,7 @@ async function init(): Promise<void> {
   sourceEl().addEventListener('input', () => {
     setDirty()
     updateWordCount()
+    scheduleOutlineUpdate()
   })
 
   api.onSiblingsChanged((files) => renderFileList(files))
@@ -379,6 +497,11 @@ async function init(): Promise<void> {
   api.onMenuSaveAs(() => { void saveCurrent(true) })
   api.onMenuExportPDF(() => api.exportPDF())
   api.onMenuExportHTML(() => { void exportCurrentHTML() })
+  api.onMenuExportDOCX(() => { void api.exportDOCX(getContent()) })
+  api.onMenuExportImage((preset) => { void exportCurrentImage(preset) })
+  api.onMenuInsertImage(() => {
+    void api.selectImagesForInsert().then((images) => insertImages(images ?? []))
+  })
 
   api.onNewFile(() => { exitSourceMode(); applyContent('') })
   api.onFileOpened((data) => {
@@ -388,6 +511,7 @@ async function init(): Promise<void> {
     updateFileTitle()
     updatePanelVisibility()
     refreshSiblings()
+    scheduleOutlineUpdate()
   })
   api.onFileChanged((content) => {
     if (sourceModeActive) {
@@ -398,6 +522,7 @@ async function init(): Promise<void> {
     updateSourceToggle()
     updateWordCount()
     resetDirty()
+    scheduleOutlineUpdate()
   })
 
   api.onSetTheme((theme) => applyTheme(theme))
