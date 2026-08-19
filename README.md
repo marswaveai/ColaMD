@@ -39,7 +39,7 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 - **Live Agent Sync** — Changes made by Claude Code, Cursor, Copilot, or other AI agents appear in the editor in real time.
 - **Agent Activity Indicator** — A subtle titlebar dot shows when an agent is writing and when it has finished.
 - **True WYSIWYG Editing** — Type Markdown and see rich text directly. No split-pane preview.
-- **File List Panel** — Browse Markdown files in the selected folder and its subdirectories. Files created or removed by an agent appear automatically.
+- **Files & Outline** — Browse Markdown files in the selected folder, or switch to a document outline for focused heading navigation.
 - **Source Mode** — Switch to the raw Markdown source whenever you need to inspect or edit it directly.
 - **Task Lists** — Click checkboxes to complete tasks, or use the keyboard shortcut.
 - **Highlights & LaTeX** — Write `==highlighted text==` and render mathematical formulas with KaTeX.
@@ -47,7 +47,8 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 - **Smart Line Breaks** — Single newlines render as line breaks, matching how people and AI tools write Markdown.
 - **Rich Text Copy** — Copy content with formatting preserved into WeChat, email, and other rich-text editors.
 - **Themes** — Twelve built-in themes for focused writing in light or dark environments.
-- **PDF & HTML Export** — Turn your Markdown document into a PDF or a self-contained HTML file when you need a finished copy.
+- **PDF, HTML & Word Export** — Turn your Markdown document into a themed PDF, self-contained HTML, or editable Word document.
+- **Reading-Page Image Export** — Share Markdown as desktop or mobile PNG pages; longer documents continue as numbered pages.
 - **Portable Image Paths** — Local images use safe `file://` URLs for display and return to relative paths when saved.
 - **VS Code Integration** — Open the current Markdown file in ColaMD directly from VS Code.
 - **Minimal by Design** — No toolbar, no permanent sidebar, no distractions.
@@ -84,7 +85,7 @@ ColaMD will evolve alongside the agent ecosystem:
 - v1.7.4 — Community-feedback release: file panel improvements, source mode, HTML export, Windows image paths, and a VS Code integration MVP
 - v1.8.0 — Portable image paths for Markdown and HTML images, plus editing fixes from community feedback
 - v1.8.1 — Refined first-launch experience and macOS icon; removed Mermaid rendering so code blocks remain native and editable
-- v1.8.2 — Twelve built-in themes, including six light and six dark themes
+- v1.9.0 — Word export, desktop and mobile reading-page image export, a document outline, themed PDF pages, and leaner startup loading
 - Future — More themes, editor integrations, and smoother Markdown workflows
 
 ## License
