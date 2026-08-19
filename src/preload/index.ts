@@ -26,8 +26,8 @@ export interface ElectronAPI {
   openFilePath: (path: string) => Promise<{ path: string; content: string } | null>
   listSiblings: () => Promise<SiblingFile[] | null>
   openSibling: (path: string) => Promise<boolean>
-  saveFile: (content: string) => Promise<string | null>
-  saveFileAs: (content: string) => Promise<string | null>
+  saveFile: (content: string, expectedPath?: string) => Promise<string | null>
+  saveFileAs: (content: string, expectedPath?: string) => Promise<string | null>
   exportPDF: () => Promise<boolean>
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => Promise<boolean>
   loadCustomTheme: () => Promise<{ name: string; css: string } | null>
@@ -54,6 +54,10 @@ export interface ElectronAPI {
   onUpdateDownloaded: (callback: (version: string) => void) => void
   downloadUpdate: () => Promise<void>
   installUpdate: () => Promise<void>
+  reportDirty: (isDirty: boolean) => void
+  reportRendererReady: () => void
+  onRequestDocumentState: (callback: (requestId: string) => void) => void
+  respondDocumentState: (requestId: string, snapshot: { dirty: boolean; content: string }) => void
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -61,8 +65,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFilePath: (path: string) => ipcRenderer.invoke('open-file-path', path),
   listSiblings: () => ipcRenderer.invoke('list-siblings'),
   openSibling: (path: string) => ipcRenderer.invoke('open-sibling', path),
-  saveFile: (content: string) => ipcRenderer.invoke('save-file', content),
-  saveFileAs: (content: string) => ipcRenderer.invoke('save-file-as', content),
+  saveFile: (content: string, expectedPath?: string) => ipcRenderer.invoke('save-file', content, expectedPath),
+  saveFileAs: (content: string, expectedPath?: string) => ipcRenderer.invoke('save-file-as', content, expectedPath),
   exportPDF: () => ipcRenderer.invoke('export-pdf'),
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => ipcRenderer.invoke('export-html', snapshot),
   loadCustomTheme: () => ipcRenderer.invoke('load-custom-theme'),
@@ -125,5 +129,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update-downloaded', (_event, version) => callback(version))
   },
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
-  installUpdate: () => ipcRenderer.invoke('install-update')
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  reportDirty: (isDirty: boolean) => ipcRenderer.send('set-dirty', isDirty),
+  reportRendererReady: () => ipcRenderer.send('renderer-ready'),
+  onRequestDocumentState: (callback: (requestId: string) => void) => {
+    ipcRenderer.on('request-document-state', (_event, requestId) => callback(requestId))
+  },
+  respondDocumentState: (requestId: string, snapshot: { dirty: boolean; content: string }) => {
+    ipcRenderer.send('document-state-response', requestId, snapshot)
+  }
 } satisfies ElectronAPI)

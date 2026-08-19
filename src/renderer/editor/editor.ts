@@ -223,14 +223,27 @@ const defaultContent = navigator.language.toLowerCase().startsWith('zh')
 
 export async function createEditor(
   rootId: string,
-  onChange?: (markdown: string) => void
+  onChange?: (markdown: string) => void,
+  onDocumentChange?: () => void
 ): Promise<Editor> {
   const root = document.getElementById(rootId)
   if (!root) throw new Error(`Element #${rootId} not found`)
 
+  const documentChangePlugin = onDocumentChange
+    ? $prose(() => new Plugin({
+      state: {
+        init: () => null,
+        apply(tr, value) {
+          if (tr.docChanged) onDocumentChange()
+          return value
+        }
+      }
+    }))
+    : null
+
   setupCodeBlockCopy(root)
 
-  editorInstance = await Editor.make()
+  let editor = Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, root)
       ctx.set(defaultValueCtx, defaultContent)
@@ -262,7 +275,9 @@ export async function createEditor(
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
     .use(searchHighlight)
-    .create()
+
+  if (documentChangePlugin) editor = editor.use(documentChangePlugin)
+  editorInstance = await editor.create()
 
   // Enhance clipboard with inline styles for rich text paste (e.g. WeChat)
   root.addEventListener('copy', enhanceClipboard)

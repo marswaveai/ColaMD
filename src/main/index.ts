@@ -76,20 +76,40 @@ interface WindowState {
   browsePath: string | null
   watcher: FSWatcher | null
   isInternalSave: boolean
+  internalSaveCount: number
   debounceTimer: ReturnType<typeof setTimeout> | null
   siblingsTimer: ReturnType<typeof setTimeout> | null
   agentState: 'idle' | 'active' | 'cooldown'
   lastExternalChange: number
   agentCooldownTimer: ReturnType<typeof setTimeout> | null
+  dirty: boolean
+  closePromise: Promise<boolean> | null
+  rendererReady: boolean
+  writeQueue: Promise<void>
+  closeAuthorized: boolean
+}
+
+interface DocumentSnapshot {
+  dirty: boolean
+  content: string
+}
+
+interface PendingDocumentStateRequest {
+  webContentsId: number
+  resolve: (snapshot: DocumentSnapshot | null) => void
+  timer: ReturnType<typeof setTimeout>
 }
 
 const windowStates = new Map<number, WindowState>()
 let pendingFilePaths: string[] = []
+let isQuitting = false
+let nextDocumentStateRequestId = 0
+const pendingDocumentStateRequests = new Map<string, PendingDocumentStateRequest>()
 
 function getState(win: BrowserWindow): WindowState {
   let state = windowStates.get(win.id)
   if (!state) {
-    state = { filePath: null, browsePath: null, watcher: null, isInternalSave: false, debounceTimer: null, siblingsTimer: null, agentState: 'idle', lastExternalChange: 0, agentCooldownTimer: null }
+    state = { filePath: null, browsePath: null, watcher: null, isInternalSave: false, internalSaveCount: 0, debounceTimer: null, siblingsTimer: null, agentState: 'idle', lastExternalChange: 0, agentCooldownTimer: null, dirty: false, closePromise: null, rendererReady: false, writeQueue: Promise.resolve(), closeAuthorized: false }
     windowStates.set(win.id, state)
   }
   return state
@@ -133,6 +153,20 @@ function createWindow(filePath?: string, initialContent?: string, initialBrowseP
       // In-memory content (e.g. the Markdown cheatsheet) — no file, no watcher
       win.webContents.send('file-opened', { path: null, content: initialContent })
     }
+  })
+
+  // Intercept window close: confirm unsaved changes before the window dies.
+  // cmd+w (role: 'close') and quit both funnel through here.
+  win.on('close', (e) => {
+    const st = getState(win)
+    if (isQuitting || st.closeAuthorized || (!st.rendererReady && !st.dirty)) return
+    e.preventDefault()
+    void confirmWindowClose(win, st).then((ok) => {
+      if (ok && !win.isDestroyed()) {
+        st.closeAuthorized = true
+        win.close()
+      }
+    })
   })
 
   win.on('closed', () => {
@@ -360,16 +394,22 @@ function restoreImagePaths(content: string, filePath: string): string {
 }
 
 function loadFileInWindow(win: BrowserWindow, filePath: string): void {
-  readFile(filePath, 'utf-8')
-    .then((data) => {
-      const state = getState(win)
+  const state = getState(win)
+  const operation = async (): Promise<void> => {
+    try {
+      const data = await readFile(filePath, 'utf-8')
+      if (win.isDestroyed()) return
       state.filePath = filePath
       state.browsePath = dirname(filePath)
       watchFile(win, state)
       updateTitle(win)
       win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(data, filePath) })
-    })
-    .catch(() => {})
+    } catch {
+      // Keep the current document when the selected file cannot be read.
+    }
+  }
+  const next = state.writeQueue.then(operation, operation)
+  state.writeQueue = next.then(() => undefined, () => undefined)
 }
 
 // Find window that already has this file open
@@ -413,21 +453,35 @@ function findEmptyWindow(): BrowserWindow | null {
   return null
 }
 
-async function saveToPath(win: BrowserWindow, filePath: string, content: string): Promise<boolean> {
+// Serialize writes per window. A save is valid only while its source document
+// remains active; stale queued work must neither overwrite window state nor
+// make a later document appear saved.
+function saveToPath(win: BrowserWindow, filePath: string, content: string, sourcePath: string | null): Promise<boolean> {
   const state = getState(win)
-  try {
-    state.isInternalSave = true
-    await writeFile(filePath, restoreImagePaths(content, filePath), 'utf-8')
-    state.filePath = filePath
-    state.browsePath = dirname(filePath)
-    watchFile(win, state)
-    updateTitle(win)
-    return true
-  } catch {
-    return false
-  } finally {
-    setTimeout(() => { state.isInternalSave = false }, 100)
+  const operation = async (): Promise<boolean> => {
+    if (win.isDestroyed() || state.filePath !== sourcePath) return false
+    try {
+      state.internalSaveCount += 1
+      state.isInternalSave = true
+      await writeFile(filePath, restoreImagePaths(content, filePath), 'utf-8')
+      if (win.isDestroyed() || state.filePath !== sourcePath) return false
+      state.filePath = filePath
+      state.browsePath = dirname(filePath)
+      watchFile(win, state)
+      updateTitle(win)
+      return true
+    } catch {
+      return false
+    } finally {
+      setTimeout(() => {
+        state.internalSaveCount = Math.max(0, state.internalSaveCount - 1)
+        state.isInternalSave = state.internalSaveCount > 0
+      }, 100)
+    }
   }
+  const next = state.writeQueue.then(operation, operation)
+  state.writeQueue = next.then(() => undefined, () => undefined)
+  return next
 }
 
 // IPC Handlers
@@ -525,11 +579,16 @@ ipcMain.handle('open-sibling', async (event, filePath: string) => {
   return true
 })
 
-ipcMain.handle('save-file', async (event, content: string) => {
+ipcMain.handle('save-file', async (event, content: string, expectedPath?: string) => {
   const win = getWinFromEvent(event)
   if (!win) return null
   const state = getState(win)
-  if (!state.filePath) {
+  const sourcePath = state.filePath
+  // A queued auto-save must never write an old document into a file opened
+  // after the save was scheduled.
+  if (expectedPath && sourcePath !== expectedPath) return null
+  let filePath = sourcePath
+  if (!filePath) {
     const result = await dialog.showSaveDialog(win, {
       defaultPath: suggestFileName(win, content),
       filters: [
@@ -538,15 +597,17 @@ ipcMain.handle('save-file', async (event, content: string) => {
       ]
     })
     if (result.canceled || !result.filePath) return null
-    state.filePath = result.filePath
+    filePath = result.filePath
   }
-  const ok = await saveToPath(win, state.filePath, content)
-  return ok ? state.filePath : null
+  const ok = await saveToPath(win, filePath, content, sourcePath)
+  return ok ? filePath : null
 })
 
-ipcMain.handle('save-file-as', async (event, content: string) => {
+ipcMain.handle('save-file-as', async (event, content: string, expectedPath?: string) => {
   const win = getWinFromEvent(event)
   if (!win) return null
+  const sourcePath = getState(win).filePath
+  if (expectedPath && sourcePath !== expectedPath) return null
   const result = await dialog.showSaveDialog(win, {
     defaultPath: suggestFileName(win, content),
     filters: [
@@ -555,7 +616,7 @@ ipcMain.handle('save-file-as', async (event, content: string) => {
     ]
   })
   if (result.canceled || !result.filePath) return null
-  const ok = await saveToPath(win, result.filePath, content)
+  const ok = await saveToPath(win, result.filePath, content, sourcePath)
   return ok ? result.filePath : null
 })
 
@@ -1033,6 +1094,133 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+// --- Unsaved-changes guard (auto-save is the primary defense; this is the backstop) ---
+
+// Ask one specific renderer for an atomic dirty/content snapshot. A timeout is
+// a failed request, never a signal that the document is clean.
+function requestDocumentState(win: BrowserWindow): Promise<DocumentSnapshot | null> {
+  const requestId = `${win.webContents.id}:${++nextDocumentStateRequestId}`
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      const pending = pendingDocumentStateRequests.get(requestId)
+      if (!pending) return
+      pendingDocumentStateRequests.delete(requestId)
+      pending.resolve(null)
+    }, 3000)
+    pendingDocumentStateRequests.set(requestId, { webContentsId: win.webContents.id, resolve, timer })
+    win.webContents.send('request-document-state', requestId)
+  })
+}
+
+ipcMain.on('document-state-response', (event, requestId: unknown, snapshot: unknown) => {
+  if (typeof requestId !== 'string' || !snapshot || typeof snapshot !== 'object') return
+  const { dirty, content } = snapshot as DocumentSnapshot
+  if (typeof dirty !== 'boolean' || typeof content !== 'string') return
+  const pending = pendingDocumentStateRequests.get(requestId)
+  if (!pending || pending.webContentsId !== event.sender.id) return
+  pendingDocumentStateRequests.delete(requestId)
+  clearTimeout(pending.timer)
+  pending.resolve({ dirty, content })
+})
+
+ipcMain.on('renderer-ready', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (win) getState(win).rendererReady = true
+})
+
+// Renderer reports its unsaved state as a fast path for quit coordination.
+ipcMain.on('set-dirty', (event, isDirty: boolean) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (win) getState(win).dirty = !!isDirty
+})
+
+// Concurrent close events for the same window must share one prompt and save.
+function confirmWindowClose(win: BrowserWindow, state: WindowState): Promise<boolean> {
+  if (!state.closePromise) {
+    state.closePromise = handleWindowClose(win, state).finally(() => {
+      state.closePromise = null
+    })
+  }
+  return state.closePromise
+}
+
+// Confirm before losing unsaved edits. Returns true only after a verified save
+// or an explicit discard; every failure leaves the window open and dirty.
+async function handleWindowClose(win: BrowserWindow, state: WindowState): Promise<boolean> {
+  if (!state.rendererReady && !state.dirty) return true
+
+  const snapshot = await requestDocumentState(win)
+  if (!snapshot) {
+    await dialog.showMessageBox(win, {
+      type: 'error',
+      buttons: ['好'],
+      message: '无法读取文档内容',
+      detail: '为保护未保存的内容，已取消关闭。'
+    })
+    return false
+  }
+  state.dirty = snapshot.dirty
+  if (!snapshot.dirty) return true
+
+  const detail = state.filePath
+    ? `“${basename(state.filePath)}” 有未保存的修改。`
+    : '当前未命名文档有未保存的修改。'
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'warning',
+    buttons: ['保存', '不保存', '取消'],
+    defaultId: 0,
+    cancelId: 2,
+    message: '未保存的修改',
+    detail
+  })
+  if (response === 2) return false
+  if (response === 1) {
+    state.dirty = false
+    return true
+  }
+
+  const sourcePath = state.filePath
+  let filePath = sourcePath
+  if (!filePath) {
+    const saveAs = await dialog.showSaveDialog(win, {
+      defaultPath: suggestFileName(win, snapshot.content),
+      filters: [
+        { name: 'Markdown', extensions: ['md'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+    if (saveAs.canceled || !saveAs.filePath) return false
+    filePath = saveAs.filePath
+  }
+
+  const saved = await saveToPath(win, filePath, snapshot.content, sourcePath)
+  if (!saved) {
+    await dialog.showMessageBox(win, {
+      type: 'error',
+      buttons: ['好'],
+      message: '无法保存文档',
+      detail: '为保护未保存的内容，已取消关闭。请检查文件权限和可用磁盘空间。'
+    })
+    return false
+  }
+  state.dirty = false
+  return true
+}
+
+app.on('before-quit', (e) => {
+  if (isQuitting) return
+  e.preventDefault()
+  void (async () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue
+      const ok = await confirmWindowClose(win, getState(win))
+      if (!ok) return // user cancelled or saving failed; abort the quit entirely
+    }
+    isQuitting = true
+    app.quit()
+  })()
 })
 
 app.on('window-all-closed', () => {

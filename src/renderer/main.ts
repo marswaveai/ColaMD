@@ -20,20 +20,101 @@ const updateBannerActionEl = () => document.getElementById('update-banner-action
 // --- Same-directory file panel ---
 let currentFilePath: string | null = null
 let dirty = false
-// Milkdown's markdownUpdated listener fires 200ms-debounced AFTER a doc change,
-// so a programmatic load would spuriously mark the doc dirty unless we keep a
-// suppression window long enough to cover that debounce.
-let applyingUntil = 0
+// Programmatic Markdown replacement dispatches a synchronous ProseMirror
+// transaction. Suppress only that transaction, never a time window of input.
+let applyingProgrammaticChange = false
 // Fresh installs start focused on the document. Once changed, the user's
 // explicit panel preference is preserved.
 let manualHidden = localStorage.getItem('file-panel-hidden') !== '0'
 
-function markApplying(): void {
-  applyingUntil = Date.now() + 350
+function setMarkdownProgrammatically(content: string): void {
+  applyingProgrammaticChange = true
+  try {
+    setMarkdown(content)
+  } finally {
+    applyingProgrammaticChange = false
+  }
+}
+
+// --- Unsaved-state tracking + auto-save ---
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null
+let documentRevision = 0
+let saveQueue: Promise<void> = Promise.resolve()
+
+function reportDirty(): void {
+  window.electronAPI.reportDirty(dirty)
+}
+
+function setDirty(): void {
+  documentRevision += 1
+  dirty = true
+  reportDirty()
+  scheduleAutosave()
+}
+
+function clearDirty(): void {
+  dirty = false
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer)
+    autosaveTimer = null
+  }
+  reportDirty()
+}
+
+// Invalidate any in-flight save captured from the previous document before
+// replacing editor content from disk.
+function resetDirty(): void {
+  documentRevision += 1
+  clearDirty()
+}
+
+function enqueueSave(operation: () => Promise<string | null>): Promise<string | null> {
+  const next = saveQueue.then(operation, operation)
+  saveQueue = next.then(() => undefined, () => undefined)
+  return next
+}
+
+function scheduleAutosave(): void {
+  if (!currentFilePath) return
+  if (autosaveTimer) clearTimeout(autosaveTimer)
+  autosaveTimer = setTimeout(() => {
+    autosaveTimer = null
+    void runAutosave()
+  }, 1000)
+}
+
+async function runAutosave(): Promise<void> {
+  if (!dirty || !currentFilePath) return
+  const revision = documentRevision
+  const filePath = currentFilePath
+  const content = getContent()
+  const path = await enqueueSave(() => window.electronAPI.saveFile(content, filePath))
+  if (path && revision === documentRevision && currentFilePath === filePath) {
+    currentFilePath = path
+    clearDirty()
+  }
+}
+
+async function saveCurrent(saveAs = false): Promise<void> {
+  const revision = documentRevision
+  const content = getContent()
+  const expectedPath = currentFilePath
+  const path = await enqueueSave(() => saveAs
+    ? window.electronAPI.saveFileAs(content, expectedPath ?? undefined)
+    : window.electronAPI.saveFile(content, expectedPath ?? undefined))
+  if (!path || currentFilePath !== expectedPath) return
+
+  currentFilePath = path
+  updateFileTitle()
+  refreshSiblings()
+  if (revision === documentRevision) {
+    clearDirty()
+  } else if (dirty) {
+    scheduleAutosave()
+  }
 }
 
 function applyContent(content: string): void {
-  markApplying()
   setContent(content)
 }
 
@@ -74,9 +155,8 @@ function updateSourceToggle(): void {
 function toggleSourceMode(): void {
   if (sourceModeActive) {
     // Source → WYSIWYG: re-parse the textarea content back into the editor
-    markApplying() // suppress the spurious dirty flag from the markdownUpdated debounce
     exitSourceMode()
-    setMarkdown(sourceEl().value)
+    setMarkdownProgrammatically(sourceEl().value)
   } else {
     // WYSIWYG → Source: serialize the current editor content into the textarea
     enterSourceMode(getMarkdown())
@@ -166,7 +246,7 @@ function exitSourceMode(): void {
 
 function setContent(content: string): void {
   exitSourceMode()
-  setMarkdown(content)
+  setMarkdownProgrammatically(content)
   updateWordCount()
 }
 
@@ -204,9 +284,8 @@ async function exportCurrentHTML(): Promise<void> {
   // Render the latest source text before taking the DOM snapshot, then restore
   // source mode so exporting does not change the user's editing context.
   if (wasSourceMode) {
-    markApplying()
     exitSourceMode()
-    setMarkdown(content)
+    setMarkdownProgrammatically(content)
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => resolve())
@@ -217,7 +296,6 @@ async function exportCurrentHTML(): Promise<void> {
   await window.electronAPI.exportHTML(getExportSnapshot(content))
 
   if (wasSourceMode) {
-    markApplying()
     enterSourceMode(content)
   }
 }
@@ -238,10 +316,17 @@ async function init(): Promise<void> {
   api.onMathModal(() => showMathModal())
 
   await createEditor('editor', (markdown) => {
-    if (Date.now() >= applyingUntil) dirty = true
     updateWordCount(markdown)
+  }, () => {
+    if (!applyingProgrammaticChange) setDirty()
   })
   updateWordCount()
+
+  // Main asks for an authoritative snapshot before any close or quit.
+  api.onRequestDocumentState((requestId) => {
+    window.electronAPI.respondDocumentState(requestId, { dirty, content: getContent() })
+  })
+  api.reportRendererReady()
 
   // File panel: switch to a sibling file (confirm if there are unsaved edits)
   fileListEl().addEventListener('click', async (e) => {
@@ -258,7 +343,7 @@ async function init(): Promise<void> {
   sourceToggleBtnEl().addEventListener('click', toggleSourceMode)
   // Source-mode edits update the word count and mark the doc dirty in real time
   sourceEl().addEventListener('input', () => {
-    if (Date.now() >= applyingUntil) dirty = true
+    setDirty()
     updateWordCount()
   })
 
@@ -271,48 +356,31 @@ async function init(): Promise<void> {
     await api.openFile()
   })
 
-  api.onMenuSave(async () => {
-    const path = await api.saveFile(getContent())
-    if (path) {
-      dirty = false
-      currentFilePath = path
-      updateFileTitle()
-      refreshSiblings()
-    }
-  })
-  api.onMenuSaveAs(async () => {
-    const path = await api.saveFileAs(getContent())
-    if (path) {
-      dirty = false
-      currentFilePath = path
-      updateFileTitle()
-      refreshSiblings()
-    }
-  })
+  api.onMenuSave(() => { void saveCurrent() })
+  api.onMenuSaveAs(() => { void saveCurrent(true) })
   api.onMenuExportPDF(() => api.exportPDF())
   api.onMenuExportHTML(() => { void exportCurrentHTML() })
 
   api.onNewFile(() => { exitSourceMode(); applyContent('') })
   api.onFileOpened((data) => {
     currentFilePath = data.path
-    dirty = false
-    markApplying()
+    resetDirty()
     setContent(data.content)
     updateFileTitle()
     updatePanelVisibility()
     refreshSiblings()
   })
   api.onFileChanged((content) => {
-    markApplying()
     if (sourceModeActive) {
       sourceEl().value = content
     } else {
-      setMarkdown(content)
+      setMarkdownProgrammatically(content)
     }
     updateSourceToggle()
     updateWordCount()
-    dirty = false
+    resetDirty()
   })
+
   api.onSetTheme((theme) => applyTheme(theme))
   api.onSetCustomCSS((css) => {
     const theme = loadSavedTheme()
