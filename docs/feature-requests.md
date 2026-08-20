@@ -46,6 +46,18 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Deferred. The initial menu, paste, and drag-and-drop implementation was removed before `v1.9.0` after it proved unreliable.
 
+### Configurable default font
+
+**Source:** User request
+
+**Need:** Let users choose the default font used by the Markdown editor.
+
+**Why it fits:** Typography is a core reading and writing preference, especially for users with different language, accessibility, or coding-font needs.
+
+**Scope:** Persist the selected font and apply it consistently to the visual editor, source mode, and reading/export views where appropriate. Keep the default behavior unchanged when no font is selected.
+
+**Status:** Planned for next week's development review.
+
 ### Multiple windows
 
 **Source:** [#44](https://github.com/marswaveai/ColaMD/issues/44)
