@@ -29,6 +29,7 @@
     "docx": "^9.7.1",
     "electron-updater": "^6.8.9",
     "katex": "^0.16.47",
+    "mermaid": "^11.17.0",
     "remark-breaks": "^4.0.0"
   },
   "devDependencies": {

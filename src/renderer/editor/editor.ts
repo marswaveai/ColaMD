@@ -10,6 +10,7 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { replaceAll, $prose } from '@milkdown/kit/utils'
 import { remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema } from '@milkdown/plugin-math'
 import { htmlView } from './html-view'
+import { mermaidView } from './mermaid-view'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
 
@@ -283,6 +284,7 @@ export async function createEditor(
     .use(listener)
     .use(clipboard)
     .use(htmlView)
+    .use(mermaidView)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
     .use(searchHighlight)

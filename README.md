@@ -43,6 +43,7 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 - **Source Mode** — Switch to the raw Markdown source whenever you need to inspect or edit it directly.
 - **Task Lists** — Click checkboxes to complete tasks, or use the keyboard shortcut.
 - **Highlights & LaTeX** — Write `==highlighted text==` and render mathematical formulas with KaTeX.
+- **Mermaid Diagrams** — Mermaid code blocks render as diagrams via a sandboxed renderer; click a diagram to edit its source.
 - **Search** — Find anything in the current document with ⌘/Ctrl+F.
 - **Smart Line Breaks** — Single newlines render as line breaks, matching how people and AI tools write Markdown.
 - **Rich Text Copy** — Copy content with formatting preserved into WeChat, email, and other rich-text editors.

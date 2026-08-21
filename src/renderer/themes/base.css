@@ -483,6 +483,28 @@ body.show-file-panel #source-editor {
   line-height: 1.6;
 }
 
+#editor .ProseMirror .mermaid-diagram {
+  overflow-x: auto;
+  padding: 12px 8px;
+  text-align: center;
+  background: var(--code-block-bg);
+  border-radius: 6px;
+}
+
+#editor .ProseMirror .mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+#editor .ProseMirror .mermaid-error {
+  padding: 8px 12px;
+  border: 1px solid var(--blockquote-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.8em;
+  background: var(--blockquote-bg);
+}
+
 /* Copy buttons live OUTSIDE the ProseMirror DOM (overlay widgets in the
    editor root), so they are styled from the root, never inside .ProseMirror. */
 #editor > .code-copy-btn {

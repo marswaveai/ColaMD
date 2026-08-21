@@ -30,6 +30,12 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Adds opt-in `COLAMD_STARTUP_TRACE=1` timing from main-process load through editor readiness. Export dependencies are dynamically loaded, reducing the main startup bundle from about 1.73 MB to 604 KB.
 
+### Diagram rendering (Mermaid)
+
+**Sources:** [#26](https://github.com/marswaveai/ColaMD/issues/26)
+
+**Status:** Mermaid blocks render through a lazily created hidden iframe sandbox, isolated from the main bundle. Includes 400ms debounce, click-to-edit source mode, and a 15s timeout recovery. The earlier CPU-storm removal (v1.8.1) is addressed by ignoring view-internal DOM mutations in the node view.
+
 ## Candidates
 
 ### Import local images
@@ -49,16 +55,6 @@ These features are implemented on `main` and await release verification.
 **Why it fits:** This shortens the return path to active documents without introducing tabs or a persistent workspace.
 
 **Constraints:** Store only a bounded list of canonical local paths. Missing files must be skipped or clearly unavailable. Do not add a permanent sidebar section or reopen documents automatically at launch.
-
-### Diagram rendering (Mermaid / mindmap)
-
-**Source:** [#26](https://github.com/marswaveai/ColaMD/issues/26)
-
-**Need:** Render Mermaid and mindmap diagrams inside Markdown documents, which are common in technical notes and planning.
-
-**Why it fits:** Diagram rendering is a frequent Markdown workflow. An earlier Mermaid integration caused high CPU usage and freezes, so it was removed in v1.8.1.
-
-**Constraints:** Large feature. Reintroduce only with a stable, isolated renderer that never blocks editing or slows first launch. Native code blocks must remain editable.
 
 ### Footnote hover preview
 
@@ -83,3 +79,9 @@ ColaMD deliberately avoids workspace and tab-system complexity. Existing file op
 ### Resizable file panel
 
 The file panel remains a fixed 220px lightweight list. Long names reveal themselves through hover scrolling, avoiding a persisted layout state and drag affordance.
+
+## Known Issues
+
+### Theme menu shows no selected state
+
+After picking a theme, the theme menu gives no indication of which theme is active, so users can't tell what is currently selected. Add a checkmark/disabled state on the active entry in the application menu. (Reported 2026-08-21.)
