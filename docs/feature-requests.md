@@ -46,6 +46,16 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Deferred. The initial menu, paste, and drag-and-drop implementation was removed before `v1.9.0` after it proved unreliable.
 
+### Multiple windows
+
+**Source:** [#44](https://github.com/marswaveai/ColaMD/issues/44)
+
+**Need:** Open a new editor window instead of replacing the current document, so users can view or edit multiple files side by side.
+
+**Why it fits:** Keeps the single-document navigation model intact — no tabs — while removing the current cover-current-document limitation.
+
+**Constraints:** Provide a File-menu (or shortcut) entry; each window keeps independent file, theme, and state. Resolve hot-reload and save conflicts when two windows watch the same file. Do not reintroduce tabs or a shared workspace.
+
 ### Recent files
 
 **Source:** [#28](https://github.com/marswaveai/ColaMD/issues/28)
