@@ -216,6 +216,16 @@ function suggestFileName(win: BrowserWindow, content?: string): string | undefin
   return match[1].trim().replace(/[/\\:*?"<>|]/g, '').slice(0, 60) || undefined
 }
 
+// Save dialogs should open beside the currently edited Markdown file. When
+// the document is still untitled there is no meaningful sibling directory, so
+// Electron keeps its normal platform-specific default (typically Documents).
+function suggestSavePath(win: BrowserWindow, fileName?: string): string | undefined {
+  const state = getState(win)
+  const name = fileName ?? suggestFileName(win)
+  if (!name) return undefined
+  return state.filePath ? join(dirname(state.filePath), name) : name
+}
+
 function stopWatching(state: WindowState): void {
   if (state.watcher) {
     state.watcher.close()
@@ -612,7 +622,7 @@ ipcMain.handle('save-file', async (event, content: string, expectedPath?: string
   let filePath = sourcePath
   if (!filePath) {
     const result = await dialog.showSaveDialog(win, {
-      defaultPath: suggestFileName(win, content),
+      defaultPath: suggestSavePath(win, suggestFileName(win, content)),
       filters: [
         { name: 'Markdown', extensions: ['md'] },
         { name: 'All Files', extensions: ['*'] }
@@ -631,7 +641,7 @@ ipcMain.handle('save-file-as', async (event, content: string, expectedPath?: str
   const sourcePath = getState(win).filePath
   if (expectedPath && sourcePath !== expectedPath) return null
   const result = await dialog.showSaveDialog(win, {
-    defaultPath: suggestFileName(win, content),
+    defaultPath: suggestSavePath(win, suggestFileName(win, content)),
     filters: [
       { name: 'Markdown', extensions: ['md'] },
       { name: 'All Files', extensions: ['*'] }
@@ -649,7 +659,7 @@ ipcMain.handle('export-docx', async (event, content: unknown) => {
   win.focus()
   const baseName = suggestFileName(win, content) ?? 'untitled'
   const result = await dialog.showSaveDialog(win, {
-    defaultPath: `${baseName}.docx`,
+    defaultPath: suggestSavePath(win, `${baseName}.docx`),
     filters: [{ name: 'Word Document', extensions: ['docx'] }]
   })
   if (result.canceled || !result.filePath) return false
@@ -680,7 +690,7 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
   const baseName = suggestFileName(win) ?? 'untitled'
   const suffix = preset === 'desktop' ? 'desktop' : 'mobile'
   const result = await dialog.showSaveDialog(win, {
-    defaultPath: `${baseName}-${suffix}.png`,
+    defaultPath: suggestSavePath(win, `${baseName}-${suffix}.png`),
     filters: [{ name: 'PNG Image', extensions: ['png'] }]
   })
   if (result.canceled || !result.filePath) return false
@@ -727,7 +737,7 @@ ipcMain.handle('export-pdf', async (event) => {
   const win = getWinFromEvent(event)
   if (!win) return false
   const result = await dialog.showSaveDialog(win, {
-    defaultPath: suggestFileName(win),
+    defaultPath: suggestSavePath(win, suggestFileName(win)),
     filters: [{ name: 'PDF', extensions: ['pdf'] }]
   })
   if (result.canceled || !result.filePath) return false
@@ -773,7 +783,7 @@ ipcMain.handle('export-html', async (event, snapshot: {
   if (!win) return false
   const baseName = suggestFileName(win, snapshot.content) ?? 'untitled'
   const result = await dialog.showSaveDialog(win, {
-    defaultPath: `${baseName}.html`,
+    defaultPath: suggestSavePath(win, `${baseName}.html`),
     filters: [{ name: 'HTML', extensions: ['html'] }]
   })
   if (result.canceled || !result.filePath) return false
@@ -1375,7 +1385,7 @@ async function handleWindowClose(win: BrowserWindow, state: WindowState): Promis
   let filePath = sourcePath
   if (!filePath) {
     const saveAs = await dialog.showSaveDialog(win, {
-      defaultPath: suggestFileName(win, snapshot.content),
+      defaultPath: suggestSavePath(win, suggestFileName(win, snapshot.content)),
       filters: [
         { name: 'Markdown', extensions: ['md'] },
         { name: 'All Files', extensions: ['*'] }
