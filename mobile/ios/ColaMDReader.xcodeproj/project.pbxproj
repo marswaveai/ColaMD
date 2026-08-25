@@ -1,0 +1,237 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* ColaMDReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ColaMDReaderApp.swift */; };
+		A10000000000000000000002 /* ReaderStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ReaderStore.swift */; };
+		A10000000000000000000003 /* ReaderHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* ReaderHomeView.swift */; };
+		A10000000000000000000004 /* WebReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* WebReaderView.swift */; };
+		A10000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* Assets.xcassets */; };
+		A10000000000000000000006 /* reader.html in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* reader.html */; };
+		A10000000000000000000007 /* reader.css in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* reader.css */; };
+		A10000000000000000000008 /* reader.js in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* reader.js */; };
+		A10000000000000000000009 /* marked.min.js in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* marked.min.js */; };
+		A1000000000000000000000A /* purify.min.js in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* purify.min.js */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* ColaMDReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColaMDReaderApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* ReaderStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderStore.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* ReaderHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHomeView.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* WebReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderView.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000006 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A20000000000000000000007 /* reader.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = reader.html; sourceTree = "<group>"; };
+		A20000000000000000000008 /* reader.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = reader.css; sourceTree = "<group>"; };
+		A20000000000000000000009 /* reader.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = reader.js; sourceTree = "<group>"; };
+		A2000000000000000000000A /* marked.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = marked.min.js; sourceTree = "<group>"; };
+		A2000000000000000000000B /* purify.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = purify.min.js; sourceTree = "<group>"; };
+		A2000000000000000000000C /* ColaMD Reader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ColaMD Reader.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A40000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A40000000000000000000002 /* ColaMDReader */,
+				A40000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A40000000000000000000002 /* ColaMDReader */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* ColaMDReaderApp.swift */,
+				A20000000000000000000002 /* ReaderStore.swift */,
+				A20000000000000000000003 /* ReaderHomeView.swift */,
+				A20000000000000000000004 /* WebReaderView.swift */,
+				A20000000000000000000005 /* Info.plist */,
+				A20000000000000000000006 /* Assets.xcassets */,
+				A40000000000000000000003 /* ReaderWeb */,
+			);
+			path = ColaMDReader;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000003 /* ReaderWeb */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000007 /* reader.html */,
+				A20000000000000000000008 /* reader.css */,
+				A20000000000000000000009 /* reader.js */,
+				A2000000000000000000000A /* marked.min.js */,
+				A2000000000000000000000B /* purify.min.js */,
+			);
+			path = ReaderWeb;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A2000000000000000000000C /* ColaMD Reader.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* ColaMDReader */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A60000000000000000000002 /* Build configuration list for PBXNativeTarget "ColaMDReader" */;
+			buildPhases = (
+				A30000000000000000000002 /* Sources */,
+				A30000000000000000000001 /* Frameworks */,
+				A30000000000000000000003 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = ColaMDReader;
+			productName = ColaMDReader;
+			productReference = A2000000000000000000000C /* ColaMD Reader.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A70000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					A50000000000000000000001 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+				};
+			};
+			buildConfigurationList = A60000000000000000000001 /* Build configuration list for PBXProject "ColaMDReader" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = A40000000000000000000001;
+			productRefGroup = A40000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A50000000000000000000001 /* ColaMDReader */);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A30000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000005 /* Assets.xcassets in Resources */,
+				A10000000000000000000006 /* reader.html in Resources */,
+				A10000000000000000000007 /* reader.css in Resources */,
+				A10000000000000000000008 /* reader.js in Resources */,
+				A10000000000000000000009 /* marked.min.js in Resources */,
+				A1000000000000000000000A /* purify.min.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A30000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* ColaMDReaderApp.swift in Sources */,
+				A10000000000000000000002 /* ReaderStore.swift in Sources */,
+				A10000000000000000000003 /* ReaderHomeView.swift in Sources */,
+				A10000000000000000000004 /* WebReaderView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A80000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		A80000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		A80000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ColaMDReader/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.marswave.colamd.reader;
+				PRODUCT_NAME = "ColaMD Reader";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A80000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ColaMDReader/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.marswave.colamd.reader;
+				PRODUCT_NAME = "ColaMD Reader";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A60000000000000000000001 /* Build configuration list for PBXProject "ColaMDReader" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A80000000000000000000001 /* Debug */, A80000000000000000000002 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A60000000000000000000002 /* Build configuration list for PBXNativeTarget "ColaMDReader" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A80000000000000000000003 /* Debug */, A80000000000000000000004 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A70000000000000000000001 /* Project object */;
+}

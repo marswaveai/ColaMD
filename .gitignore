@@ -5,4 +5,5 @@ release/
 .DS_Store
 *.env
 log.md
+mobile/ios/build/
 vscode-extension/*.vsix
