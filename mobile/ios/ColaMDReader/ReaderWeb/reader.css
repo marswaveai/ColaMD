@@ -1,13 +1,13 @@
 :root {
   color-scheme: light;
-  --page: #faf9f5;
-  --paper: #ffffff;
-  --ink: #252525;
-  --muted: #6e6b64;
-  --line: #dedbd2;
-  --code: #f1efe9;
-  --accent: #0a7a69;
-  --quote: #9a968c;
+  --page: #faf6f0;
+  --paper: #fffdfa;
+  --ink: #29241f;
+  --muted: #746c64;
+  --line: #dfd7ce;
+  --code: #f3ede6;
+  --accent: #f1752d;
+  --quote: #b19b89;
   --font-size: 18px;
   --font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
@@ -21,7 +21,7 @@
   --muted: #aaa79f;
   --line: #3e423f;
   --code: #2a2e2b;
-  --accent: #69c4ac;
+  --accent: #f08b61;
   --quote: #8e938e;
 }
 
@@ -33,7 +33,7 @@
   --muted: #86725b;
   --line: #ddceb7;
   --code: #f0e4ce;
-  --accent: #836624;
+  --accent: #bd6033;
   --quote: #aa936f;
 }
 

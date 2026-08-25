@@ -41,18 +41,19 @@ struct ReaderHomeView: View {
 
     private var library: some View {
         ZStack {
-            Color(uiColor: .systemBackground)
+            ReaderPalette.page
                 .ignoresSafeArea()
 
             GeometryReader { geometry in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 10) {
                             Text("ColaMD Reader")
                                 .font(.largeTitle.weight(.bold))
-                            Text("Markdown Reader")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(ReaderPalette.ink)
+                            Capsule()
+                                .fill(ReaderPalette.accent)
+                                .frame(width: 34, height: 3)
                         }
                         .padding(.top, 20)
 
@@ -77,12 +78,11 @@ struct ReaderHomeView: View {
                     Label("打开文件", systemImage: "folder")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(ReaderPrimaryButtonStyle())
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }
-            .background(.bar)
+            .background(ReaderPalette.paper)
         }
     }
 
@@ -90,9 +90,10 @@ struct ReaderHomeView: View {
         VStack(spacing: 12) {
             Image(systemName: "doc.text")
                 .font(.system(size: 32, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ReaderPalette.accent)
             Text("还没有文档")
                 .font(.headline)
+                .foregroundStyle(ReaderPalette.ink)
         }
         .frame(maxWidth: .infinity, minHeight: max(260, availableHeight - 180))
     }
@@ -101,6 +102,7 @@ struct ReaderHomeView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("最近阅读")
                 .font(.headline)
+                .foregroundStyle(ReaderPalette.ink)
                 .padding(.top, 38)
                 .padding(.bottom, 2)
 
@@ -117,24 +119,24 @@ struct ReaderHomeView: View {
             HStack(spacing: 12) {
                 Image(systemName: "doc.text")
                     .font(.title3)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(ReaderPalette.accent)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(recent.fileName)
                         .font(.body.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(ReaderPalette.ink)
                         .lineLimit(2)
                     Text(recent.openedAt, style: .relative)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ReaderPalette.muted)
                 }
 
                 Spacer(minLength: 8)
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ReaderPalette.muted.opacity(0.72))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 14)
@@ -148,13 +150,18 @@ struct ReaderHomeView: View {
                 Label("移除", systemImage: "trash")
             }
         }
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(ReaderPalette.paper, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(ReaderPalette.line, lineWidth: 1)
+        }
     }
 
     private func reader(_ document: ReaderDocument) -> some View {
         WebReaderView(document: document, theme: store.theme, fontSize: store.fontSize)
             .navigationTitle(document.fileName)
             .navigationBarTitleDisplayMode(.inline)
+            .tint(ReaderPalette.accent)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -196,6 +203,26 @@ struct ReaderHomeView: View {
             .sheet(isPresented: $isOutlinePresented) {
                 OutlineSheet(headings: document.outline)
             }
+    }
+}
+
+private enum ReaderPalette {
+    static let page = Color(red: 0.98, green: 0.965, blue: 0.94)
+    static let paper = Color(red: 1.0, green: 0.992, blue: 0.978)
+    static let ink = Color(red: 0.16, green: 0.145, blue: 0.13)
+    static let muted = Color(red: 0.43, green: 0.40, blue: 0.37)
+    static let line = Color(red: 0.87, green: 0.84, blue: 0.80)
+    static let accent = Color(red: 0.945, green: 0.365, blue: 0.18)
+}
+
+private struct ReaderPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.vertical, 15)
+            .background(ReaderPalette.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .opacity(configuration.isPressed ? 0.78 : 1)
     }
 }
 
