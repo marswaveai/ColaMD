@@ -30,3 +30,7 @@ The bundled renderer uses `marked` 15.0.12 (MIT) and DOMPurify 3.3.3 (MPL-2.0 or
 ## Known MVP boundary
 
 Markdown files are copied into the app container on import. Remote and data-URI images render. Relative local image folders are not imported in this MVP, so those images are intentionally not rendered yet.
+
+## Share-sheet boundary
+
+The app registers Markdown document types for Files app opening. A future WeChat Share Extension can copy an incoming file into an App Group container, but iOS does not provide a reliable, supported way for that extension to automatically open its containing app. That work must therefore use a visible "saved to ColaMD Reader" completion state and be validated on a signed device before it is considered part of the product flow.
