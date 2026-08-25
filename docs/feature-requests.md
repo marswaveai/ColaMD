@@ -68,6 +68,16 @@ These features are implemented on `main` and await release verification.
 
 **Constraints:** Provide a File-menu (or shortcut) entry; each window keeps independent file, theme, and state. Resolve hot-reload and save conflicts when two windows watch the same file. Do not reintroduce tabs or a shared workspace.
 
+### Publish ColaMD for iOS
+
+**Source:** User request
+
+**Need:** Publish the iOS app under the unified `ColaMD` product name so anyone can install it from the App Store.
+
+**Scope:** Create the App Store Connect record, configure Release distribution signing, upload an archive, run internal and external TestFlight verification, prepare screenshots and store metadata, complete privacy and export-compliance declarations, submit App Review, and verify public installation plus `.md` / `.txt` opening after release. Confirm whether the Share Extension is included before submission; the current Xcode project contains only the main app target.
+
+**Status:** Deferred. The company Apple Developer Program account is active; execute the release checklist later.
+
 ### Recent files
 
 **Source:** [#28](https://github.com/marswaveai/ColaMD/issues/28)
