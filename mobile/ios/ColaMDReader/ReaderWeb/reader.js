@@ -36,7 +36,11 @@
 
   function render(payload) {
     const markdown = typeof payload.markdown === 'string' ? payload.markdown : '';
-    const theme = ['light', 'dark', 'sepia'].includes(payload.theme) ? payload.theme : 'light';
+    const supportedThemes = new Set([
+      'light', 'dark', 'elegant', 'sepia', 'notion', 'bear', 'writer',
+      'solarized-dark', 'nord', 'gruvbox', 'dracula', 'midnight'
+    ]);
+    const theme = supportedThemes.has(payload.theme) ? payload.theme : 'light';
     const fontSize = Number.isFinite(payload.fontSize) ? Math.min(Math.max(payload.fontSize, 14), 28) : 18;
 
     document.documentElement.dataset.theme = theme;

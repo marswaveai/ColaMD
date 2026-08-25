@@ -16,7 +16,27 @@
 		A10000000000000000000008 /* reader.js in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* reader.js */; };
 		A10000000000000000000009 /* marked.min.js in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* marked.min.js */; };
 		A1000000000000000000000A /* purify.min.js in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* purify.min.js */; };
+		B10000000000000000000001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* ShareViewController.swift */; };
+		B10000000000000000000002 /* ColaMDShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* ColaMDShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B90000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A70000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B50000000000000000000001;
+			remoteInfo = ColaMDShareExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		BA0000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B50000000000000000000001 /* ColaMDShareExtension */;
+			targetProxy = B90000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXFileReference section */
 		A20000000000000000000001 /* ColaMDReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColaMDReaderApp.swift; sourceTree = "<group>"; };
@@ -31,10 +51,19 @@
 		A2000000000000000000000A /* marked.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = marked.min.js; sourceTree = "<group>"; };
 		A2000000000000000000000B /* purify.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = purify.min.js; sourceTree = "<group>"; };
 		A2000000000000000000000C /* ColaMD Reader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "ColaMD Reader.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000001 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		B20000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B20000000000000000000003 /* ColaMDShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ColaMDShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B30000000000000000000002 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = ();
@@ -47,6 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				A40000000000000000000002 /* ColaMDReader */,
+				B40000000000000000000001 /* ColaMDShareExtension */,
 				A40000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -81,8 +111,18 @@
 			isa = PBXGroup;
 			children = (
 				A2000000000000000000000C /* ColaMD Reader.app */,
+				B20000000000000000000003 /* ColaMDShareExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B40000000000000000000001 /* ColaMDShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000001 /* ShareViewController.swift */,
+				B20000000000000000000002 /* Info.plist */,
+			);
+			path = ColaMDShareExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -95,13 +135,31 @@
 				A30000000000000000000002 /* Sources */,
 				A30000000000000000000001 /* Frameworks */,
 				A30000000000000000000003 /* Resources */,
+				B30000000000000000000004 /* Embed App Extensions */,
 			);
 			buildRules = ();
-			dependencies = ();
+			dependencies = (
+				BA0000000000000000000001 /* PBXTargetDependency */,
+			);
 			name = ColaMDReader;
 			productName = ColaMDReader;
 			productReference = A2000000000000000000000C /* ColaMD Reader.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B50000000000000000000001 /* ColaMDShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B60000000000000000000001 /* Build configuration list for PBXNativeTarget "ColaMDShareExtension" */;
+			buildPhases = (
+				B30000000000000000000001 /* Sources */,
+				B30000000000000000000002 /* Frameworks */,
+				B30000000000000000000003 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = ColaMDShareExtension;
+			productName = ColaMDShareExtension;
+			productReference = B20000000000000000000003 /* ColaMDShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -115,6 +173,19 @@
 				TargetAttributes = {
 					A50000000000000000000001 = {
 						CreatedOnToolsVersion = 26.3;
+						SystemCapabilities = {
+							com.apple.AppGroups = {
+								enabled = 1;
+							};
+						};
+					};
+					B50000000000000000000001 = {
+						CreatedOnToolsVersion = 26.3;
+						SystemCapabilities = {
+							com.apple.AppGroups = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -127,7 +198,10 @@
 			productRefGroup = A40000000000000000000004 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (A50000000000000000000001 /* ColaMDReader */);
+			targets = (
+				A50000000000000000000001 /* ColaMDReader */,
+				B50000000000000000000001 /* ColaMDShareExtension */,
+			);
 		};
 /* End PBXProject section */
 
@@ -145,6 +219,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B30000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B30000000000000000000004 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B10000000000000000000002 /* ColaMDShareExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -156,6 +247,14 @@
 				A10000000000000000000002 /* ReaderStore.swift in Sources */,
 				A10000000000000000000003 /* ReaderHomeView.swift in Sources */,
 				A10000000000000000000004 /* WebReaderView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B30000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* ShareViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -184,6 +283,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ColaMDReader/ColaMDReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = CJSWWQ2B9V;
@@ -203,6 +303,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ColaMDReader/ColaMDReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = CJSWWQ2B9V;
@@ -213,6 +314,46 @@
 				PRODUCT_BUNDLE_IDENTIFIER = ai.marswave.colamd.reader;
 				PRODUCT_NAME = "ColaMD Reader";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B80000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ColaMDShareExtension/ColaMDShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CJSWWQ2B9V;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ColaMDShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.marswave.colamd.reader.share;
+				PRODUCT_NAME = ColaMD;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B80000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ColaMDShareExtension/ColaMDShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CJSWWQ2B9V;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ColaMDShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.marswave.colamd.reader.share;
+				PRODUCT_NAME = ColaMD;
+				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -230,6 +371,12 @@
 		A60000000000000000000002 /* Build configuration list for PBXNativeTarget "ColaMDReader" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (A80000000000000000000003 /* Debug */, A80000000000000000000004 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B60000000000000000000001 /* Build configuration list for PBXNativeTarget "ColaMDShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (B80000000000000000000001 /* Debug */, B80000000000000000000002 /* Release */);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

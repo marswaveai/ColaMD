@@ -79,8 +79,8 @@ struct ReaderHomeView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(ReaderPrimaryButtonStyle())
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
             }
             .background(ReaderPalette.paper)
         }
@@ -178,6 +178,8 @@ struct ReaderHomeView: View {
                             isOutlinePresented = true
                         } label: {
                             Image(systemName: "list.bullet")
+                            .font(.system(size: 14, weight: .medium))
+                            .frame(width: 26, height: 26)
                         }
                         .accessibilityLabel("文档目录")
                     }
@@ -195,7 +197,9 @@ struct ReaderHomeView: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "textformat.size")
+                        Image(systemName: "textformat")
+                            .font(.system(size: 14, weight: .medium))
+                            .frame(width: 26, height: 26)
                     }
                     .accessibilityLabel("阅读设置")
                 }
@@ -218,10 +222,10 @@ private enum ReaderPalette {
 private struct ReaderPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)
-            .padding(.vertical, 15)
-            .background(ReaderPalette.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.vertical, 11)
+            .background(ReaderPalette.accent, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .opacity(configuration.isPressed ? 0.78 : 1)
     }
 }

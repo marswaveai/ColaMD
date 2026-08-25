@@ -26,7 +26,16 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
     case system
     case light
     case dark
+    case elegant
     case sepia
+    case notion
+    case bear
+    case writer
+    case solarizedDark = "solarized-dark"
+    case nord
+    case gruvbox
+    case dracula
+    case midnight
 
     var id: String { rawValue }
 
@@ -35,7 +44,16 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
         case .system: "跟随系统"
         case .light: "浅色"
         case .dark: "深色"
-        case .sepia: "护眼"
+        case .elegant: "雅致"
+        case .sepia: "羊皮纸"
+        case .notion: "简白"
+        case .bear: "熊红"
+        case .writer: "作家"
+        case .solarizedDark: "夜航"
+        case .nord: "极地"
+        case .gruvbox: "暖木"
+        case .dracula: "德古拉"
+        case .midnight: "午夜"
         }
     }
 }
@@ -91,6 +109,7 @@ final class ReaderStore: ObservableObject {
         self.theme = ReaderTheme(rawValue: defaults.string(forKey: Keys.theme) ?? "") ?? .system
         self.fontSize = ReaderFontSize(rawValue: defaults.integer(forKey: Keys.fontSize)) ?? .standard
         self.recents = Self.loadRecents(defaults: defaults)
+        importPendingSharedDocuments()
     }
 
     func importDocument(from url: URL) {
@@ -127,6 +146,38 @@ final class ReaderStore: ObservableObject {
         try? fileManager.removeItem(at: url)
         recents.removeAll { $0.id == recent.id }
         persistRecents()
+    }
+
+    func importPendingSharedDocuments() {
+        guard let directory = sharedImportsDirectory,
+              let pendingURLs = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.contentModificationDateKey]
+              ) else {
+            return
+        }
+
+        for url in pendingURLs.sorted(by: { lhs, rhs in
+            let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            return lhsDate < rhsDate
+        }) {
+            do {
+                document = try importDocumentSynchronously(from: url)
+                try? fileManager.removeItem(at: url)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private var sharedImportsDirectory: URL? {
+        guard let containerURL = fileManager.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.ai.marswave.colamd.reader"
+        ) else {
+            return nil
+        }
+        return containerURL.appendingPathComponent("SharedImports", isDirectory: true)
     }
 
     private func importDocumentSynchronously(from sourceURL: URL) throws -> ReaderDocument {
