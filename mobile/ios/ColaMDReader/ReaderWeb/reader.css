@@ -60,6 +60,11 @@ body {
   padding: 20px 18px calc(32px + env(safe-area-inset-bottom));
 }
 
+@media (max-width: 350px) {
+  #document { padding-left: 16px; padding-right: 16px; }
+  pre { padding-left: 12px; padding-right: 12px; }
+}
+
 h1, h2, h3, h4, h5, h6 {
   color: var(--ink);
   line-height: 1.3;
@@ -127,6 +132,13 @@ th, td { border: 1px solid var(--line); padding: 0.5em 0.65em; text-align: left;
 th { background: var(--code); font-weight: 650; }
 
 img { display: block; height: auto; margin: 1.2em auto; max-width: 100%; }
+
+@media (min-width: 430px) {
+  #document {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+}
 
 @media (min-width: 700px) {
   #document {

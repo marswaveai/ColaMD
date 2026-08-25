@@ -6,62 +6,68 @@ struct ReaderHomeView: View {
     @State private var isOutlinePresented = false
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let document = store.document {
+        Group {
+            if let document = store.document {
+                NavigationStack {
                     reader(document)
-                } else {
-                    library
                 }
+            } else {
+                library
             }
-            .fileImporter(
-                isPresented: $isImporterPresented,
-                allowedContentTypes: ReaderDocumentType.importableTypes,
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    if let url = urls.first {
-                        store.importDocument(from: url)
-                    }
-                case .failure(let error):
-                    store.errorMessage = error.localizedDescription
+        }
+        .fileImporter(
+            isPresented: $isImporterPresented,
+            allowedContentTypes: ReaderDocumentType.importableTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    store.importDocument(from: url)
                 }
+            case .failure(let error):
+                store.errorMessage = error.localizedDescription
             }
-            .alert("无法打开文档", isPresented: Binding(
-                get: { store.errorMessage != nil },
-                set: { if !$0 { store.errorMessage = nil } }
-            )) {
-                Button("好", role: .cancel) {}
-            } message: {
-                Text(store.errorMessage ?? "")
-            }
+        }
+        .alert("无法打开文档", isPresented: Binding(
+            get: { store.errorMessage != nil },
+            set: { if !$0 { store.errorMessage = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(store.errorMessage ?? "")
         }
     }
 
     private var library: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("ColaMD Reader")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                    Text("Markdown Reader")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.top, 20)
+        ZStack {
+            Color(uiColor: .systemBackground)
+                .ignoresSafeArea()
 
-                if store.recents.isEmpty {
-                    emptyLibrary
-                } else {
-                    recentDocuments
+            GeometryReader { geometry in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("ColaMD Reader")
+                                .font(.largeTitle.weight(.bold))
+                            Text("Markdown Reader")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 20)
+
+                        if store.recents.isEmpty {
+                            emptyLibrary(availableHeight: geometry.size.height)
+                        } else {
+                            recentDocuments
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 24)
         }
-        .background(Color(uiColor: .systemBackground))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 Divider()
@@ -78,20 +84,17 @@ struct ReaderHomeView: View {
             }
             .background(.bar)
         }
-        .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var emptyLibrary: some View {
+    private func emptyLibrary(availableHeight: CGFloat) -> some View {
         VStack(spacing: 12) {
-            Spacer(minLength: 88)
             Image(systemName: "doc.text")
                 .font(.system(size: 32, weight: .medium))
                 .foregroundStyle(.secondary)
             Text("还没有文档")
                 .font(.headline)
-            Spacer(minLength: 120)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: max(260, availableHeight - 180))
     }
 
     private var recentDocuments: some View {
@@ -121,7 +124,7 @@ struct ReaderHomeView: View {
                     Text(recent.fileName)
                         .font(.body.weight(.medium))
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                     Text(recent.openedAt, style: .relative)
                         .font(.caption)
                         .foregroundStyle(.secondary)

@@ -45,6 +45,8 @@
     <string>public.app-category.productivity</string>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
+    <key>UILaunchScreen</key>
+    <dict/>
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>
