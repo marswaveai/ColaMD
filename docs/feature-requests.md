@@ -74,9 +74,11 @@ These features are implemented on `main` and await release verification.
 
 **Need:** Publish the iOS app under the unified `ColaMD` product name so anyone can install it from the App Store.
 
-**Scope:** Create the App Store Connect record, configure Release distribution signing, upload an archive, run internal and external TestFlight verification, prepare screenshots and store metadata, complete privacy and export-compliance declarations, submit App Review, and verify public installation plus `.md` / `.txt` opening after release. Confirm whether the Share Extension is included before submission; the current Xcode project contains only the main app target.
+**Scope:** Publish the main ColaMD app first: create the App Store Connect record, configure Release distribution signing, upload an archive, run internal and external TestFlight verification, prepare screenshots and store metadata, complete privacy and export-compliance declarations, submit App Review, and verify public installation plus `.md` / `.txt` opening after release. Defer the Share Extension until it has a clear user need; it is an optional later update, not a prerequisite for the first release.
 
-**Status:** Deferred. The company Apple Developer Program account is active; execute the release checklist later.
+**Signing note:** Development signing is only for registered test devices. App Store distribution signing is a separate profile that Xcode can create and manage automatically from the company Apple Developer Program account. No manual profile editing is planned.
+
+**Status:** Deferred. First release scope is the main app only; Share Extension remains optional.
 
 ### Recent files
 
