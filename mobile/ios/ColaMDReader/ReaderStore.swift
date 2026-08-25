@@ -109,7 +109,6 @@ final class ReaderStore: ObservableObject {
         self.theme = ReaderTheme(rawValue: defaults.string(forKey: Keys.theme) ?? "") ?? .system
         self.fontSize = ReaderFontSize(rawValue: defaults.integer(forKey: Keys.fontSize)) ?? .standard
         self.recents = Self.loadRecents(defaults: defaults)
-        importPendingSharedDocuments()
     }
 
     func importDocument(from url: URL) {
@@ -146,38 +145,6 @@ final class ReaderStore: ObservableObject {
         try? fileManager.removeItem(at: url)
         recents.removeAll { $0.id == recent.id }
         persistRecents()
-    }
-
-    func importPendingSharedDocuments() {
-        guard let directory = sharedImportsDirectory,
-              let pendingURLs = try? fileManager.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: [.contentModificationDateKey]
-              ) else {
-            return
-        }
-
-        for url in pendingURLs.sorted(by: { lhs, rhs in
-            let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            return lhsDate < rhsDate
-        }) {
-            do {
-                document = try importDocumentSynchronously(from: url)
-                try? fileManager.removeItem(at: url)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private var sharedImportsDirectory: URL? {
-        guard let containerURL = fileManager.containerURL(
-            forSecurityApplicationGroupIdentifier: "group.ai.marswave.colamd.reader"
-        ) else {
-            return nil
-        }
-        return containerURL.appendingPathComponent("SharedImports", isDirectory: true)
     }
 
     private func importDocumentSynchronously(from sourceURL: URL) throws -> ReaderDocument {
