@@ -182,8 +182,9 @@ struct ReaderHomeView: View {
                 store.closeDocument()
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 26, height: 26)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(ReaderReadingPalette.ink(for: store.theme, colorScheme: colorScheme))
+                    .frame(width: 44, height: 42)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("返回文档库")
@@ -191,7 +192,7 @@ struct ReaderHomeView: View {
             Text(document.fileName)
                 .font(.caption)
                 .lineLimit(1)
-                .foregroundStyle(ReaderReadingPalette.accent(for: store.theme, colorScheme: colorScheme))
+                .foregroundStyle(ReaderReadingPalette.ink(for: store.theme, colorScheme: colorScheme))
 
             Spacer(minLength: 4)
 
@@ -200,8 +201,9 @@ struct ReaderHomeView: View {
                     isOutlinePresented = true
                 } label: {
                     Image(systemName: "list.bullet")
-                        .font(.system(size: 14, weight: .medium))
-                        .frame(width: 26, height: 26)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(ReaderReadingPalette.accent(for: store.theme, colorScheme: colorScheme))
+                        .frame(width: 44, height: 42)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("文档目录")
@@ -220,14 +222,15 @@ struct ReaderHomeView: View {
                     }
                 }
             } label: {
-                Image(systemName: "textformat")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 26, height: 26)
+                Text("格式")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(ReaderReadingPalette.accent(for: store.theme, colorScheme: colorScheme))
+                    .frame(minWidth: 44, minHeight: 42)
             }
-            .accessibilityLabel("阅读设置")
+            .accessibilityLabel("阅读格式")
         }
-        .padding(.horizontal, 14)
-        .frame(height: 34)
+        .padding(.horizontal, 10)
+        .frame(height: 42)
     }
 }
 
@@ -253,6 +256,22 @@ private enum ReaderReadingPalette {
         case .gruvbox: Color(red: 0.157, green: 0.157, blue: 0.157)
         case .dracula: Color(red: 0.157, green: 0.165, blue: 0.212)
         case .midnight: .black
+        }
+    }
+
+    static func ink(for theme: ReaderTheme, colorScheme: ColorScheme) -> Color {
+        switch theme {
+        case .system: colorScheme == .dark ? Color(red: 0.90, green: 0.93, blue: 0.95) : Color(red: 0.14, green: 0.16, blue: 0.18)
+        case .light, .notion, .bear: Color(red: 0.14, green: 0.16, blue: 0.18)
+        case .dark: Color(red: 0.90, green: 0.93, blue: 0.95)
+        case .elegant: Color(red: 0.17, green: 0.17, blue: 0.17)
+        case .sepia: Color(red: 0.31, green: 0.25, blue: 0.20)
+        case .writer: Color(red: 0.10, green: 0.10, blue: 0.10)
+        case .solarizedDark: Color(red: 0.76, green: 0.84, blue: 0.84)
+        case .nord: Color(red: 0.85, green: 0.87, blue: 0.91)
+        case .gruvbox: Color(red: 0.92, green: 0.86, blue: 0.70)
+        case .dracula: Color(red: 0.97, green: 0.97, blue: 0.95)
+        case .midnight: Color(red: 0.84, green: 0.84, blue: 0.84)
         }
     }
 
