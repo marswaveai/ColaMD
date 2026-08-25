@@ -202,7 +202,7 @@ struct ReaderHomeView: View {
                 } label: {
                     Image(systemName: "list.bullet")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(ReaderReadingPalette.accent(for: store.theme, colorScheme: colorScheme))
+                        .foregroundStyle(ReaderReadingPalette.ink(for: store.theme, colorScheme: colorScheme))
                         .frame(width: 44, height: 42)
                 }
                 .buttonStyle(.plain)
@@ -224,7 +224,7 @@ struct ReaderHomeView: View {
             } label: {
                 Text("格式")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(ReaderReadingPalette.accent(for: store.theme, colorScheme: colorScheme))
+                    .foregroundStyle(ReaderReadingPalette.ink(for: store.theme, colorScheme: colorScheme))
                     .frame(minWidth: 44, minHeight: 42)
             }
             .accessibilityLabel("阅读格式")
