@@ -49,7 +49,7 @@ struct ReaderHomeView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("ColaMD Reader")
+                            Text("ColaMD")
                                 .font(.largeTitle.weight(.bold))
                                 .foregroundStyle(ReaderPalette.ink)
                             Capsule()
@@ -128,7 +128,7 @@ struct ReaderHomeView: View {
                         .font(.body.weight(.medium))
                         .foregroundStyle(ReaderPalette.ink)
                         .lineLimit(2)
-                    Text(recent.openedAt, style: .relative)
+                    Text(recent.openedAt.formatted(date: .abbreviated, time: .shortened))
                         .font(.caption)
                         .foregroundStyle(ReaderPalette.muted)
                 }
