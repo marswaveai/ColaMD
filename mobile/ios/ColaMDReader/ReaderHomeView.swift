@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ReaderHomeView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var store: ReaderStore
     @State private var isImporterPresented = false
     @State private var isOutlinePresented = false
@@ -158,55 +159,119 @@ struct ReaderHomeView: View {
     }
 
     private func reader(_ document: ReaderDocument) -> some View {
-        WebReaderView(document: document, theme: store.theme, fontSize: store.fontSize)
-            .navigationTitle(document.fileName)
-            .navigationBarTitleDisplayMode(.inline)
-            .tint(ReaderPalette.accent)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        store.closeDocument()
-                    } label: {
-                        Image(systemName: "chevron.left")
+        ZStack {
+            ReaderReadingPalette.page(for: store.theme, colorScheme: colorScheme)
+                .ignoresSafeArea()
+            WebReaderView(document: document, theme: store.theme, fontSize: store.fontSize)
+        }
+        .navigationBarBackButtonHidden()
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            readerHeader(document)
+                .background(ReaderReadingPalette.page(for: store.theme, colorScheme: colorScheme))
+        }
+        .tint(ReaderReadingPalette.accent(for: store.theme, colorScheme: colorScheme))
+        .sheet(isPresented: $isOutlinePresented) {
+            OutlineSheet(headings: document.outline)
+        }
+    }
+
+    private func readerHeader(_ document: ReaderDocument) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                store.closeDocument()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 26, height: 26)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("返回文档库")
+
+            Text(document.fileName)
+                .font(.caption)
+                .lineLimit(1)
+                .foregroundStyle(ReaderReadingPalette.accent(for: store.theme, colorScheme: colorScheme))
+
+            Spacer(minLength: 4)
+
+            if !document.outline.isEmpty {
+                Button {
+                    isOutlinePresented = true
+                } label: {
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 14, weight: .medium))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("文档目录")
+            }
+
+            Menu {
+                Picker("主题", selection: $store.theme) {
+                    ForEach(ReaderTheme.allCases) { theme in
+                        Text(theme.label).tag(theme)
                     }
-                    .accessibilityLabel("返回文档库")
                 }
 
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if !document.outline.isEmpty {
-                        Button {
-                            isOutlinePresented = true
-                        } label: {
-                            Image(systemName: "list.bullet")
-                            .font(.system(size: 14, weight: .medium))
-                            .frame(width: 26, height: 26)
-                        }
-                        .accessibilityLabel("文档目录")
+                Picker("字号", selection: $store.fontSize) {
+                    ForEach(ReaderFontSize.allCases) { size in
+                        Text(size.label).tag(size)
                     }
-
-                    Menu {
-                        Picker("主题", selection: $store.theme) {
-                            ForEach(ReaderTheme.allCases) { theme in
-                                Text(theme.label).tag(theme)
-                            }
-                        }
-
-                        Picker("字号", selection: $store.fontSize) {
-                            ForEach(ReaderFontSize.allCases) { size in
-                                Text(size.label).tag(size)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "textformat")
-                            .font(.system(size: 14, weight: .medium))
-                            .frame(width: 26, height: 26)
-                    }
-                    .accessibilityLabel("阅读设置")
                 }
+            } label: {
+                Image(systemName: "textformat")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 26, height: 26)
             }
-            .sheet(isPresented: $isOutlinePresented) {
-                OutlineSheet(headings: document.outline)
-            }
+            .accessibilityLabel("阅读设置")
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 34)
+    }
+}
+
+private enum ReaderReadingPalette {
+    static func colorScheme(for theme: ReaderTheme, system: ColorScheme) -> ColorScheme {
+        switch theme {
+        case .system: system
+        case .dark, .solarizedDark, .nord, .gruvbox, .dracula, .midnight: .dark
+        default: .light
+        }
+    }
+
+    static func page(for theme: ReaderTheme, colorScheme: ColorScheme) -> Color {
+        switch theme {
+        case .system: colorScheme == .dark ? Color(red: 0.05, green: 0.067, blue: 0.09) : .white
+        case .light, .notion, .bear: .white
+        case .dark: Color(red: 0.05, green: 0.067, blue: 0.09)
+        case .elegant: Color(red: 0.94, green: 0.93, blue: 0.92)
+        case .sepia: Color(red: 0.965, green: 0.937, blue: 0.878)
+        case .writer: Color(red: 0.988, green: 0.988, blue: 0.98)
+        case .solarizedDark: Color(red: 0, green: 0.169, blue: 0.212)
+        case .nord: Color(red: 0.18, green: 0.204, blue: 0.251)
+        case .gruvbox: Color(red: 0.157, green: 0.157, blue: 0.157)
+        case .dracula: Color(red: 0.157, green: 0.165, blue: 0.212)
+        case .midnight: .black
+        }
+    }
+
+    static func accent(for theme: ReaderTheme, colorScheme: ColorScheme) -> Color {
+        switch theme {
+        case .system: colorScheme == .dark ? Color(red: 0.345, green: 0.651, blue: 1) : Color(red: 0.035, green: 0.412, blue: 0.855)
+        case .light: Color(red: 0.035, green: 0.412, blue: 0.855)
+        case .dark: Color(red: 0.345, green: 0.651, blue: 1)
+        case .elegant: Color(red: 0.737, green: 0.267, blue: 0.141)
+        case .sepia: Color(red: 0.612, green: 0.369, blue: 0.161)
+        case .notion: Color(red: 0.216, green: 0.208, blue: 0.184)
+        case .bear: Color(red: 0.831, green: 0.239, blue: 0.165)
+        case .writer: Color(red: 0.231, green: 0.431, blue: 0.769)
+        case .solarizedDark: Color(red: 0.188, green: 0.576, blue: 0.855)
+        case .nord: Color(red: 0.533, green: 0.753, blue: 0.816)
+        case .gruvbox: Color(red: 0.514, green: 0.647, blue: 0.596)
+        case .dracula: Color(red: 0.741, green: 0.576, blue: 0.976)
+        case .midnight: Color(red: 0.039, green: 0.518, blue: 1)
+        }
     }
 }
 
@@ -223,10 +288,10 @@ private struct ReaderPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.vertical, 11)
-            .background(ReaderPalette.accent, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .opacity(configuration.isPressed ? 0.78 : 1)
+            .foregroundStyle(ReaderPalette.accent)
+            .frame(minHeight: 32)
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.58 : 1)
     }
 }
 
