@@ -13,7 +13,7 @@
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>CFBundleDisplayName</key>
-    <string>ColaMD Reader</string>
+    <string>ColaMD</string>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
