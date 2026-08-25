@@ -49,15 +49,15 @@ body {
   color: var(--ink);
   font-family: var(--font-family);
   font-size: var(--font-size);
-  line-height: 1.8;
+  line-height: 1.72;
   overflow-wrap: break-word;
   -webkit-font-smoothing: antialiased;
 }
 
 #document {
-  width: min(100%, 760px);
+  width: min(100%, 720px);
   margin: 0 auto;
-  padding: 24px 20px calc(40px + env(safe-area-inset-bottom));
+  padding: 20px 18px calc(32px + env(safe-area-inset-bottom));
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -67,8 +67,8 @@ h1, h2, h3, h4, h5, h6 {
   scroll-margin-top: 18px;
 }
 
-h1 { font-size: 1.65em; margin-top: 0.3em; padding-bottom: 0.35em; border-bottom: 1px solid var(--line); }
-h2 { font-size: 1.35em; padding-bottom: 0.3em; border-bottom: 1px solid var(--line); }
+h1 { font-size: 1.58em; margin-top: 0.2em; padding-bottom: 0.35em; border-bottom: 1px solid var(--line); }
+h2 { font-size: 1.3em; padding-bottom: 0.3em; border-bottom: 1px solid var(--line); }
 h3 { font-size: 1.16em; }
 h4, h5, h6 { font-size: 1em; }
 
@@ -127,6 +127,12 @@ th, td { border: 1px solid var(--line); padding: 0.5em 0.65em; text-align: left;
 th { background: var(--code); font-weight: 650; }
 
 img { display: block; height: auto; margin: 1.2em auto; max-width: 100%; }
+
+@media (min-width: 700px) {
+  #document {
+    padding: 28px 32px calc(44px + env(safe-area-inset-bottom));
+  }
+}
 
 .markdown-empty {
   color: var(--muted);

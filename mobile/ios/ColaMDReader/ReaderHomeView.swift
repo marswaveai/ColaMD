@@ -40,42 +40,112 @@ struct ReaderHomeView: View {
     }
 
     private var library: some View {
-        List {
-            Section {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("ColaMD Reader")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                    Text("Markdown Reader")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 20)
+
+                if store.recents.isEmpty {
+                    emptyLibrary
+                } else {
+                    recentDocuments
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
+        }
+        .background(Color(uiColor: .systemBackground))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
                 Button {
                     isImporterPresented = true
                 } label: {
-                    Label("打开 Markdown 文件", systemImage: "doc.badge.plus")
+                    Label("打开文件", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
             }
+            .background(.bar)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
 
-            if !store.recents.isEmpty {
-                Section("最近阅读") {
-                    ForEach(store.recents) { recent in
-                        Button {
-                            store.reopen(recent)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(recent.fileName)
-                                    .lineLimit(1)
-                                Text(recent.openedAt, style: .relative)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .swipeActions {
-                            Button(role: .destructive) {
-                                store.remove(recent)
-                            } label: {
-                                Label("移除", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
+    private var emptyLibrary: some View {
+        VStack(spacing: 12) {
+            Spacer(minLength: 88)
+            Image(systemName: "doc.text")
+                .font(.system(size: 32, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text("还没有文档")
+                .font(.headline)
+            Spacer(minLength: 120)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var recentDocuments: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("最近阅读")
+                .font(.headline)
+                .padding(.top, 38)
+                .padding(.bottom, 2)
+
+            ForEach(store.recents) { recent in
+                recentRow(recent)
             }
         }
-        .navigationTitle("ColaMD Reader")
-        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func recentRow(_ recent: RecentDocument) -> some View {
+        Button {
+            store.reopen(recent)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "doc.text")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(recent.fileName)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(recent.openedAt, style: .relative)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                store.remove(recent)
+            } label: {
+                Label("移除", systemImage: "trash")
+            }
+        }
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func reader(_ document: ReaderDocument) -> some View {
