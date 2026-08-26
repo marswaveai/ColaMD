@@ -138,10 +138,14 @@ function editorRect(): DOMRect {
 
 function positionCopyButton(pre: HTMLPreElement): void {
   if (!copyButton) return
+  const editor = document.getElementById('editor') as HTMLElement
   const rect = pre.getBoundingClientRect()
   const base = editorRect()
-  copyButton.style.left = `${rect.left - base.left + rect.width - 8}px`
-  copyButton.style.top = `${rect.top - base.top + 8}px`
+  // The button is absolutely positioned inside the scroll container #editor, so
+  // its top/left are measured from the scroll-content origin, not from the
+  // editor's border box. Add the scroll offsets so it tracks the block.
+  copyButton.style.left = `${rect.left - base.left + editor.scrollLeft + rect.width - 8}px`
+  copyButton.style.top = `${rect.top - base.top + editor.scrollTop + 8}px`
 }
 
 function createCopyButton(): HTMLButtonElement {
@@ -179,34 +183,57 @@ function createCopyButton(): HTMLButtonElement {
 
 function setupCodeBlockCopy(root: HTMLElement): void {
   copyButton = createCopyButton()
+  const btn = copyButton
 
-  const sync = (event?: MouseEvent): void => {
-    if (!copyButton) return
-    const related = event?.relatedTarget
-    if (related === copyButton || related instanceof Node && copyButton.contains(related)) return
+  const inButton = (node: Node | null): boolean =>
+    !!node && (node === btn || btn.contains(node))
 
-    const pre = root.querySelector('pre:hover') as HTMLPreElement | null
-    if (pre && pre.querySelector('code')) {
-      copyButtonPre = pre
-      copyButton.classList.add('hovering')
-      positionCopyButton(pre)
-    } else if (copyButton.matches(':hover') && copyButtonPre) {
-      copyButton.classList.add('hovering')
-    } else {
-      copyButtonPre = null
-      copyButton.classList.remove('hovering')
-    }
+  const showFor = (pre: HTMLPreElement): void => {
+    copyButtonPre = pre
+    btn.classList.add('hovering')
+    positionCopyButton(pre)
   }
 
-  // ProseMirror fires DOM mutations on every doc change, so re-sync on its
-  // transaction loop instead of a MutationObserver (avoids self-trigger loops).
-  root.addEventListener('mouseover', sync)
-  root.addEventListener('mouseout', sync)
-  copyButton.addEventListener('mouseleave', sync)
-  window.addEventListener('scroll', () => sync(), { passive: true })
-  const resizeObserver = new ResizeObserver(() => sync())
+  const hide = (): void => {
+    copyButtonPre = null
+    btn.classList.remove('hovering')
+  }
+
+  const positionActive = (): void => {
+    if (copyButtonPre) positionCopyButton(copyButtonPre)
+  }
+
+  // Show the copy button when the pointer enters a fenced code block.
+  root.addEventListener('mouseover', (event) => {
+    if (inButton(event.target as Node)) return
+    const pre = (event.target as Element | null)?.closest?.('pre') as HTMLPreElement | null
+    if (pre && pre.querySelector('code')) showFor(pre)
+  })
+
+  // Keep the button visible until the pointer leaves BOTH the block and the
+  // button. The button is a sibling overlay sitting on top of the <pre>, so
+  // hovering it makes `pre:hover` false — we must not gate visibility on
+  // `:hover` or the button disappears mid-interaction (original bug).
+  root.addEventListener('mouseout', (event) => {
+    const from = (event.target as Element | null)?.closest?.('pre') as HTMLPreElement | null
+    if (!from || from !== copyButtonPre) return
+    const to = event.relatedTarget as Node | null
+    if (inButton(to)) return
+    if (to && from.contains(to)) return
+    hide()
+  })
+
+  btn.addEventListener('mouseout', (event) => {
+    const to = event.relatedTarget as Node | null
+    if (copyButtonPre && to && copyButtonPre.contains(to)) return
+    hide()
+  })
+
+  // #editor is the scroll container; reposition when the block moves.
+  root.addEventListener('scroll', positionActive, { passive: true })
+  window.addEventListener('scroll', positionActive, { passive: true })
+  const resizeObserver = new ResizeObserver(positionActive)
   resizeObserver.observe(root)
-  sync()
 }
 
 function toggleStrongMark(): void {

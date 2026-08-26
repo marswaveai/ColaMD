@@ -185,6 +185,7 @@ body {
 }
 
 #editor {
+  position: relative; /* anchor for the absolutely-positioned code copy button */
   height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 0 40px 40px;
