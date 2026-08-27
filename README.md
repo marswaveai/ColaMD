@@ -94,6 +94,10 @@ ColaMD will evolve alongside the agent ecosystem:
 
 [MIT](LICENSE) — Free forever.
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=marswaveai/ColaMD&type=Date)](https://star-history.com/#marswaveai/ColaMD&Date)
+
 ---
 
 Built by [marswave.ai](https://marswave.ai) for a simpler Markdown future.
