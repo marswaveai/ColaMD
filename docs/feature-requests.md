@@ -80,15 +80,55 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Deferred. First release scope is the main app only; Share Extension remains optional.
 
-### Recent files
+### Recent files and restore last session
 
-**Source:** [#28](https://github.com/marswaveai/ColaMD/issues/28)
+**Source:** [#28](https://github.com/marswaveai/ColaMD/issues/28), [#45](https://github.com/marswaveai/ColaMD/issues/45)
 
-**Need:** Reopen recently edited Markdown files from the existing File menu.
+**Need:** Reopen recently edited Markdown files from the existing File menu, and optionally reopen the last open document at launch so the app resumes where it closed.
 
 **Why it fits:** This shortens the return path to active documents without introducing tabs or a persistent workspace.
 
-**Constraints:** Store only a bounded list of canonical local paths. Missing files must be skipped or clearly unavailable. Do not add a permanent sidebar section or reopen documents automatically at launch.
+**Constraints:** Store only a bounded list of canonical local paths. Missing files must be skipped or clearly unavailable. Restore-at-launch must stay opt-in-feeling: reopening the last document automatically at launch needs evaluation against users who prefer starting fresh.
+
+### Visible save status hint
+
+**Source:** [#49](https://github.com/marswaveai/ColaMD/issues/49)
+
+**Need:** A subtle indicator showing that edits are auto-saved, so users do not assume content is lost because nothing visible confirms saving.
+
+**Why it fits:** Auto-save exists (1s after input stops) but is invisible; the lack of any feedback makes users distrust persistence.
+
+**Constraints:** Keep it quiet by design — a small status hint in the title bar area, not a modal or toast. Must never imply unsaved state incorrectly.
+
+### Heading anchor navigation
+
+**Source:** [#50](https://github.com/marswaveai/ColaMD/issues/50)
+
+**Need:** Clicking `[text](#heading-anchor)` links inside the editor should scroll to the matching heading; auto anchors from headings plus explicit `{#id}`-style anchors should both resolve.
+
+**Why it fits:** Long-document navigation is core reading/writing behavior and the outline panel only covers headings, not in-text links.
+
+**Constraints:** Must work without hijacking normal link behavior for external URLs. Chinese heading slug generation must match the anchor resolution rules. Apply consistently between visual mode and source mode.
+
+### Multiple windows
+
+**Source:** [#44](https://github.com/marswaveai/ColaMD/issues/44)
+
+**Need:** Open a second independent editor window via menu or shortcut, each with its own file, theme, and state.
+
+**Why it fits:** Side-by-side comparison of two documents is a real workflow and cannot be covered by tabs or the single-window file switch.
+
+**Constraints:** Large change. Every window keeps independent save queues, watchers, and unsaved-changes guards; same-file hot-reload conflicts need explicit strategy before implementation. No tabs.
+
+### Merge Windows menu bar into title bar
+
+**Source:** [#46](https://github.com/marswaveai/ColaMD/issues/46)
+
+**Need:** On Windows, put menu items on the same row as the document title and window controls (like VS Code), reclaiming one row of vertical space.
+
+**Why it fits:** Reduces top chrome on Windows where the separate native menu bar wastes height.
+
+**Constraints:** Keep native minimize/maximize/close behavior, keyboard access to menus, existing shortcuts, and window dragging. Only affects Windows; macOS already integrates menus natively.
 
 ### Footnote hover preview
 

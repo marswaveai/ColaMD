@@ -195,7 +195,9 @@ body {
   display: none;
   height: calc(100vh - 40px);
   width: 100%;
-  padding: 40px;
+  /* Center a column matching the visual editor (780px) so switching modes
+     keeps the text in the same place (#48). Falls back to 40px on narrow windows. */
+  padding: 40px max(40px, calc((100% - 780px) / 2));
   box-sizing: border-box;
   border: none;
   outline: none;
