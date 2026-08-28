@@ -56,7 +56,7 @@ These features are implemented on `main` and await release verification.
 
 **Source:** [#28](https://github.com/marswaveai/ColaMD/issues/28), [#45](https://github.com/marswaveai/ColaMD/issues/45)
 
-**Status:** File → Open Recent lists the last 10 documents (stale paths pruned). Opening or Save-As records the file in `~/.colamd/recent.json`. At launch the app reopens the most recent document by default; a checkbox in the same submenu turns restore off, and Clear Recent wipes the list.
+**Status:** File → Open Recent lists the last 10 documents (stale paths pruned). Opening or Save-As records the file in `~/.colamd/recent.json`. At launch the app reopens the most recent document by default; a checkbox in the same submenu turns restore off, and Clear Recent wipes the list. The startup restore policy is queued for redesign; the desired default is a blank launch unless the previous session ended unexpectedly or the system restarted.
 
 ### Configurable editor font
 
@@ -69,6 +69,16 @@ These features are implemented on `main` and await release verification.
 **Source:** [#44](https://github.com/marswaveai/ColaMD/issues/44)
 
 **Status:** File → New Window opens an independent editor window; opening a file that is already open focuses its window, and an empty window is reused before spawning a new one. Each window keeps its own file, save queue, watcher, and unsaved-changes guard.
+
+### Startup session restore policy
+
+**Source:** User feedback (2026-08-28)
+
+**Need:** Keep normal launches blank instead of automatically reopening the last document. Reopen documents only when there is a clear recovery context, such as an unexpected app exit or system restart.
+
+**Scope:** Separate the recent-files list from session recovery, define how intentional quit differs from a crash or restart, and keep recovery explicit and predictable. Remove or redesign the current default-on "restore last document" behavior.
+
+**Status:** Deferred. The current restore behavior remains in `v2.0.0`; do not change it in this release.
 
 ## Security Maintenance
 
