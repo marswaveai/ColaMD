@@ -4,7 +4,7 @@ import { autoUpdater } from 'electron-updater'
 import { join, basename, dirname, extname, isAbsolute, resolve, relative } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { appendFile, readFile, writeFile, readdir, copyFile, mkdir, stat } from 'fs/promises'
-import { watch, FSWatcher, existsSync, readdirSync } from 'fs'
+import { watch, FSWatcher, existsSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 
 const startupStartedAt = performance.now()
 const startupTraceEnabled = process.env.COLAMD_STARTUP_TRACE === '1'
@@ -79,6 +79,42 @@ function ensureThemesDir(): void {
   if (!existsSync(themesDir)) {
     mkdir(themesDir, { recursive: true }).catch(() => {})
   }
+}
+
+// --- Recent files + session restore (#28, #45) ---
+const recentStorePath = join(app.getPath('home'), '.colamd', 'recent.json')
+let recentStore: { recent: string[]; restoreOnLaunch: boolean } = { recent: [], restoreOnLaunch: true }
+try {
+  const parsed = JSON.parse(readFileSync(recentStorePath, 'utf-8'))
+  if (Array.isArray(parsed.recent)) {
+    recentStore.recent = parsed.recent.filter((p: unknown): p is string => typeof p === 'string')
+  }
+  if (typeof parsed.restoreOnLaunch === 'boolean') recentStore.restoreOnLaunch = parsed.restoreOnLaunch
+} catch { /* first run or unreadable store */ }
+
+function persistRecentStore(): void {
+  try {
+    mkdir(dirname(recentStorePath), { recursive: true }).catch(() => {})
+    writeFileSync(recentStorePath, JSON.stringify(recentStore, null, 2), 'utf-8')
+  } catch { /* best effort */ }
+}
+
+function pushRecentFile(filePath: string): void {
+  recentStore.recent = [filePath, ...recentStore.recent.filter((p) => p !== filePath)].slice(0, 10)
+  persistRecentStore()
+  buildMenu()
+}
+
+function clearRecentFiles(): void {
+  recentStore.recent = []
+  persistRecentStore()
+  buildMenu()
+}
+
+function setRestoreOnLaunch(enabled: boolean): void {
+  recentStore.restoreOnLaunch = enabled
+  persistRecentStore()
+  buildMenu()
 }
 
 async function scanCustomThemes(): Promise<string[]> {
@@ -435,6 +471,7 @@ function loadFileInWindow(win: BrowserWindow, filePath: string): void {
       state.browsePath = dirname(filePath)
       watchFile(win, state)
       updateTitle(win)
+      pushRecentFile(filePath)
       win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(data, filePath) })
     } catch {
       // Keep the current document when the selected file cannot be read.
@@ -501,6 +538,7 @@ function saveToPath(win: BrowserWindow, filePath: string, content: string, sourc
       state.browsePath = dirname(filePath)
       watchFile(win, state)
       updateTitle(win)
+      pushRecentFile(filePath)
       return true
     } catch {
       return false
@@ -1008,6 +1046,7 @@ function buildMenu(): void {
     ? {
         file: '文件', edit: '编辑', view: '视图', theme: '主题', help: '帮助',
         newFile: '新建', open: '打开...', save: '保存', saveAs: '另存为...',
+        recentOpen: '最近打开', restoreOnLaunch: '启动时打开上次文档', clearRecent: '清除最近记录',
         exportPDF: '导出 PDF...', exportHTML: '导出 HTML...', exportWord: '导出 Word...', exportImageDesktop: '导出图片（电脑阅读）...', exportImageMobile: '导出图片（手机阅读）...', find: '查找',
         setDefault: '设置为默认应用...',
         insertFormula: '插入公式', filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
@@ -1023,6 +1062,7 @@ function buildMenu(): void {
     : {
         file: 'File', edit: 'Edit', view: 'View', theme: 'Theme', help: 'Help',
         newFile: 'New', open: 'Open...', save: 'Save', saveAs: 'Save As...',
+        recentOpen: 'Open Recent', restoreOnLaunch: 'Reopen last document at launch', clearRecent: 'Clear Recent',
         exportPDF: 'Export PDF...', exportHTML: 'Export HTML...', exportWord: 'Export Word...', exportImageDesktop: 'Export Image (Desktop)...', exportImageMobile: 'Export Image (Mobile)...', find: 'Find',
         setDefault: 'Set as Default...',
         insertFormula: 'Insert Formula', filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
@@ -1098,6 +1138,26 @@ function buildMenu(): void {
           label: labels.open,
           accelerator: 'CmdOrCtrl+O',
           click: () => sendToFocused('menu-open')
+        },
+        {
+          label: labels.recentOpen,
+          submenu: [
+            ...recentStore.recent.filter((p) => existsSync(p)).slice(0, 10).map((p, index) => ({
+              label: `${index + 1}. ${basename(p)}`,
+              click: () => openFile(p)
+            })),
+            { type: 'separator' as const },
+            {
+              label: labels.restoreOnLaunch,
+              type: 'checkbox' as const,
+              checked: recentStore.restoreOnLaunch,
+              click: () => setRestoreOnLaunch(!recentStore.restoreOnLaunch)
+            },
+            {
+              label: labels.clearRecent,
+              click: () => clearRecentFiles()
+            }
+          ]
         },
         { type: 'separator' },
         {
@@ -1327,7 +1387,13 @@ app.whenReady().then(() => {
   } else {
     // Start with an empty editor and no directory scan. Bundled examples stay
     // available from Help and are loaded only when explicitly requested.
-    createWindow()
+    // With session restore on, reopen the most recent document instead (#45).
+    const lastDoc = recentStore.restoreOnLaunch ? recentStore.recent.find((p) => existsSync(p)) : undefined
+    if (lastDoc) {
+      createWindow(lastDoc)
+    } else {
+      createWindow()
+    }
   }
 
   setupAutoUpdater()

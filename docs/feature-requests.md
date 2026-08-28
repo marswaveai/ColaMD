@@ -52,6 +52,12 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Theme menu entries are now checkboxes showing the active theme, including imported custom themes. The renderer reports the applied theme to the main process, which rebuilds the menu on change.
 
+### Recent files and restore last session
+
+**Source:** [#28](https://github.com/marswaveai/ColaMD/issues/28), [#45](https://github.com/marswaveai/ColaMD/issues/45)
+
+**Status:** File → Open Recent lists the last 10 documents (stale paths pruned). Opening or Save-As records the file in `~/.colamd/recent.json`. At launch the app reopens the most recent document by default; a checkbox in the same submenu turns restore off, and Clear Recent wipes the list.
+
 ## Candidates
 
 ### Import local images
@@ -85,16 +91,6 @@ These features are implemented on `main` and await release verification.
 **Signing note:** Development signing is only for registered test devices. App Store distribution signing is a separate profile that Xcode can create and manage automatically from the company Apple Developer Program account. No manual profile editing is planned.
 
 **Status:** Deferred. First release scope is the main app only; Share Extension remains optional.
-
-### Recent files and restore last session
-
-**Source:** [#28](https://github.com/marswaveai/ColaMD/issues/28), [#45](https://github.com/marswaveai/ColaMD/issues/45)
-
-**Need:** Reopen recently edited Markdown files from the existing File menu, and optionally reopen the last open document at launch so the app resumes where it closed.
-
-**Why it fits:** This shortens the return path to active documents without introducing tabs or a persistent workspace.
-
-**Constraints:** Store only a bounded list of canonical local paths. Missing files must be skipped or clearly unavailable. Restore-at-launch must stay opt-in-feeling: reopening the last document automatically at launch needs evaluation against users who prefer starting fresh.
 
 ### Multiple windows
 
