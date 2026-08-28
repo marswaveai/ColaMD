@@ -94,9 +94,6 @@ ColaMD 将随 Agent 生态一起演进：
 
 [MIT](LICENSE) — 永久免费。
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=marswaveai/ColaMD&type=Date)](https://star-history.com/#marswaveai/ColaMD&Date)
 
 ---
 
