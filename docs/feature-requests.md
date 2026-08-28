@@ -34,7 +34,7 @@ These features are implemented on `main` and await release verification.
 
 **Sources:** [#26](https://github.com/marswaveai/ColaMD/issues/26)
 
-**Status:** Mermaid blocks render through a lazily created hidden iframe sandbox, isolated from the main bundle. Includes 400ms debounce, click-to-edit source mode, and a 15s timeout recovery. The earlier CPU-storm removal (v1.8.1) is addressed by ignoring view-internal DOM mutations in the node view.
+**Status:** Mermaid blocks render through a lazily created hidden iframe, isolated from the main bundle (same-process iframe isolation, not a hardened browser sandbox). Includes 400ms debounce, click-to-edit source mode, and a 15s timeout recovery. The earlier CPU-storm removal (v1.8.1) is addressed by ignoring view-internal DOM mutations in the node view.
 
 ### Visible save status hint
 

@@ -62,6 +62,8 @@ export interface ElectronAPI {
   listSystemFonts: () => Promise<string[]>
   onEditorFontChanged: (callback: (prefs: { family: string; size: number }) => void) => void
   onOpenFontSettings: (callback: () => void) => void
+  reportExternalConflict: () => Promise<void>
+  onExternalConflictResult: (callback: (result: { action: 'keep' | 'load'; content?: string }) => void) => void
   onUpdateAvailable: (callback: (version: string) => void) => void
   onUpdateDownloaded: (callback: (version: string) => void) => void
   downloadUpdate: () => Promise<void>
@@ -159,6 +161,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onOpenFontSettings: (callback: () => void) => {
     ipcRenderer.on('open-font-settings', () => callback())
+  },
+  reportExternalConflict: () => {
+    return ipcRenderer.invoke('report-external-conflict')
+  },
+  onExternalConflictResult: (callback: (result: { action: 'keep' | 'load'; content?: string }) => void) => {
+    ipcRenderer.on('external-conflict-result', (_event, result) => callback(result))
   },
   onUpdateAvailable: (callback: (version: string) => void) => {
     ipcRenderer.on('update-available', (_event, version) => callback(version))

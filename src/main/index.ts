@@ -144,6 +144,9 @@ interface WindowState {
   watcher: FSWatcher | null
   isInternalSave: boolean
   internalSaveCount: number
+  // Content of our last internal write/load. Delayed FSEvents echoes of our
+  // own writes are skipped when the disk still holds exactly this content.
+  lastInternalSaveContent: string | null
   debounceTimer: ReturnType<typeof setTimeout> | null
   siblingsTimer: ReturnType<typeof setTimeout> | null
   agentState: 'idle' | 'active' | 'cooldown'
@@ -176,7 +179,7 @@ const pendingDocumentStateRequests = new Map<string, PendingDocumentStateRequest
 function getState(win: BrowserWindow): WindowState {
   let state = windowStates.get(win.id)
   if (!state) {
-    state = { filePath: null, browsePath: null, watcher: null, isInternalSave: false, internalSaveCount: 0, debounceTimer: null, siblingsTimer: null, agentState: 'idle', lastExternalChange: 0, agentCooldownTimer: null, dirty: false, closePromise: null, rendererReady: false, writeQueue: Promise.resolve(), closeAuthorized: false }
+    state = { filePath: null, browsePath: null, watcher: null, isInternalSave: false, internalSaveCount: 0, lastInternalSaveContent: null, debounceTimer: null, siblingsTimer: null, agentState: 'idle', lastExternalChange: 0, agentCooldownTimer: null, dirty: false, closePromise: null, rendererReady: false, writeQueue: Promise.resolve(), closeAuthorized: false }
     windowStates.set(win.id, state)
   }
   return state
@@ -332,6 +335,11 @@ function watchFile(win: BrowserWindow, state: WindowState): void {
     state.debounceTimer = setTimeout(() => {
       readFile(filePath, 'utf-8')
         .then((data) => {
+          // Our own writes echo back through FSEvents long after the internal
+          // save window closes; reloading them would revert the editor and
+          // wipe anything typed since the save. Skip self-echoes.
+          if (state.lastInternalSaveContent !== null && data === state.lastInternalSaveContent) return
+          state.lastInternalSaveContent = null
           if (!win.isDestroyed()) win.webContents.send('file-changed', resolveImagePaths(data, filePath))
         })
         .catch(() => { /* file mid-replace; a follow-up event will re-trigger */ })
@@ -483,6 +491,7 @@ function loadFileInWindow(win: BrowserWindow, filePath: string): void {
       watchFile(win, state)
       updateTitle(win)
       pushRecentFile(filePath, true)
+      state.lastInternalSaveContent = data
       win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(data, filePath) })
     } catch {
       // Keep the current document when the selected file cannot be read.
@@ -543,7 +552,9 @@ function saveToPath(win: BrowserWindow, filePath: string, content: string, sourc
     try {
       state.internalSaveCount += 1
       state.isInternalSave = true
-      await writeFile(filePath, restoreImagePaths(content, filePath), 'utf-8')
+      const dataToWrite = restoreImagePaths(content, filePath)
+      await writeFile(filePath, dataToWrite, 'utf-8')
+      state.lastInternalSaveContent = dataToWrite
       if (win.isDestroyed() || state.filePath !== sourcePath) return false
       state.filePath = filePath
       state.browsePath = dirname(filePath)
@@ -597,6 +608,8 @@ ipcMain.handle('open-file', async (event) => {
       state.browsePath = dirname(filePath)
       watchFile(win, state)
       updateTitle(win)
+      pushRecentFile(filePath, true)
+      state.lastInternalSaveContent = content
       win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(content, filePath) })
       return { path: filePath, content }
     } catch {
@@ -621,6 +634,8 @@ ipcMain.handle('open-file-path', async (event, filePath: string) => {
       state.browsePath = dirname(filePath)
       watchFile(win, state)
       updateTitle(win)
+      pushRecentFile(filePath, true)
+      state.lastInternalSaveContent = content
       win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(content, filePath) })
       return { path: filePath, content }
     } catch {
@@ -697,7 +712,7 @@ ipcMain.handle('save-file-as', async (event, content: string, expectedPath?: str
     ]
   })
   if (result.canceled || !result.filePath) return null
-  const ok = await saveToPath(win, result.filePath, content, sourcePath)
+  const ok = await saveToPath(win, result.filePath, content, sourcePath, true)
   return ok ? result.filePath : null
 })
 
@@ -992,6 +1007,38 @@ ipcMain.handle('set-editor-font', (_event, prefs: unknown) => {
     if (win.webContents === _event.sender) continue
     if (!win.webContents.isDestroyed()) win.webContents.send('editor-font-changed', prefs)
   }
+})
+
+// External edit collided with unsaved local changes. Pause the editor's
+// autosave (renderer side) and ask the user which version survives.
+ipcMain.handle('report-external-conflict', async (event) => {
+  const win = getWinFromEvent(event)
+  if (!win) {
+    event.sender.send('external-conflict-result', { action: 'keep' })
+    return
+  }
+  const state = getState(win)
+  const filePath = state.filePath
+  const choice = await dialog.showMessageBox(win, {
+    type: 'warning',
+    buttons: ['保留我的版本（继续编辑）', '加载磁盘上的版本（丢弃未保存的输入）'],
+    defaultId: 0,
+    cancelId: 0,
+    message: '文件已被其他程序修改',
+    detail: '你正在编辑的内容尚未保存，同时磁盘上的文件已被外部修改。请选择保留哪个版本。'
+  })
+  if (win.isDestroyed()) return
+  if (choice.response === 1 && filePath) {
+    try {
+      const data = await readFile(filePath, 'utf-8')
+      state.lastInternalSaveContent = data
+      event.sender.send('external-conflict-result', { action: 'load', content: resolveImagePaths(data, filePath) })
+      return
+    } catch {
+      // fall through to keep-mine when the file cannot be read
+    }
+  }
+  event.sender.send('external-conflict-result', { action: 'keep' })
 })
 
 ipcMain.handle('report-theme', (_event, theme: unknown) => {
@@ -1584,7 +1631,7 @@ async function handleWindowClose(win: BrowserWindow, state: WindowState): Promis
     filePath = saveAs.filePath
   }
 
-  const saved = await saveToPath(win, filePath, snapshot.content, sourcePath)
+  const saved = await saveToPath(win, filePath, snapshot.content, sourcePath, true)
   if (!saved) {
     await dialog.showMessageBox(win, {
       type: 'error',

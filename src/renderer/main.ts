@@ -54,6 +54,9 @@ function reportDirty(): void {
 
 // --- Save status hint (#49) ---
 let saveStatusTimer: ReturnType<typeof setTimeout> | null = null
+// True while an external-modification conflict waits for the user's choice;
+// autosave stays paused so it cannot silently overwrite the external edit.
+let externalConflictPending = false
 
 function showSaveStatus(state: 'dirty' | 'saved'): void {
   const el = saveStatusEl()
@@ -122,6 +125,9 @@ function enqueueSave(operation: () => Promise<string | null>): Promise<string | 
 
 function scheduleAutosave(): void {
   if (!currentFilePath) return
+  // Paused while an external-modification conflict is unresolved: the user
+  // must decide between their version and the disk version first.
+  if (externalConflictPending) return
   if (autosaveTimer) clearTimeout(autosaveTimer)
   autosaveTimer = setTimeout(() => {
     autosaveTimer = null
@@ -538,17 +544,26 @@ async function init(): Promise<void> {
   })
   api.onFileChanged((content) => {
     // An external edit landing while the user still has unsaved changes must
-    // never clobber the editor — their in-flight characters come first.
-    // Skip and surface a hint; the next save simply overwrites the external
-    // write (same outcome as saving after noticing it manually).
+    // never clobber the editor, and plain autosave would silently overwrite
+    // the external edit. Pause autosave and let the user choose explicitly.
     if (dirty) {
-      showSaveStatus('dirty')
+      if (externalConflictPending) return
+      externalConflictPending = true
+      if (autosaveTimer) {
+        clearTimeout(autosaveTimer)
+        autosaveTimer = null
+      }
       const el = saveStatusEl()
       if (el) {
+        if (saveStatusTimer) {
+          clearTimeout(saveStatusTimer)
+          saveStatusTimer = null
+        }
         el.textContent = '文件已被外部修改'
         el.classList.remove('saved')
         el.classList.add('pending')
       }
+      window.electronAPI.reportExternalConflict?.()
       return
     }
     if (sourceModeActive) {
@@ -563,6 +578,19 @@ async function init(): Promise<void> {
   })
 
   api.onSetTheme((theme) => applyTheme(theme))
+  api.onExternalConflictResult((result) => {
+    if (result.action === 'load' && typeof result.content === 'string') {
+      applyContent(result.content)
+      resetDirty()
+      updateWordCount()
+      scheduleOutlineUpdate()
+    } else {
+      // Keep mine: resume autosave; the next save overwrites the external edit.
+      showSaveStatus('dirty')
+      if (dirty) scheduleAutosave()
+    }
+    externalConflictPending = false
+  })
   api.onOpenFontSettings(() => showFontSettingsModal())
   api.onEditorFontChanged((prefs) => applyEditorFont(prefs.family || prefs.size ? prefs : null))
   api.onSetCustomCSS((css) => {
