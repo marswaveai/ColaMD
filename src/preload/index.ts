@@ -59,6 +59,7 @@ export interface ElectronAPI {
   onToggleFilePanel: (callback: () => void) => void
   onToggleSourceMode: (callback: () => void) => void
   setEditorFont: (prefs: { family: string; size: number }) => Promise<void>
+  listSystemFonts: () => Promise<string[]>
   onEditorFontChanged: (callback: (prefs: { family: string; size: number }) => void) => void
   onOpenFontSettings: (callback: () => void) => void
   onUpdateAvailable: (callback: (version: string) => void) => void
@@ -149,6 +150,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   setEditorFont: (prefs: { family: string; size: number }) => {
     return ipcRenderer.invoke('set-editor-font', prefs)
+  },
+  listSystemFonts: () => {
+    return ipcRenderer.invoke('list-system-fonts')
   },
   onEditorFontChanged: (callback: (prefs: { family: string; size: number }) => void) => {
     ipcRenderer.on('editor-font-changed', (_event, prefs) => callback(prefs))

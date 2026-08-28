@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } from 'electron'
 import { execFile } from 'child_process'
 import { autoUpdater } from 'electron-updater'
 import { join, basename, dirname, extname, isAbsolute, resolve, relative } from 'path'
@@ -933,6 +933,43 @@ ipcMain.handle('load-theme-css', async (_event, fileName: string) => {
 // inside a menu-triggered path hangs the main process).
 let currentTheme = 'elegant'
 let themeMenuItems: Array<{ id: string; theme: string }> = []
+// Enumerate installed system font families for the font settings dialog (#7752855).
+// system_profiler takes seconds, so it is warmed at startup and cached here.
+let systemFontFamilies: string[] | null = null
+let systemFontFamiliesPromise: Promise<string[]> | null = null
+
+function loadSystemFontFamilies(): Promise<string[]> {
+  if (systemFontFamilies) return Promise.resolve(systemFontFamilies)
+  if (systemFontFamiliesPromise) return systemFontFamiliesPromise
+  systemFontFamiliesPromise = new Promise((resolve) => {
+    if (process.platform !== 'darwin') {
+      resolve([])
+      return
+    }
+    execFile('system_profiler', ['SPFontsDataType', '-json'], { maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+      try {
+        if (err) throw err
+        const data = JSON.parse(stdout).SPFontsDataType as Array<{ typefaces?: Array<{ family?: string }> }>
+        const families = new Set<string>()
+        for (const item of data) {
+          for (const tf of item.typefaces ?? []) {
+            const family = tf.family?.trim()
+            if (family && !family.startsWith('.')) families.add(family)
+          }
+        }
+        const collator = new Intl.Collator(app.getLocale().startsWith('zh') ? 'zh-Hans' : 'en', { sensitivity: 'base', numeric: true })
+        systemFontFamilies = [...families].sort(collator.compare)
+      } catch {
+        systemFontFamilies = []
+      }
+      resolve(systemFontFamilies)
+    })
+  })
+  return systemFontFamiliesPromise
+}
+
+ipcMain.handle('list-system-fonts', () => loadSystemFontFamilies())
+
 // Broadcast editor font changes from one window to the others (#7752855)
 ipcMain.handle('set-editor-font', (_event, prefs: unknown) => {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -1383,6 +1420,9 @@ app.whenReady().then(() => {
   markStartup('app-ready')
   ensureThemesDir()
   buildMenu()
+
+  // Warm the system font list in the background for the font settings dialog
+  void loadSystemFontFamilies()
 
   // Check command line args for file paths
   const args = process.argv.slice(app.isPackaged ? 1 : 2)

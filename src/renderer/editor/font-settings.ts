@@ -26,6 +26,10 @@ const COMMON_FONTS = [
   'SF Mono'
 ]
 
+function isZh(): boolean {
+  return navigator.language.toLowerCase().startsWith('zh')
+}
+
 export function loadSavedEditorFont(): EditorFontPrefs | null {
   try {
     const raw = localStorage.getItem(STORE_KEY)
@@ -76,6 +80,15 @@ export function clearEditorFont(): void {
 
 export function showFontSettingsModal(): void {
   const saved = loadSavedEditorFont()
+  const zh = isZh()
+  const t = {
+    title: zh ? '编辑器字体' : 'Editor Font',
+    font: zh ? '字体' : 'Font',
+    size: zh ? '字号' : 'Size',
+    reset: zh ? '恢复默认' : 'Reset',
+    cancel: zh ? '取消' : 'Cancel',
+    apply: zh ? '应用' : 'Apply'
+  }
 
   const overlay = document.createElement('div')
   overlay.className = 'math-modal-overlay'
@@ -84,7 +97,7 @@ export function showFontSettingsModal(): void {
   modal.className = 'math-modal font-modal'
 
   const header = document.createElement('h3')
-  header.textContent = 'Editor Font'
+  header.textContent = t.title
 
   const row = document.createElement('div')
   row.className = 'font-modal-row'
@@ -94,7 +107,7 @@ export function showFontSettingsModal(): void {
 
   const familyLabel = document.createElement('label')
   familyLabel.className = 'font-modal-label'
-  familyLabel.textContent = 'Font'
+  familyLabel.textContent = t.font
 
   const familyInput = document.createElement('input')
   familyInput.className = 'math-modal-input font-modal-input'
@@ -107,7 +120,7 @@ export function showFontSettingsModal(): void {
 
   const sizeLabel = document.createElement('label')
   sizeLabel.className = 'font-modal-label'
-  sizeLabel.textContent = 'Size'
+  sizeLabel.textContent = t.size
 
   const sizeInput = document.createElement('input')
   sizeInput.className = 'math-modal-input font-modal-size'
@@ -146,7 +159,7 @@ export function showFontSettingsModal(): void {
   footerRight.className = 'font-modal-footer-group'
 
   const resetBtn = document.createElement('button')
-  resetBtn.textContent = 'Reset'
+  resetBtn.textContent = t.reset
   resetBtn.className = 'math-modal-btn cancel'
   resetBtn.addEventListener('click', () => {
     clearEditorFont()
@@ -154,12 +167,12 @@ export function showFontSettingsModal(): void {
   })
 
   const cancelBtn = document.createElement('button')
-  cancelBtn.textContent = 'Cancel'
+  cancelBtn.textContent = t.cancel
   cancelBtn.className = 'math-modal-btn cancel'
   cancelBtn.addEventListener('click', () => overlay.remove())
 
   const applyBtn = document.createElement('button')
-  applyBtn.textContent = 'Apply'
+  applyBtn.textContent = t.apply
   applyBtn.className = 'math-modal-btn save'
   applyBtn.addEventListener('click', () => {
     const family = sanitizeFamily(familyInput.value)
@@ -179,6 +192,15 @@ export function showFontSettingsModal(): void {
     opt.value = f
     datalist.appendChild(opt)
   }
+  // Replace the starter list with the real installed fonts once available.
+  window.electronAPI.listSystemFonts?.().then((fonts) => {
+    if (!fonts.length || !datalist.isConnected) return
+    datalist.replaceChildren(...fonts.map((f) => {
+      const opt = document.createElement('option')
+      opt.value = f
+      return opt
+    }))
+  })
 
   familyCol.append(familyLabel, familyInput)
   sizeCol.append(sizeLabel, sizeInput)
