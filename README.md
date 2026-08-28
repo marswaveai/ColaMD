@@ -48,6 +48,11 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 - **Smart Line Breaks** — Single newlines render as line breaks, matching how people and AI tools write Markdown.
 - **Rich Text Copy** — Copy content with formatting preserved into WeChat, email, and other rich-text editors.
 - **Themes** — Twelve built-in themes for focused writing in light or dark environments.
+- **Recent Files & Session Restore** — Jump back to the last 10 documents from the File menu, and reopen where you left off at launch.
+- **Editor Font Settings** — Pick any installed system font and size for the editor; your choice wins over theme defaults.
+- **Multiple Windows** — Independent editor windows, each with its own save queue and close protection.
+- **Save Status Hint** — A quiet titlebar indicator shows unsaved/saved, then fades away.
+- **Heading Anchors** — Click intra-document anchor links to jump between headings, CJK included.
 - **Version Changelog** — The first launch after an update opens the built-in changelog once, so you can see what changed without repeated prompts.
 - **PDF, HTML & Word Export** — Turn your Markdown document into a themed PDF, self-contained HTML, or editable Word document.
 - **Reading-Page Image Export** — Share Markdown as desktop or mobile PNG pages; longer documents continue as numbered pages.
@@ -88,6 +93,7 @@ ColaMD will evolve alongside the agent ecosystem:
 - v1.8.0 — Portable image paths for Markdown and HTML images, plus editing fixes from community feedback
 - v1.8.1 — Refined first-launch experience and macOS icon; removed Mermaid rendering so code blocks remain native and editable
 - v1.9.0 — Word export, desktop and mobile reading-page image export, a document outline, themed PDF pages, and leaner startup loading
+- v2.0.0 — 1000-star release: Mermaid returns sandboxed with luminance-aware colors, recent files & session restore, editor font settings, heading anchors, multiple windows, and a save status hint
 - Future — More themes, editor integrations, and smoother Markdown workflows
 
 ## License
