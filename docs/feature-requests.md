@@ -64,6 +64,12 @@ These features are implemented on `main` and await release verification.
 
 **Status:** View → Editor Font… opens a settings dialog with font family and size plus a live preview. The preference is layered user > theme > defaults, overriding only the editor prose and source mode; code blocks and UI keep their theme fonts. Stored locally, synced across windows.
 
+### Multiple windows
+
+**Source:** [#44](https://github.com/marswaveai/ColaMD/issues/44)
+
+**Status:** File → New Window opens an independent editor window; opening a file that is already open focuses its window, and an empty window is reused before spawning a new one. Each window keeps its own file, save queue, watcher, and unsaved-changes guard.
+
 ## Candidates
 
 ### Import local images
@@ -87,16 +93,6 @@ These features are implemented on `main` and await release verification.
 **Signing note:** Development signing is only for registered test devices. App Store distribution signing is a separate profile that Xcode can create and manage automatically from the company Apple Developer Program account. No manual profile editing is planned.
 
 **Status:** Deferred. First release scope is the main app only; Share Extension remains optional.
-
-### Multiple windows
-
-**Source:** [#44](https://github.com/marswaveai/ColaMD/issues/44)
-
-**Need:** Open a second independent editor window via menu or shortcut, each with its own file, theme, and state.
-
-**Why it fits:** Side-by-side comparison of two documents is a real workflow and cannot be covered by tabs or the single-window file switch.
-
-**Constraints:** Large change. Every window keeps independent save queues, watchers, and unsaved-changes guards; same-file hot-reload conflicts need explicit strategy before implementation. No tabs.
 
 ### Merge Windows menu bar into title bar
 
