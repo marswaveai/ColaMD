@@ -100,14 +100,22 @@ function persistRecentStore(): void {
 }
 
 function pushRecentFile(filePath: string): void {
-  recentStore.recent = [filePath, ...recentStore.recent.filter((p) => p !== filePath)].slice(0, 10)
+  const recent = [filePath, ...recentStore.recent.filter((p) => p !== filePath)].slice(0, 10)
+  if (recent.length === recentStore.recent.length && recent.every((p, index) => p === recentStore.recent[index])) return
+  recentStore.recent = recent
   persistRecentStore()
-  buildMenu()
+  // NOTE: never rebuild the menu here. This runs on every autosave, and
+  // setApplicationMenu during typing cancels the macOS IME composition and
+  // loses in-flight characters. On macOS the File menu uses the native
+  // recent-documents role, which updates itself; other platforms pick up the
+  // new list the next time the menu is built.
+  if (process.platform === 'darwin') app.addRecentDocument(filePath)
 }
 
 function clearRecentFiles(): void {
   recentStore.recent = []
   persistRecentStore()
+  if (process.platform === 'darwin') app.clearRecentDocuments()
   buildMenu()
 }
 
@@ -1192,24 +1200,30 @@ function buildMenu(): void {
           click: () => sendToFocused('menu-open')
         },
         {
-          label: labels.recentOpen,
-          submenu: [
-            ...recentStore.recent.filter((p) => existsSync(p)).slice(0, 10).map((p, index) => ({
-              label: `${index + 1}. ${basename(p)}`,
-              click: () => openFile(p)
-            })),
-            { type: 'separator' as const },
-            {
-              label: labels.restoreOnLaunch,
-              type: 'checkbox' as const,
-              checked: recentStore.restoreOnLaunch,
-              click: () => setRestoreOnLaunch(!recentStore.restoreOnLaunch)
-            },
-            {
-              label: labels.clearRecent,
-              click: () => clearRecentFiles()
-            }
-          ]
+          ...(process.platform === 'darwin'
+            ? {
+                role: 'recentDocuments' as const,
+                submenu: [{ role: 'clearRecentDocuments' as const }]
+              }
+            : {
+                label: labels.recentOpen,
+                submenu: [
+                  ...recentStore.recent.filter((p) => existsSync(p)).slice(0, 10).map((p, index) => ({
+                    label: `${index + 1}. ${basename(p)}`,
+                    click: () => openFile(p)
+                  }))
+                ]
+              })
+        },
+        {
+          label: labels.restoreOnLaunch,
+          type: 'checkbox' as const,
+          checked: recentStore.restoreOnLaunch,
+          click: () => setRestoreOnLaunch(!recentStore.restoreOnLaunch)
+        },
+        {
+          label: labels.clearRecent,
+          click: () => clearRecentFiles()
         },
         { type: 'separator' },
         {
