@@ -890,6 +890,16 @@ ipcMain.handle('load-theme-css', async (_event, fileName: string) => {
   }
 })
 
+// Renderer reports the applied theme so the Theme menu can show a checkmark.
+let currentTheme = 'elegant'
+ipcMain.handle('report-theme', (_event, theme: unknown) => {
+  const next = typeof theme === 'string' && theme ? theme : 'elegant'
+  if (next !== currentTheme) {
+    currentTheme = next
+    buildMenu()
+  }
+})
+
 // Menu — targets the focused window
 
 function setAsDefaultApp(): void {
@@ -977,6 +987,8 @@ function buildMenu(): void {
     for (const file of files) {
       customThemeItems.push({
         label: file.replace(/\.css$/, ''),
+        checked: currentTheme === `custom:${file}`,
+        type: 'checkbox' as const,
         click: async () => {
           try {
             const css = await readFile(join(themesDir, file), 'utf-8')
@@ -1022,19 +1034,19 @@ function buildMenu(): void {
       }
 
   const themeSubmenu: Electron.MenuItemConstructorOptions[] = [
-    { label: labels.light, click: () => sendToFocused('set-theme', 'light') },
-    { label: labels.elegant, click: () => sendToFocused('set-theme', 'elegant') },
-    { label: labels.notion, click: () => sendToFocused('set-theme', 'notion') },
-    { label: labels.writer, click: () => sendToFocused('set-theme', 'writer') },
-    { label: labels.bear, click: () => sendToFocused('set-theme', 'bear') },
-    { label: labels.sepia, click: () => sendToFocused('set-theme', 'sepia') },
+    { label: labels.light, type: 'checkbox' as const, checked: currentTheme === 'light', click: () => sendToFocused('set-theme', 'light') },
+    { label: labels.elegant, type: 'checkbox' as const, checked: currentTheme === 'elegant', click: () => sendToFocused('set-theme', 'elegant') },
+    { label: labels.notion, type: 'checkbox' as const, checked: currentTheme === 'notion', click: () => sendToFocused('set-theme', 'notion') },
+    { label: labels.writer, type: 'checkbox' as const, checked: currentTheme === 'writer', click: () => sendToFocused('set-theme', 'writer') },
+    { label: labels.bear, type: 'checkbox' as const, checked: currentTheme === 'bear', click: () => sendToFocused('set-theme', 'bear') },
+    { label: labels.sepia, type: 'checkbox' as const, checked: currentTheme === 'sepia', click: () => sendToFocused('set-theme', 'sepia') },
     { type: 'separator' },
-    { label: labels.dark, click: () => sendToFocused('set-theme', 'dark') },
-    { label: labels.gruvbox, click: () => sendToFocused('set-theme', 'gruvbox') },
-    { label: labels.midnight, click: () => sendToFocused('set-theme', 'midnight') },
-    { label: labels.solarizedDark, click: () => sendToFocused('set-theme', 'solarized-dark') },
-    { label: labels.nord, click: () => sendToFocused('set-theme', 'nord') },
-    { label: labels.dracula, click: () => sendToFocused('set-theme', 'dracula') },
+    { label: labels.dark, type: 'checkbox' as const, checked: currentTheme === 'dark', click: () => sendToFocused('set-theme', 'dark') },
+    { label: labels.gruvbox, type: 'checkbox' as const, checked: currentTheme === 'gruvbox', click: () => sendToFocused('set-theme', 'gruvbox') },
+    { label: labels.midnight, type: 'checkbox' as const, checked: currentTheme === 'midnight', click: () => sendToFocused('set-theme', 'midnight') },
+    { label: labels.solarizedDark, type: 'checkbox' as const, checked: currentTheme === 'solarized-dark', click: () => sendToFocused('set-theme', 'solarized-dark') },
+    { label: labels.nord, type: 'checkbox' as const, checked: currentTheme === 'nord', click: () => sendToFocused('set-theme', 'nord') },
+    { label: labels.dracula, type: 'checkbox' as const, checked: currentTheme === 'dracula', click: () => sendToFocused('set-theme', 'dracula') },
   ]
   if (customThemeItems.length > 0) {
     themeSubmenu.push({ type: 'separator' }, ...customThemeItems)

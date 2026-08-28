@@ -36,6 +36,7 @@ export interface ElectronAPI {
   exportImage: (snapshot: ImageExportSnapshot, preset: ImageExportPreset) => Promise<boolean>
   loadCustomTheme: () => Promise<{ name: string; css: string } | null>
   loadThemeCSS: (fileName: string) => Promise<string | null>
+  reportTheme: (theme: string) => Promise<void>
   getPathForFile: (file: File) => string
   openExternal: (url: string) => void
   onFileChanged: (callback: (content: string) => void) => void
@@ -80,6 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportImage: (snapshot: ImageExportSnapshot, preset: ImageExportPreset) => ipcRenderer.invoke('export-image', snapshot, preset),
   loadCustomTheme: () => ipcRenderer.invoke('load-custom-theme'),
   loadThemeCSS: (fileName: string) => ipcRenderer.invoke('load-theme-css', fileName),
+  reportTheme: (theme: string) => ipcRenderer.invoke('report-theme', theme),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
   onFileChanged: (callback: (content: string) => void) => {

@@ -41,6 +41,9 @@ export function applyTheme(name: string, customCSS?: string): void {
 
   // Persist theme choice
   localStorage.setItem('colamd-theme', name)
+
+  // Tell the main process so the theme menu can show the selected state
+  window.electronAPI?.reportTheme?.(name)
 }
 
 export function loadSavedTheme(): string {
