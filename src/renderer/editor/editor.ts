@@ -19,6 +19,48 @@ import '@milkdown/kit/prose/view/style/prosemirror.css'
 
 export const searchPluginKey = new PluginKey('search-highlight')
 
+// --- Heading anchors for intra-document links (#50) ---
+
+// GitHub-style heading slug: lowercase, strip punctuation (CJK and letters
+// survive), spaces become hyphens. Repeated slugs get -1, -2 … suffixes.
+function slugifyHeading(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, '')
+    .replace(/\s+/g, '-')
+}
+
+function headingAnchorMap(root: HTMLElement): Map<string, Element> {
+  const map = new Map<string, Element>()
+  const seen = new Map<string, number>()
+  root.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
+    const base = slugifyHeading(heading.textContent || '')
+    if (!base) return
+    const count = seen.get(base) ?? 0
+    seen.set(base, count + 1)
+    const slug = count === 0 ? base : `${base}-${count}`
+    map.set(slug.toLowerCase(), heading)
+  })
+  return map
+}
+
+function findHeadingAnchor(root: HTMLElement, rawTarget: string): Element | null {
+  let decoded = rawTarget
+  try {
+    decoded = decodeURIComponent(rawTarget)
+  } catch {
+    // Malformed percent-encoding — fall back to the raw text.
+  }
+  const map = headingAnchorMap(root)
+  return (
+    map.get(decoded.toLowerCase()) ??
+    map.get(slugifyHeading(decoded).toLowerCase()) ??
+    null
+  )
+}
+
 const searchHighlight = $prose(() => {
   return new Plugin({
     key: searchPluginKey,
@@ -331,13 +373,27 @@ export async function createEditor(
     toggleStrongMark()
   })
 
-  // Cmd+click (Mac) / Ctrl+click (Win/Linux) to open links in browser
+  // Intra-document anchor links are pure navigation: handle them in the
+  // capture phase and keep ProseMirror out, so placing the caret (and its
+  // async scroll-to-selection) can't override the heading jump (#50).
+  root.addEventListener('click', (e) => {
+    const link = (e.target as HTMLElement).closest('a')
+    if (!link) return
+    const href = link.getAttribute('href')
+    if (!href || !href.startsWith('#')) return
+    e.preventDefault()
+    e.stopPropagation()
+    const heading = findHeadingAnchor(root, href.slice(1))
+    if (heading) heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, true)
+
+  // Cmd/Ctrl+click (Mac/Win/Linux) opens other links in the browser.
   root.addEventListener('click', (e) => {
     if (!(e.metaKey || e.ctrlKey)) return
     const link = (e.target as HTMLElement).closest('a')
     if (!link) return
     const href = link.getAttribute('href')
-    if (href) {
+    if (href && !href.startsWith('#')) {
       e.preventDefault()
       window.electronAPI.openExternal(href)
     }
