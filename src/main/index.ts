@@ -890,14 +890,16 @@ ipcMain.handle('load-theme-css', async (_event, fileName: string) => {
   }
 })
 
-// Renderer reports the applied theme so the Theme menu can show a checkmark.
+// Renderer reports the applied theme; the Theme menu checkmarks are updated
+// in place (never rebuild the menu from an IPC callback — setApplicationMenu
+// inside a menu-triggered path hangs the main process).
 let currentTheme = 'elegant'
+let themeMenuItems: Array<{ id: string; theme: string }> = []
 ipcMain.handle('report-theme', (_event, theme: unknown) => {
   const next = typeof theme === 'string' && theme ? theme : 'elegant'
-  if (next !== currentTheme) {
-    currentTheme = next
-    buildMenu()
-  }
+  if (next === currentTheme) return
+  currentTheme = next
+  updateThemeMenuChecks()
 })
 
 // Menu — targets the focused window
@@ -987,6 +989,7 @@ function buildMenu(): void {
     for (const file of files) {
       customThemeItems.push({
         label: file.replace(/\.css$/, ''),
+        id: `theme-custom-${file}`,
         checked: currentTheme === `custom:${file}`,
         type: 'checkbox' as const,
         click: async () => {
@@ -1033,20 +1036,34 @@ function buildMenu(): void {
         hide: 'Hide ColaMD', hideOthers: 'Hide Others', showAll: 'Show All', quit: 'Quit ColaMD',
       }
 
+  const themeIdByLabel = new Map<string, string>([
+    [labels.light, 'light'],
+    [labels.elegant, 'elegant'],
+    [labels.notion, 'notion'],
+    [labels.writer, 'writer'],
+    [labels.bear, 'bear'],
+    [labels.sepia, 'sepia'],
+    [labels.dark, 'dark'],
+    [labels.gruvbox, 'gruvbox'],
+    [labels.midnight, 'midnight'],
+    [labels.solarizedDark, 'solarized-dark'],
+    [labels.nord, 'nord'],
+    [labels.dracula, 'dracula'],
+  ])
   const themeSubmenu: Electron.MenuItemConstructorOptions[] = [
-    { label: labels.light, type: 'checkbox' as const, checked: currentTheme === 'light', click: () => sendToFocused('set-theme', 'light') },
-    { label: labels.elegant, type: 'checkbox' as const, checked: currentTheme === 'elegant', click: () => sendToFocused('set-theme', 'elegant') },
-    { label: labels.notion, type: 'checkbox' as const, checked: currentTheme === 'notion', click: () => sendToFocused('set-theme', 'notion') },
-    { label: labels.writer, type: 'checkbox' as const, checked: currentTheme === 'writer', click: () => sendToFocused('set-theme', 'writer') },
-    { label: labels.bear, type: 'checkbox' as const, checked: currentTheme === 'bear', click: () => sendToFocused('set-theme', 'bear') },
-    { label: labels.sepia, type: 'checkbox' as const, checked: currentTheme === 'sepia', click: () => sendToFocused('set-theme', 'sepia') },
+    { label: labels.light, id: 'theme-light', type: 'checkbox' as const, checked: currentTheme === 'light', click: () => sendToFocused('set-theme', 'light') },
+    { label: labels.elegant, id: 'theme-elegant', type: 'checkbox' as const, checked: currentTheme === 'elegant', click: () => sendToFocused('set-theme', 'elegant') },
+    { label: labels.notion, id: 'theme-notion', type: 'checkbox' as const, checked: currentTheme === 'notion', click: () => sendToFocused('set-theme', 'notion') },
+    { label: labels.writer, id: 'theme-writer', type: 'checkbox' as const, checked: currentTheme === 'writer', click: () => sendToFocused('set-theme', 'writer') },
+    { label: labels.bear, id: 'theme-bear', type: 'checkbox' as const, checked: currentTheme === 'bear', click: () => sendToFocused('set-theme', 'bear') },
+    { label: labels.sepia, id: 'theme-sepia', type: 'checkbox' as const, checked: currentTheme === 'sepia', click: () => sendToFocused('set-theme', 'sepia') },
     { type: 'separator' },
-    { label: labels.dark, type: 'checkbox' as const, checked: currentTheme === 'dark', click: () => sendToFocused('set-theme', 'dark') },
-    { label: labels.gruvbox, type: 'checkbox' as const, checked: currentTheme === 'gruvbox', click: () => sendToFocused('set-theme', 'gruvbox') },
-    { label: labels.midnight, type: 'checkbox' as const, checked: currentTheme === 'midnight', click: () => sendToFocused('set-theme', 'midnight') },
-    { label: labels.solarizedDark, type: 'checkbox' as const, checked: currentTheme === 'solarized-dark', click: () => sendToFocused('set-theme', 'solarized-dark') },
-    { label: labels.nord, type: 'checkbox' as const, checked: currentTheme === 'nord', click: () => sendToFocused('set-theme', 'nord') },
-    { label: labels.dracula, type: 'checkbox' as const, checked: currentTheme === 'dracula', click: () => sendToFocused('set-theme', 'dracula') },
+    { label: labels.dark, id: 'theme-dark', type: 'checkbox' as const, checked: currentTheme === 'dark', click: () => sendToFocused('set-theme', 'dark') },
+    { label: labels.gruvbox, id: 'theme-gruvbox', type: 'checkbox' as const, checked: currentTheme === 'gruvbox', click: () => sendToFocused('set-theme', 'gruvbox') },
+    { label: labels.midnight, id: 'theme-midnight', type: 'checkbox' as const, checked: currentTheme === 'midnight', click: () => sendToFocused('set-theme', 'midnight') },
+    { label: labels.solarizedDark, id: 'theme-solarized-dark', type: 'checkbox' as const, checked: currentTheme === 'solarized-dark', click: () => sendToFocused('set-theme', 'solarized-dark') },
+    { label: labels.nord, id: 'theme-nord', type: 'checkbox' as const, checked: currentTheme === 'nord', click: () => sendToFocused('set-theme', 'nord') },
+    { label: labels.dracula, id: 'theme-dracula', type: 'checkbox' as const, checked: currentTheme === 'dracula', click: () => sendToFocused('set-theme', 'dracula') },
   ]
   if (customThemeItems.length > 0) {
     themeSubmenu.push({ type: 'separator' }, ...customThemeItems)
@@ -1199,7 +1216,21 @@ function buildMenu(): void {
     }
   ]
 
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
+  themeMenuItems = [
+    ...themeSubmenu.filter((item): item is Electron.MenuItemConstructorOptions & { id: string } => typeof item.id === 'string')
+      .map((item) => ({ id: item.id, theme: themeIdByLabel.get(item.label ?? '') ?? (item.id.startsWith('theme-custom-') ? `custom:${String(item.label)}.css` : '') })),
+  ]
+}
+
+function updateThemeMenuChecks(): void {
+  const menu = Menu.getApplicationMenu()
+  if (!menu) return
+  for (const entry of themeMenuItems) {
+    const item = menu.getMenuItemById(entry.id)
+    if (item) item.checked = entry.theme === currentTheme
+  }
 }
 
 // --- Auto update (weak, non-blocking) ---
