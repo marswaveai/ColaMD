@@ -16,6 +16,7 @@ const fileToggleBtnEl = () => document.getElementById('file-toggle-btn') as HTML
 const sourceToggleBtnEl = () => document.getElementById('source-toggle-btn') as HTMLButtonElement
 const wordCountEl = () => document.getElementById('word-count') as HTMLElement
 const fileTitleEl = () => document.getElementById('file-title') as HTMLElement
+const saveStatusEl = () => document.getElementById('save-status') as HTMLElement
 const updateBannerEl = () => document.getElementById('update-banner') as HTMLElement
 const updateBannerTextEl = () => document.getElementById('update-banner-text') as HTMLElement
 const updateBannerActionEl = () => document.getElementById('update-banner-action') as HTMLButtonElement
@@ -50,10 +51,48 @@ function reportDirty(): void {
   window.electronAPI.reportDirty(dirty)
 }
 
+// --- Save status hint (#49) ---
+let saveStatusTimer: ReturnType<typeof setTimeout> | null = null
+
+function showSaveStatus(state: 'dirty' | 'saved'): void {
+  const el = saveStatusEl()
+  if (!el) return
+  if (saveStatusTimer) {
+    clearTimeout(saveStatusTimer)
+    saveStatusTimer = null
+  }
+  if (state === 'dirty') {
+    el.textContent = '未保存'
+    el.classList.remove('saved')
+    el.classList.add('pending')
+  } else {
+    el.textContent = '已保存'
+    el.classList.remove('pending')
+    el.classList.add('saved')
+    saveStatusTimer = setTimeout(() => {
+      el.classList.remove('saved')
+      el.textContent = ''
+    }, 2000)
+  }
+}
+
+function clearSaveStatus(): void {
+  if (saveStatusTimer) {
+    clearTimeout(saveStatusTimer)
+    saveStatusTimer = null
+  }
+  const el = saveStatusEl()
+  if (el) {
+    el.classList.remove('pending', 'saved')
+    el.textContent = ''
+  }
+}
+
 function setDirty(): void {
   documentRevision += 1
   dirty = true
   reportDirty()
+  showSaveStatus('dirty')
   scheduleAutosave()
 }
 
@@ -71,6 +110,7 @@ function clearDirty(): void {
 function resetDirty(): void {
   documentRevision += 1
   clearDirty()
+  clearSaveStatus()
 }
 
 function enqueueSave(operation: () => Promise<string | null>): Promise<string | null> {
@@ -97,6 +137,7 @@ async function runAutosave(): Promise<void> {
   if (path && revision === documentRevision && currentFilePath === filePath) {
     currentFilePath = path
     clearDirty()
+    showSaveStatus('saved')
   }
 }
 
@@ -114,6 +155,7 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
   refreshSiblings()
   if (revision === documentRevision) {
     clearDirty()
+    showSaveStatus('saved')
     return true
   }
   if (dirty) scheduleAutosave()
