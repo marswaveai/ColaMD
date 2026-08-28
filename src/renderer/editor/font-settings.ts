@@ -10,22 +10,6 @@ export interface EditorFontPrefs {
 
 const STORE_KEY = 'colamd-editor-font'
 
-const COMMON_FONTS = [
-  'system-ui',
-  'PingFang SC',
-  'Songti SC',
-  'Kaiti SC',
-  'Yuanti SC',
-  'LXGW WenKai',
-  'Noto Serif SC',
-  'Noto Sans SC',
-  'Helvetica Neue',
-  'Georgia',
-  'Menlo',
-  'Monaco',
-  'SF Mono'
-]
-
 function isZh(): boolean {
   return navigator.language.toLowerCase().startsWith('zh')
 }
@@ -113,7 +97,83 @@ export function showFontSettingsModal(): void {
   familyInput.className = 'math-modal-input font-modal-input'
   familyInput.placeholder = 'LXGW WenKai, Songti SC, Menlo…'
   familyInput.value = saved?.family ?? ''
-  familyInput.setAttribute('list', 'colamd-font-options')
+  familyInput.autocomplete = 'off'
+
+  // Scrollable custom font dropdown (datalist is unscrollable and can't be styled)
+  const fontList = document.createElement('div')
+  fontList.className = 'font-modal-list'
+  fontList.style.display = 'none'
+  let fontNames: string[] = []
+  void window.electronAPI.listSystemFonts?.().then((fonts) => {
+    if (!fonts.length) return
+    fontNames = fonts
+    if (document.activeElement === familyInput) renderFontList(familyInput.value)
+  })
+
+  let activeIndex = -1
+
+  function renderFontList(query: string): void {
+    const q = query.trim().toLowerCase()
+    const items = (q ? fontNames.filter((f) => f.toLowerCase().includes(q)) : fontNames).slice(0, 1000)
+    if (!items.length) {
+      fontList.style.display = 'none'
+      return
+    }
+    activeIndex = -1
+    fontList.replaceChildren(...items.map((name) => {
+      const item = document.createElement('div')
+      item.className = 'font-modal-list-item'
+      item.textContent = name
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        familyInput.value = name
+        fontList.style.display = 'none'
+        updatePreview()
+      })
+      return item
+    }))
+    fontList.style.display = 'block'
+  }
+
+  function hideFontList(): void {
+    fontList.style.display = 'none'
+    activeIndex = -1
+  }
+
+  let blurTimer: ReturnType<typeof setTimeout> | null = null
+  familyInput.addEventListener('focus', () => {
+    if (blurTimer) {
+      clearTimeout(blurTimer)
+      blurTimer = null
+    }
+    renderFontList(familyInput.value)
+  })
+  familyInput.addEventListener('input', () => {
+    renderFontList(familyInput.value)
+    updatePreview()
+  })
+  familyInput.addEventListener('blur', () => {
+    blurTimer = setTimeout(hideFontList, 150)
+  })
+  familyInput.addEventListener('keydown', (e) => {
+    const items = fontList.querySelectorAll('.font-modal-list-item')
+    if (fontList.style.display === 'none' || !items.length) return
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      activeIndex = e.key === 'ArrowDown'
+        ? Math.min(activeIndex + 1, items.length - 1)
+        : Math.max(activeIndex - 1, 0)
+      items.forEach((el, i) => el.classList.toggle('active', i === activeIndex))
+      items[activeIndex].scrollIntoView({ block: 'nearest' })
+    } else if (e.key === 'Enter' && activeIndex >= 0) {
+      e.preventDefault()
+      familyInput.value = (items[activeIndex] as HTMLElement).textContent ?? ''
+      hideFontList()
+      updatePreview()
+    } else if (e.key === 'Escape') {
+      hideFontList()
+    }
+  })
 
   const sizeCol = document.createElement('div')
   sizeCol.className = 'font-modal-col font-modal-col-size'
@@ -185,30 +245,13 @@ export function showFontSettingsModal(): void {
     overlay.remove()
   })
 
-  const datalist = document.createElement('datalist')
-  datalist.id = 'colamd-font-options'
-  for (const f of COMMON_FONTS) {
-    const opt = document.createElement('option')
-    opt.value = f
-    datalist.appendChild(opt)
-  }
-  // Replace the starter list with the real installed fonts once available.
-  window.electronAPI.listSystemFonts?.().then((fonts) => {
-    if (!fonts.length || !datalist.isConnected) return
-    datalist.replaceChildren(...fonts.map((f) => {
-      const opt = document.createElement('option')
-      opt.value = f
-      return opt
-    }))
-  })
-
-  familyCol.append(familyLabel, familyInput)
+  familyCol.append(familyLabel, familyInput, fontList)
   sizeCol.append(sizeLabel, sizeInput)
   row.append(familyCol, sizeCol)
   footerLeft.appendChild(resetBtn)
   footerRight.append(cancelBtn, applyBtn)
   footer.append(footerLeft, footerRight)
-  modal.append(header, row, preview, footer, datalist)
+  modal.append(header, row, preview, footer)
   overlay.appendChild(modal)
   document.body.appendChild(overlay)
 

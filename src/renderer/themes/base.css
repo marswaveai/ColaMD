@@ -1056,6 +1056,7 @@ body.has-custom-font #source-editor {
   gap: 6px;
   flex: 1;
   min-width: 0;
+  position: relative;
 }
 
 .font-modal-col-size {
@@ -1076,6 +1077,36 @@ body.has-custom-font #source-editor {
 
 .font-modal .font-modal-size {
   width: 100%;
+}
+
+.font-modal-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10001;
+  max-height: 208px;
+  overflow-y: auto;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+}
+
+.font-modal-list-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--text-color);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.font-modal-list-item:hover,
+.font-modal-list-item.active {
+  background: var(--code-bg);
 }
 
 .font-modal-preview {

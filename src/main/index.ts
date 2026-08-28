@@ -934,7 +934,9 @@ ipcMain.handle('load-theme-css', async (_event, fileName: string) => {
 let currentTheme = 'elegant'
 let themeMenuItems: Array<{ id: string; theme: string }> = []
 // Enumerate installed system font families for the font settings dialog (#7752855).
-// system_profiler takes seconds, so it is warmed at startup and cached here.
+// Uses NSFontManager via JXA — the same source as the macOS font panel — so the
+// list matches what the system and other apps (e.g. Typora) show, with
+// localized family names. Result is cached after the first load.
 let systemFontFamilies: string[] | null = null
 let systemFontFamiliesPromise: Promise<string[]> | null = null
 
@@ -946,19 +948,22 @@ function loadSystemFontFamilies(): Promise<string[]> {
       resolve([])
       return
     }
-    execFile('system_profiler', ['SPFontsDataType', '-json'], { maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    const script = [
+      'ObjC.import("AppKit")',
+      'const nm = $.NSFontManager.sharedFontManager',
+      'const out = []',
+      'const fams = nm.availableFontFamilies.js',
+      'for (const f of fams) { out.push(nm.localizedNameForFamilyFace($(f), $()).js) }',
+      'out.join("\\n")'
+    ].join('; ')
+    execFile('osascript', ['-l', 'JavaScript', '-e', script], { maxBuffer: 4 * 1024 * 1024, timeout: 15000 }, (err, stdout) => {
       try {
-        if (err) throw err
-        const data = JSON.parse(stdout).SPFontsDataType as Array<{ typefaces?: Array<{ family?: string }> }>
-        const families = new Set<string>()
-        for (const item of data) {
-          for (const tf of item.typefaces ?? []) {
-            const family = tf.family?.trim()
-            if (family && !family.startsWith('.')) families.add(family)
-          }
+        if (err) {
+          console.error('[font-list] osascript failed:', (err as NodeJS.ErrnoException).message)
+          throw err
         }
         const collator = new Intl.Collator(app.getLocale().startsWith('zh') ? 'zh-Hans' : 'en', { sensitivity: 'base', numeric: true })
-        systemFontFamilies = [...families].sort(collator.compare)
+        systemFontFamilies = [...new Set(stdout.split('\n').map((s) => s.trim()).filter(Boolean))].sort(collator.compare)
       } catch {
         systemFontFamilies = []
       }
