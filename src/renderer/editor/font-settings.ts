@@ -86,27 +86,28 @@ export function showFontSettingsModal(): void {
   const header = document.createElement('h3')
   header.textContent = 'Editor Font'
 
+  const row = document.createElement('div')
+  row.className = 'font-modal-row'
+
+  const familyCol = document.createElement('div')
+  familyCol.className = 'font-modal-col'
+
   const familyLabel = document.createElement('label')
   familyLabel.className = 'font-modal-label'
-  familyLabel.textContent = 'Font family'
+  familyLabel.textContent = 'Font'
 
   const familyInput = document.createElement('input')
   familyInput.className = 'math-modal-input font-modal-input'
-  familyInput.placeholder = 'e.g. LXGW WenKai, Songti SC, Menlo…'
+  familyInput.placeholder = 'LXGW WenKai, Songti SC, Menlo…'
   familyInput.value = saved?.family ?? ''
   familyInput.setAttribute('list', 'colamd-font-options')
 
-  const datalist = document.createElement('datalist')
-  datalist.id = 'colamd-font-options'
-  for (const f of COMMON_FONTS) {
-    const opt = document.createElement('option')
-    opt.value = f
-    datalist.appendChild(opt)
-  }
+  const sizeCol = document.createElement('div')
+  sizeCol.className = 'font-modal-col font-modal-col-size'
 
   const sizeLabel = document.createElement('label')
   sizeLabel.className = 'font-modal-label'
-  sizeLabel.textContent = 'Font size (px)'
+  sizeLabel.textContent = 'Size'
 
   const sizeInput = document.createElement('input')
   sizeInput.className = 'math-modal-input font-modal-size'
@@ -114,6 +115,7 @@ export function showFontSettingsModal(): void {
   sizeInput.min = '10'
   sizeInput.max = '40'
   sizeInput.step = '1'
+  sizeInput.placeholder = '16'
   sizeInput.value = saved?.size ? String(saved.size) : ''
 
   const preview = document.createElement('div')
@@ -126,16 +128,22 @@ export function showFontSettingsModal(): void {
     const family = sanitizeFamily(familyInput.value)
     const size = parseInt(sizeInput.value, 10)
     preview.style.fontFamily = family || 'inherit'
-    preview.style.fontSize = size ? `${Math.min(Math.max(size, 10), 40)}px` : 'inherit'
+    preview.style.fontSize = size ? `${Math.min(Math.max(size, 10), 40)}px` : '16px'
     previewText.textContent =
-      'The quick brown fox jumps over the lazy dog. 中文字体排版预览，Markdown 写作。0123456789'
+      'The quick brown fox jumps over the lazy dog. 中文字体排版预览 0123456789'
   }
   familyInput.addEventListener('input', updatePreview)
   sizeInput.addEventListener('input', updatePreview)
   updatePreview()
 
   const footer = document.createElement('div')
-  footer.className = 'math-modal-footer'
+  footer.className = 'math-modal-footer font-modal-footer'
+
+  const footerLeft = document.createElement('div')
+  footerLeft.className = 'font-modal-footer-group'
+
+  const footerRight = document.createElement('div')
+  footerRight.className = 'font-modal-footer-group'
 
   const resetBtn = document.createElement('button')
   resetBtn.textContent = 'Reset'
@@ -164,8 +172,21 @@ export function showFontSettingsModal(): void {
     overlay.remove()
   })
 
-  footer.append(resetBtn, cancelBtn, applyBtn)
-  modal.append(header, familyLabel, familyInput, datalist, sizeLabel, sizeInput, preview, footer)
+  const datalist = document.createElement('datalist')
+  datalist.id = 'colamd-font-options'
+  for (const f of COMMON_FONTS) {
+    const opt = document.createElement('option')
+    opt.value = f
+    datalist.appendChild(opt)
+  }
+
+  familyCol.append(familyLabel, familyInput)
+  sizeCol.append(sizeLabel, sizeInput)
+  row.append(familyCol, sizeCol)
+  footerLeft.appendChild(resetBtn)
+  footerRight.append(cancelBtn, applyBtn)
+  footer.append(footerLeft, footerRight)
+  modal.append(header, row, preview, footer, datalist)
   overlay.appendChild(modal)
   document.body.appendChild(overlay)
 

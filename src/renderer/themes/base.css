@@ -1036,25 +1036,65 @@ body.has-custom-font #source-editor {
 }
 
 /* Font settings modal (reuses math-modal shell) */
-.font-modal-label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 10px 0 4px;
+.font-modal {
+  width: 440px;
+  gap: 14px;
 }
 
-.font-modal-size {
-  width: 100px;
+.font-modal h3 {
+  font-size: 15px;
+}
+
+.font-modal-row {
+  display: flex;
+  gap: 10px;
+}
+
+.font-modal-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.font-modal-col-size {
+  flex: none;
+  width: 84px;
+}
+
+.font-modal-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.font-modal .math-modal-input {
+  font-family: inherit;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.font-modal .font-modal-size {
+  width: 100%;
 }
 
 .font-modal-preview {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-color);
-  line-height: 1.6;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--code-bg);
+  line-height: 1.7;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.font-modal-footer {
+  justify-content: space-between;
+  margin-top: 2px;
+}
+
+.font-modal-footer-group {
+  display: flex;
+  gap: 10px;
 }
