@@ -37,6 +37,19 @@ function currentTheme(): 'default' | 'dark' {
   return 'default'
 }
 
+// Diagrams render on the code-block background, which can disagree with the
+// app theme's overall brightness (elegant/bear are light themes with dark
+// code blocks). Pick the Mermaid palette by background luminance instead.
+function mermaidThemeForBackground(bg: string): 'default' | 'dark' {
+  const match = bg.trim().match(/^#([0-9a-f]{6})$/i)
+  if (!match) return currentTheme()
+  const value = parseInt(match[1], 16)
+  const r = (value >> 16) & 255
+  const g = (value >> 8) & 255
+  const b = value & 255
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5 ? 'dark' : 'default'
+}
+
 function rejectAllPending(reason: Error): void {
   for (const entry of pending.values()) {
     clearTimeout(entry.timer)
@@ -80,7 +93,7 @@ function dispatchRender(code: string, resolve: (svg: string) => void, reject: (r
   }, RENDER_TIMEOUT_MS)
   pending.set(id, { resolve, reject, timer })
   const bg = getComputedStyle(document.body).getPropertyValue('--code-block-bg').trim()
-  iframe?.contentWindow?.postMessage({ type: 'render', id, code, theme: currentTheme(), bg }, '*')
+  iframe?.contentWindow?.postMessage({ type: 'render', id, code, theme: mermaidThemeForBackground(bg), bg }, '*')
 }
 
 window.addEventListener('message', (event) => {

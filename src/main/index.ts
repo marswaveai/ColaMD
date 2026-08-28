@@ -1397,13 +1397,18 @@ async function handleWindowClose(win: BrowserWindow, state: WindowState): Promis
 
   const snapshot = await requestDocumentState(win)
   if (!snapshot) {
-    await dialog.showMessageBox(win, {
-      type: 'error',
-      buttons: ['好'],
-      message: '无法读取文档内容',
-      detail: '为保护未保存的内容，已取消关闭。'
+    // Renderer is unresponsive: it cannot report state or save anything, so
+    // blocking forever would trap the user. Offer an explicit escape instead.
+    if (!state.dirty) return true
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['仍要关闭', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      message: '无法与编辑窗口通信',
+      detail: '窗口可能已停止响应，无法确认是否有未保存的修改。强行关闭可能丢失内容。'
     })
-    return false
+    return response === 0
   }
   state.dirty = snapshot.dirty
   if (!snapshot.dirty) return true
