@@ -1021,3 +1021,40 @@ body.theme-elegant #editor .ProseMirror table td {
   background: rgba(127, 127, 127, 0.14);
   color: var(--text-color);
 }
+
+/* ===== Editor font preferences (#7752855) =====
+   User preference > theme > built-in defaults. Only the editor prose and the
+   source editor are overridden; code blocks keep the theme's code font. */
+body.has-custom-font #editor .ProseMirror {
+  font-family: var(--editor-font) !important;
+  font-size: var(--editor-font-size, 16px) !important;
+}
+
+body.has-custom-font #source-editor {
+  font-family: var(--editor-font) !important;
+  font-size: var(--editor-font-size, 14px) !important;
+}
+
+/* Font settings modal (reuses math-modal shell) */
+.font-modal-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 10px 0 4px;
+}
+
+.font-modal-size {
+  width: 100px;
+}
+
+.font-modal-preview {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  line-height: 1.6;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

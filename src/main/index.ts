@@ -933,6 +933,14 @@ ipcMain.handle('load-theme-css', async (_event, fileName: string) => {
 // inside a menu-triggered path hangs the main process).
 let currentTheme = 'elegant'
 let themeMenuItems: Array<{ id: string; theme: string }> = []
+// Broadcast editor font changes from one window to the others (#7752855)
+ipcMain.handle('set-editor-font', (_event, prefs: unknown) => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.webContents === _event.sender) continue
+    if (!win.webContents.isDestroyed()) win.webContents.send('editor-font-changed', prefs)
+  }
+})
+
 ipcMain.handle('report-theme', (_event, theme: unknown) => {
   const next = typeof theme === 'string' && theme ? theme : 'elegant'
   if (next === currentTheme) return
@@ -1057,6 +1065,7 @@ function buildMenu(): void {
         cheatsheet: 'Markdown 语法', about: '关于 ColaMD', checkForUpdates: '检查更新...', updateAvailable: '发现新版本', close: '关闭窗口',
         undo: '撤销', redo: '重做', cut: '剪切', copy: '复制', paste: '粘贴', selectAll: '全选',
         actualSize: '实际大小', zoomIn: '放大', zoomOut: '缩小', fullscreen: '切换全屏',
+        fontSettings: '编辑器字体…',
         hide: '隐藏 ColaMD', hideOthers: '隐藏其他应用', showAll: '显示全部', quit: '退出 ColaMD',
       }
     : {
@@ -1073,6 +1082,7 @@ function buildMenu(): void {
         cheatsheet: 'Markdown Syntax', about: 'About ColaMD', checkForUpdates: 'Check for Updates...', updateAvailable: 'Update Available', close: 'Close Window',
         undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
         actualSize: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
+        fontSettings: 'Editor Font…',
         hide: 'Hide ColaMD', hideOthers: 'Hide Others', showAll: 'Show All', quit: 'Quit ColaMD',
       }
 
@@ -1240,6 +1250,8 @@ function buildMenu(): void {
           accelerator: 'CmdOrCtrl+/',
           click: () => sendToFocused('toggle-source-mode')
         },
+        { type: 'separator' },
+        { label: labels.fontSettings, click: () => sendToFocused('open-font-settings') },
         { type: 'separator' },
         { label: labels.fullscreen, role: 'togglefullscreen' }
       ]

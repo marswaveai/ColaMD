@@ -58,6 +58,9 @@ export interface ElectronAPI {
   onSiblingsChanged: (callback: (files: SiblingFile[]) => void) => void
   onToggleFilePanel: (callback: () => void) => void
   onToggleSourceMode: (callback: () => void) => void
+  setEditorFont: (prefs: { family: string; size: number }) => Promise<void>
+  onEditorFontChanged: (callback: (prefs: { family: string; size: number }) => void) => void
+  onOpenFontSettings: (callback: () => void) => void
   onUpdateAvailable: (callback: (version: string) => void) => void
   onUpdateDownloaded: (callback: (version: string) => void) => void
   downloadUpdate: () => Promise<void>
@@ -143,6 +146,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onToggleSourceMode: (callback: () => void) => {
     ipcRenderer.on('toggle-source-mode', () => callback())
+  },
+  setEditorFont: (prefs: { family: string; size: number }) => {
+    return ipcRenderer.invoke('set-editor-font', prefs)
+  },
+  onEditorFontChanged: (callback: (prefs: { family: string; size: number }) => void) => {
+    ipcRenderer.on('editor-font-changed', (_event, prefs) => callback(prefs))
+  },
+  onOpenFontSettings: (callback: () => void) => {
+    ipcRenderer.on('open-font-settings', () => callback())
   },
   onUpdateAvailable: (callback: (version: string) => void) => {
     ipcRenderer.on('update-available', (_event, version) => callback(version))

@@ -1,6 +1,7 @@
 import { createEditor, getMarkdown, setMarkdown, showMathModal } from './editor/editor'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
+import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
 import './themes/base.css'
 import './themes/premium.css'
 
@@ -458,6 +459,7 @@ async function init(): Promise<void> {
   const api = window.electronAPI
   const savedTheme = loadSavedTheme()
   applyTheme(savedTheme)
+  applyEditorFont(loadSavedEditorFont())
 
   if (savedTheme.startsWith('custom:')) {
     const fileName = savedTheme.slice(7)
@@ -546,6 +548,8 @@ async function init(): Promise<void> {
   })
 
   api.onSetTheme((theme) => applyTheme(theme))
+  api.onOpenFontSettings(() => showFontSettingsModal())
+  api.onEditorFontChanged((prefs) => applyEditorFont(prefs.family || prefs.size ? prefs : null))
   api.onSetCustomCSS((css) => {
     const theme = loadSavedTheme()
     applyTheme(theme, css)

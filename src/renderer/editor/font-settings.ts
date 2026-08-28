@@ -1,0 +1,176 @@
+// Editor font preferences (#7752855).
+// Layering: user preference > theme > built-in defaults. Themes keep their own
+// font rules; a body class + CSS variables override only the editor prose and
+// the source editor, leaving code blocks and the rest of the UI untouched.
+
+export interface EditorFontPrefs {
+  family: string
+  size: number
+}
+
+const STORE_KEY = 'colamd-editor-font'
+
+const COMMON_FONTS = [
+  'system-ui',
+  'PingFang SC',
+  'Songti SC',
+  'Kaiti SC',
+  'Yuanti SC',
+  'LXGW WenKai',
+  'Noto Serif SC',
+  'Noto Sans SC',
+  'Helvetica Neue',
+  'Georgia',
+  'Menlo',
+  'Monaco',
+  'SF Mono'
+]
+
+export function loadSavedEditorFont(): EditorFontPrefs | null {
+  try {
+    const raw = localStorage.getItem(STORE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<EditorFontPrefs>
+    if (typeof parsed.family !== 'string' && typeof parsed.size !== 'number') return null
+    return {
+      family: typeof parsed.family === 'string' ? parsed.family : '',
+      size: typeof parsed.size === 'number' ? parsed.size : 0
+    }
+  } catch {
+    return null
+  }
+}
+
+function sanitizeFamily(family: string): string {
+  return family.replace(/[{};<>@]/g, '').trim()
+}
+
+export function applyEditorFont(prefs: EditorFontPrefs | null): void {
+  const body = document.body
+  if (!prefs || (!prefs.family && !prefs.size)) {
+    body.classList.remove('has-custom-font')
+    body.style.removeProperty('--editor-font')
+    body.style.removeProperty('--editor-font-size')
+    return
+  }
+  body.classList.add('has-custom-font')
+  const family = sanitizeFamily(prefs.family)
+  if (family) body.style.setProperty('--editor-font', family)
+  else body.style.removeProperty('--editor-font')
+  if (prefs.size >= 10 && prefs.size <= 40) body.style.setProperty('--editor-font-size', `${prefs.size}px`)
+  else body.style.removeProperty('--editor-font-size')
+}
+
+export function persistEditorFont(prefs: EditorFontPrefs): void {
+  localStorage.setItem(STORE_KEY, JSON.stringify(prefs))
+  applyEditorFont(prefs)
+  // Let other windows pick the change up too (they apply it idempotently).
+  window.electronAPI?.setEditorFont?.(prefs)
+}
+
+export function clearEditorFont(): void {
+  localStorage.removeItem(STORE_KEY)
+  applyEditorFont(null)
+  window.electronAPI?.setEditorFont?.({ family: '', size: 0 })
+}
+
+export function showFontSettingsModal(): void {
+  const saved = loadSavedEditorFont()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'math-modal-overlay'
+
+  const modal = document.createElement('div')
+  modal.className = 'math-modal font-modal'
+
+  const header = document.createElement('h3')
+  header.textContent = 'Editor Font'
+
+  const familyLabel = document.createElement('label')
+  familyLabel.className = 'font-modal-label'
+  familyLabel.textContent = 'Font family'
+
+  const familyInput = document.createElement('input')
+  familyInput.className = 'math-modal-input font-modal-input'
+  familyInput.placeholder = 'e.g. LXGW WenKai, Songti SC, Menlo…'
+  familyInput.value = saved?.family ?? ''
+  familyInput.setAttribute('list', 'colamd-font-options')
+
+  const datalist = document.createElement('datalist')
+  datalist.id = 'colamd-font-options'
+  for (const f of COMMON_FONTS) {
+    const opt = document.createElement('option')
+    opt.value = f
+    datalist.appendChild(opt)
+  }
+
+  const sizeLabel = document.createElement('label')
+  sizeLabel.className = 'font-modal-label'
+  sizeLabel.textContent = 'Font size (px)'
+
+  const sizeInput = document.createElement('input')
+  sizeInput.className = 'math-modal-input font-modal-size'
+  sizeInput.type = 'number'
+  sizeInput.min = '10'
+  sizeInput.max = '40'
+  sizeInput.step = '1'
+  sizeInput.value = saved?.size ? String(saved.size) : ''
+
+  const preview = document.createElement('div')
+  preview.className = 'font-modal-preview'
+
+  const previewText = document.createElement('span')
+  preview.appendChild(previewText)
+
+  const updatePreview = (): void => {
+    const family = sanitizeFamily(familyInput.value)
+    const size = parseInt(sizeInput.value, 10)
+    preview.style.fontFamily = family || 'inherit'
+    preview.style.fontSize = size ? `${Math.min(Math.max(size, 10), 40)}px` : 'inherit'
+    previewText.textContent =
+      'The quick brown fox jumps over the lazy dog. 中文字体排版预览，Markdown 写作。0123456789'
+  }
+  familyInput.addEventListener('input', updatePreview)
+  sizeInput.addEventListener('input', updatePreview)
+  updatePreview()
+
+  const footer = document.createElement('div')
+  footer.className = 'math-modal-footer'
+
+  const resetBtn = document.createElement('button')
+  resetBtn.textContent = 'Reset'
+  resetBtn.className = 'math-modal-btn cancel'
+  resetBtn.addEventListener('click', () => {
+    clearEditorFont()
+    overlay.remove()
+  })
+
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.className = 'math-modal-btn cancel'
+  cancelBtn.addEventListener('click', () => overlay.remove())
+
+  const applyBtn = document.createElement('button')
+  applyBtn.textContent = 'Apply'
+  applyBtn.className = 'math-modal-btn save'
+  applyBtn.addEventListener('click', () => {
+    const family = sanitizeFamily(familyInput.value)
+    const size = parseInt(sizeInput.value, 10)
+    if (!family && !size) {
+      clearEditorFont()
+    } else {
+      persistEditorFont({ family, size: Number.isFinite(size) ? size : 0 })
+    }
+    overlay.remove()
+  })
+
+  footer.append(resetBtn, cancelBtn, applyBtn)
+  modal.append(header, familyLabel, familyInput, datalist, sizeLabel, sizeInput, preview, footer)
+  overlay.appendChild(modal)
+  document.body.appendChild(overlay)
+
+  overlay.addEventListener('mousedown', (e) => {
+    if (e.target === overlay) overlay.remove()
+  })
+  familyInput.focus()
+}

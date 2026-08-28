@@ -58,6 +58,12 @@ These features are implemented on `main` and await release verification.
 
 **Status:** File → Open Recent lists the last 10 documents (stale paths pruned). Opening or Save-As records the file in `~/.colamd/recent.json`. At launch the app reopens the most recent document by default; a checkbox in the same submenu turns restore off, and Clear Recent wipes the list.
 
+### Configurable editor font
+
+**Source:** User request (#7752855)
+
+**Status:** View → Editor Font… opens a settings dialog with font family and size plus a live preview. The preference is layered user > theme > defaults, overriding only the editor prose and source mode; code blocks and UI keep their theme fonts. Stored locally, synced across windows.
+
 ## Candidates
 
 ### Import local images
@@ -67,16 +73,6 @@ These features are implemented on `main` and await release verification.
 **Need:** Insert local images into Markdown without compromising editor stability or document content.
 
 **Status:** Deferred. The initial menu, paste, and drag-and-drop implementation was removed before `v1.9.0` after it proved unreliable.
-
-### Configurable default font
-
-**Source:** User request
-
-**Need:** Let users choose the default font used by the Markdown editor.
-
-**Why it fits:** Typography is a core reading and writing preference, especially for users with different language, accessibility, or coding-font needs.
-
-**Scope:** Persist the selected font and apply it consistently to the visual editor, source mode, and reading/export views where appropriate. Keep the default behavior unchanged when no font is selected.
 
 **Status:** Planned for next week's development review.
 
