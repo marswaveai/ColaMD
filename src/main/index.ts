@@ -99,17 +99,20 @@ function persistRecentStore(): void {
   } catch { /* best effort */ }
 }
 
-function pushRecentFile(filePath: string): void {
+function pushRecentFile(filePath: string, rebuildMenu = false): void {
   const recent = [filePath, ...recentStore.recent.filter((p) => p !== filePath)].slice(0, 10)
   if (recent.length === recentStore.recent.length && recent.every((p, index) => p === recentStore.recent[index])) return
   recentStore.recent = recent
   persistRecentStore()
-  // NOTE: never rebuild the menu here. This runs on every autosave, and
-  // setApplicationMenu during typing cancels the macOS IME composition and
-  // loses in-flight characters. On macOS the File menu uses the native
-  // recent-documents role, which updates itself; other platforms pick up the
-  // new list the next time the menu is built.
-  if (process.platform === 'darwin') app.addRecentDocument(filePath)
+  // NEVER rebuild the menu from the autosave path: setApplicationMenu during
+  // typing cancels the macOS IME composition and loses in-flight characters.
+  // macOS keeps recents live via the native recentDocuments role instead;
+  // other platforms only refresh the menu on user-initiated saves/opens.
+  if (process.platform === 'darwin') {
+    app.addRecentDocument(filePath)
+  } else if (rebuildMenu) {
+    buildMenu()
+  }
 }
 
 function clearRecentFiles(): void {
@@ -479,7 +482,7 @@ function loadFileInWindow(win: BrowserWindow, filePath: string): void {
       state.browsePath = dirname(filePath)
       watchFile(win, state)
       updateTitle(win)
-      pushRecentFile(filePath)
+      pushRecentFile(filePath, true)
       win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(data, filePath) })
     } catch {
       // Keep the current document when the selected file cannot be read.
@@ -533,7 +536,7 @@ function findEmptyWindow(): BrowserWindow | null {
 // Serialize writes per window. A save is valid only while its source document
 // remains active; stale queued work must neither overwrite window state nor
 // make a later document appear saved.
-function saveToPath(win: BrowserWindow, filePath: string, content: string, sourcePath: string | null): Promise<boolean> {
+function saveToPath(win: BrowserWindow, filePath: string, content: string, sourcePath: string | null, rebuildMenu = false): Promise<boolean> {
   const state = getState(win)
   const operation = async (): Promise<boolean> => {
     if (win.isDestroyed() || state.filePath !== sourcePath) return false
@@ -546,7 +549,7 @@ function saveToPath(win: BrowserWindow, filePath: string, content: string, sourc
       state.browsePath = dirname(filePath)
       watchFile(win, state)
       updateTitle(win)
-      pushRecentFile(filePath)
+      pushRecentFile(filePath, rebuildMenu)
       return true
     } catch {
       return false
@@ -657,7 +660,7 @@ ipcMain.handle('open-sibling', async (event, filePath: string) => {
   return true
 })
 
-ipcMain.handle('save-file', async (event, content: string, expectedPath?: string) => {
+ipcMain.handle('save-file', async (event, content: string, expectedPath?: string, rebuildMenu?: boolean) => {
   const win = getWinFromEvent(event)
   if (!win) return null
   const state = getState(win)
@@ -677,7 +680,7 @@ ipcMain.handle('save-file', async (event, content: string, expectedPath?: string
     if (result.canceled || !result.filePath) return null
     filePath = result.filePath
   }
-  const ok = await saveToPath(win, filePath, content, sourcePath)
+  const ok = await saveToPath(win, filePath, content, sourcePath, rebuildMenu ?? false)
   return ok ? filePath : null
 })
 

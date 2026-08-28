@@ -134,7 +134,8 @@ async function runAutosave(): Promise<void> {
   const revision = documentRevision
   const filePath = currentFilePath
   const content = getContent()
-  const path = await enqueueSave(() => window.electronAPI.saveFile(content, filePath))
+  // rebuildMenu=false: autosave must never rebuild the app menu (macOS IME)
+  const path = await enqueueSave(() => window.electronAPI.saveFile(content, filePath, false))
   if (path && revision === documentRevision && currentFilePath === filePath) {
     currentFilePath = path
     clearDirty()
@@ -148,7 +149,7 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
   const expectedPath = currentFilePath
   const path = await enqueueSave(() => saveAs
     ? window.electronAPI.saveFileAs(content, expectedPath ?? undefined)
-    : window.electronAPI.saveFile(content, expectedPath ?? undefined))
+    : window.electronAPI.saveFile(content, expectedPath ?? undefined, true))
   if (!path || currentFilePath !== expectedPath) return false
 
   currentFilePath = path
@@ -536,6 +537,20 @@ async function init(): Promise<void> {
     scheduleOutlineUpdate()
   })
   api.onFileChanged((content) => {
+    // An external edit landing while the user still has unsaved changes must
+    // never clobber the editor — their in-flight characters come first.
+    // Skip and surface a hint; the next save simply overwrites the external
+    // write (same outcome as saving after noticing it manually).
+    if (dirty) {
+      showSaveStatus('dirty')
+      const el = saveStatusEl()
+      if (el) {
+        el.textContent = '文件已被外部修改'
+        el.classList.remove('saved')
+        el.classList.add('pending')
+      }
+      return
+    }
     if (sourceModeActive) {
       sourceEl().value = content
     } else {

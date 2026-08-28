@@ -28,7 +28,7 @@ export interface ElectronAPI {
   openFilePath: (path: string) => Promise<{ path: string; content: string } | null>
   listSiblings: () => Promise<SiblingFile[] | null>
   openSibling: (path: string) => Promise<boolean>
-  saveFile: (content: string, expectedPath?: string) => Promise<string | null>
+  saveFile: (content: string, expectedPath?: string, rebuildMenu?: boolean) => Promise<string | null>
   saveFileAs: (content: string, expectedPath?: string) => Promise<string | null>
   exportPDF: () => Promise<boolean>
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => Promise<boolean>
@@ -77,7 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFilePath: (path: string) => ipcRenderer.invoke('open-file-path', path),
   listSiblings: () => ipcRenderer.invoke('list-siblings'),
   openSibling: (path: string) => ipcRenderer.invoke('open-sibling', path),
-  saveFile: (content: string, expectedPath?: string) => ipcRenderer.invoke('save-file', content, expectedPath),
+  saveFile: (content: string, expectedPath?: string, rebuildMenu?: boolean) => ipcRenderer.invoke('save-file', content, expectedPath, rebuildMenu),
   saveFileAs: (content: string, expectedPath?: string) => ipcRenderer.invoke('save-file-as', content, expectedPath),
   exportPDF: () => ipcRenderer.invoke('export-pdf'),
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => ipcRenderer.invoke('export-html', snapshot),
