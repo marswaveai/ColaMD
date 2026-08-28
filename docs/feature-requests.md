@@ -70,6 +70,18 @@ These features are implemented on `main` and await release verification.
 
 **Status:** File → New Window opens an independent editor window; opening a file that is already open focuses its window, and an empty window is reused before spawning a new one. Each window keeps its own file, save queue, watcher, and unsaved-changes guard.
 
+## Security Maintenance
+
+### Upgrade Electron and transitive security dependencies
+
+**Source:** `npm audit` (2026-08-28)
+
+**Need:** Upgrade the Electron runtime and its transitive dependencies to versions that address the currently reported security advisories, without weakening the app's document and renderer security model.
+
+**Scope:** Evaluate the required Electron major-version upgrade, then verify macOS code signing and notarization, Windows and Linux builds, auto-update manifests, Mermaid rendering, file opening, IPC boundaries, and unsaved-document protection on every supported platform.
+
+**Status:** Planned. Do not mix this with issue #55, whose reported PostCSS version is outdated and is not present in the current dependency tree.
+
 ## Candidates
 
 ### Import local images
