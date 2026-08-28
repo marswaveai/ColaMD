@@ -66,17 +66,14 @@ function showSaveStatus(state: 'dirty' | 'saved'): void {
     saveStatusTimer = null
   }
   if (state === 'dirty') {
-    el.textContent = '未保存'
-    el.classList.remove('saved')
+    // Announce unsaved edits only; a successful save fades out silently.
+    el.textContent = '已编辑'
     el.classList.add('pending')
   } else {
-    el.textContent = '已保存'
     el.classList.remove('pending')
-    el.classList.add('saved')
     saveStatusTimer = setTimeout(() => {
-      el.classList.remove('saved')
       el.textContent = ''
-    }, 2000)
+    }, 600)
   }
 }
 
