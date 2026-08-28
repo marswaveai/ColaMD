@@ -36,6 +36,22 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Mermaid blocks render through a lazily created hidden iframe sandbox, isolated from the main bundle. Includes 400ms debounce, click-to-edit source mode, and a 15s timeout recovery. The earlier CPU-storm removal (v1.8.1) is addressed by ignoring view-internal DOM mutations in the node view.
 
+### Visible save status hint
+
+**Source:** [#49](https://github.com/marswaveai/ColaMD/issues/49)
+
+**Status:** A quiet `未保存 / 已保存` hint sits beside the filename in the title bar. `未保存` shows while edits are pending; `已保存` flashes after autosave or manual save, then fades out. No timestamps, no toasts.
+
+### Heading anchor navigation
+
+**Source:** [#50](https://github.com/marswaveai/ColaMD/issues/50)
+
+**Status:** Plain clicks on `[text](#anchor)` links jump to the matching heading with a smooth scroll. Slug resolution follows GitHub rules: lowercase, punctuation stripped, CJK preserved, URL-encoded targets decoded, case-insensitive fallback, and `-1`/`-2` suffixes for repeated headings. External links keep the ⌘/Ctrl+click-to-open behavior; anchor clicks never move the caret.
+
+### Theme menu selected state
+
+**Status:** Theme menu entries are now checkboxes showing the active theme, including imported custom themes. The renderer reports the applied theme to the main process, which rebuilds the menu on change.
+
 ## Candidates
 
 ### Import local images
@@ -80,26 +96,6 @@ These features are implemented on `main` and await release verification.
 
 **Constraints:** Store only a bounded list of canonical local paths. Missing files must be skipped or clearly unavailable. Restore-at-launch must stay opt-in-feeling: reopening the last document automatically at launch needs evaluation against users who prefer starting fresh.
 
-### Visible save status hint
-
-**Source:** [#49](https://github.com/marswaveai/ColaMD/issues/49)
-
-**Need:** A subtle indicator showing that edits are auto-saved, so users do not assume content is lost because nothing visible confirms saving.
-
-**Why it fits:** Auto-save exists (1s after input stops) but is invisible; the lack of any feedback makes users distrust persistence.
-
-**Constraints:** Keep it quiet by design — a small status hint in the title bar area, not a modal or toast. Must never imply unsaved state incorrectly.
-
-### Heading anchor navigation
-
-**Source:** [#50](https://github.com/marswaveai/ColaMD/issues/50)
-
-**Need:** Clicking `[text](#heading-anchor)` links inside the editor should scroll to the matching heading; auto anchors from headings plus explicit `{#id}`-style anchors should both resolve.
-
-**Why it fits:** Long-document navigation is core reading/writing behavior and the outline panel only covers headings, not in-text links.
-
-**Constraints:** Must work without hijacking normal link behavior for external URLs. Chinese heading slug generation must match the anchor resolution rules. Apply consistently between visual mode and source mode.
-
 ### Multiple windows
 
 **Source:** [#44](https://github.com/marswaveai/ColaMD/issues/44)
@@ -143,9 +139,3 @@ ColaMD deliberately avoids workspace and tab-system complexity. Existing file op
 ### Resizable file panel
 
 The file panel remains a fixed 220px lightweight list. Long names reveal themselves through hover scrolling, avoiding a persisted layout state and drag affordance.
-
-## Known Issues
-
-### Theme menu shows no selected state
-
-After picking a theme, the theme menu gives no indication of which theme is active, so users can't tell what is currently selected. Add a checkmark/disabled state on the active entry in the application menu. (Reported 2026-08-21.)
