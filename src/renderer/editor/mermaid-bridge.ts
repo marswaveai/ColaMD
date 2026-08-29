@@ -28,7 +28,9 @@ let iframe: HTMLIFrameElement | null = null
 let ready = false
 let nextRenderId = 0
 const pending = new Map<number, Pending>()
-const waitingForReady: Array<() => void> = []
+type QueuedRender = { run: () => void; reject: (reason: Error) => void }
+
+const waitingForReady: QueuedRender[] = []
 
 function currentTheme(): 'default' | 'dark' {
   for (const cls of DARK_THEME_CLASSES) {
@@ -66,7 +68,10 @@ function destroyIframe(): void {
     iframe = null
   }
   ready = false
-  waitingForReady.length = 0
+  // Queued requests never reached `pending`, so reject them here too or their
+  // promises never settle and the blocks hang on the source view forever.
+  const queued = waitingForReady.splice(0)
+  for (const entry of queued) entry.reject(new Error('渲染超时，已重置渲染器'))
 }
 
 function ensureIframe(): void {
@@ -104,7 +109,7 @@ window.addEventListener('message', (event) => {
   if (data.type === 'ready') {
     ready = true
     const queued = waitingForReady.splice(0)
-    for (const run of queued) run()
+    for (const entry of queued) entry.run()
     return
   }
 
@@ -124,7 +129,7 @@ export function renderMermaid(code: string): Promise<string> {
     if (ready) {
       dispatchRender(code, resolve, reject)
     } else {
-      waitingForReady.push(() => dispatchRender(code, resolve, reject))
+      waitingForReady.push({ run: () => dispatchRender(code, resolve, reject), reject })
     }
   })
 }

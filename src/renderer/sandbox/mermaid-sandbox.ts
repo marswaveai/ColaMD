@@ -20,6 +20,7 @@ const BASE_CONFIG = {
 mermaid.initialize({ ...BASE_CONFIG, theme: 'default' })
 
 window.addEventListener('message', (event) => {
+  if (event.source !== window.parent) return
   const data = event.data as RenderRequest | undefined
   if (!data || data.type !== 'render' || typeof data.id !== 'number' || typeof data.code !== 'string') return
 
