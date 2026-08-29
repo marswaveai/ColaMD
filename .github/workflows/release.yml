@@ -10,10 +10,10 @@ on:
         description: 'macOS architecture to build'
         type: choice
         options:
-          - both
+          - universal
           - x64
           - arm64
-        default: both
+        default: universal
 
 jobs:
   build:
@@ -47,10 +47,11 @@ jobs:
         run: |
           ARCH_ARGS=""
           if [ "${{ matrix.platform }}" = "mac" ]; then
-            case "${{ inputs.mac_arch || 'both' }}" in
+            case "${{ inputs.mac_arch || 'universal' }}" in
               x64) ARCH_ARGS="--x64" ;;
               arm64) ARCH_ARGS="--arm64" ;;
-              *) ARCH_ARGS="--x64 --arm64" ;;
+              universal) ARCH_ARGS="--universal" ;;
+              *) ARCH_ARGS="--universal" ;;
             esac
           fi
           npx electron-builder --${{ matrix.platform }} $ARCH_ARGS --publish never
