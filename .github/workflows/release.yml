@@ -43,6 +43,7 @@ jobs:
       - run: npm run build
 
       - name: Build distributables
+        shell: bash
         run: |
           ARCH_ARGS=""
           if [ "${{ matrix.platform }}" = "mac" ]; then
