@@ -5,6 +5,15 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      mac_arch:
+        description: 'macOS architecture to build'
+        type: choice
+        options:
+          - both
+          - x64
+          - arm64
+        default: both
 
 jobs:
   build:
@@ -34,7 +43,16 @@ jobs:
       - run: npm run build
 
       - name: Build distributables
-        run: npx electron-builder --${{ matrix.platform }} --publish never
+        run: |
+          ARCH_ARGS=""
+          if [ "${{ matrix.platform }}" = "mac" ]; then
+            case "${{ inputs.mac_arch || 'both' }}" in
+              x64) ARCH_ARGS="--x64" ;;
+              arm64) ARCH_ARGS="--arm64" ;;
+              *) ARCH_ARGS="--x64 --arm64" ;;
+            esac
+          fi
+          npx electron-builder --${{ matrix.platform }} $ARCH_ARGS --publish never
         env:
           CSC_LINK: ${{ matrix.sign && secrets.CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ matrix.sign && secrets.CSC_KEY_PASSWORD || '' }}
@@ -54,7 +72,10 @@ jobs:
             release/*.yml
           if-no-files-found: ignore
 
+  # Tag pushes publish a release; manual dispatches are build-only so the
+  # artifacts can be verified (or attached manually) before publishing.
   release:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     permissions:
