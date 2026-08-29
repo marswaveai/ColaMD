@@ -462,14 +462,16 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
 async function init(): Promise<void> {
   const api = window.electronAPI
   const savedTheme = loadSavedTheme()
-  applyTheme(savedTheme)
-  applyEditorFont(loadSavedEditorFont())
-
   if (savedTheme.startsWith('custom:')) {
-    const fileName = savedTheme.slice(7)
-    const css = await api.loadThemeCSS(fileName)
-    if (css) applyTheme(savedTheme, css)
+    // Load the CSS before applying so the window never paints a theme class
+    // without its stylesheet. A file that is gone falls back to 'elegant',
+    // which applyTheme() re-persists so later windows self-heal (issue #57).
+    const css = await api.loadThemeCSS(savedTheme.slice(7))
+    applyTheme(css ? savedTheme : 'elegant', css ?? undefined)
+  } else {
+    applyTheme(savedTheme)
   }
+  applyEditorFont(loadSavedEditorFont())
 
   const searchPanel = new SearchPanel()
   api.onSearch(() => searchPanel.show())

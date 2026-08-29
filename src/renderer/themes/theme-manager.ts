@@ -48,5 +48,9 @@ export function applyTheme(name: string, customCSS?: string): void {
 
 export function loadSavedTheme(): string {
   const saved = localStorage.getItem('colamd-theme')
-  return saved && themes[saved] ? saved : 'elegant'
+  if (!saved) return 'elegant'
+  // Custom themes are stored as "custom:<file>.css"; keeping the name lets
+  // freshly opened windows reload their CSS instead of falling back (issue #57)
+  if (themes[saved] || saved.startsWith('custom:')) return saved
+  return 'elegant'
 }
