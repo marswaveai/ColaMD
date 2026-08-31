@@ -94,6 +94,16 @@ These features are implemented on `main` and await release verification.
 
 ## Candidates
 
+### Markdown formatting shortcuts
+
+**Source:** [#58](https://github.com/marswaveai/ColaMD/issues/58)
+
+**Need:** Provide discoverable shortcuts for common Markdown formatting such as bold, italic, links, lists, strikethrough, and inline code.
+
+**Scope:** First evaluate the common commands and conflicts with editor/browser shortcuts. Keep shortcut customization and disable controls out of the initial implementation; they require a broader preferences/keybinding system.
+
+**Status:** Candidate.
+
 ### Import local images
 
 **Source:** [#21](https://github.com/marswaveai/ColaMD/issues/21)
