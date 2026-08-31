@@ -68,8 +68,8 @@ function destroyIframe(): void {
     iframe = null
   }
   ready = false
-  // Queued requests never reached `pending`, so reject them here too or their
-  // promises never settle and the blocks hang on the source view forever.
+  // Queued requests never entered `pending`; reject them too so code blocks
+  // leave source view instead of waiting forever after a sandbox reset.
   const queued = waitingForReady.splice(0)
   for (const entry of queued) entry.reject(new Error('渲染超时，已重置渲染器'))
 }

@@ -93,6 +93,7 @@ ColaMD will evolve alongside the agent ecosystem:
 - v1.8.0 — Portable image paths for Markdown and HTML images, plus editing fixes from community feedback
 - v1.8.1 — Refined first-launch experience and macOS icon; removed Mermaid rendering so code blocks remain native and editable
 - v1.9.0 — Word export, desktop and mobile reading-page image export, a document outline, themed PDF pages, and leaner startup loading
+- v2.0.1 — Universal macOS build for Apple silicon and Intel Macs, plus custom-theme restoration, Mermaid render recovery, and Windows updater fixes
 - v2.0.0 — 1000-star release: Mermaid diagrams return with luminance-aware colors, recent files & session restore, editor font settings, heading anchors, multiple windows, and a save status hint
 - Future — More themes, editor integrations, and smoother Markdown workflows
 
