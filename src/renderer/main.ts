@@ -462,14 +462,15 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
 async function init(): Promise<void> {
   const api = window.electronAPI
   const savedTheme = loadSavedTheme()
-  applyTheme(savedTheme)
-  applyEditorFont(loadSavedEditorFont())
-
   if (savedTheme.startsWith('custom:')) {
-    const fileName = savedTheme.slice(7)
-    const css = await api.loadThemeCSS(fileName)
-    if (css) applyTheme(savedTheme, css)
+    // Load before applying: a newly opened window must not briefly paint the
+    // custom class without its stylesheet. Missing files self-heal to elegant.
+    const css = await api.loadThemeCSS(savedTheme.slice(7))
+    applyTheme(css ? savedTheme : 'elegant', css ?? undefined)
+  } else {
+    applyTheme(savedTheme)
   }
+  applyEditorFont(loadSavedEditorFont())
 
   const searchPanel = new SearchPanel()
   api.onSearch(() => searchPanel.show())
@@ -626,15 +627,7 @@ async function init(): Promise<void> {
     } else {
       updateBannerActionEl().textContent = '下载中…'
       updateBannerActionEl().disabled = true
-      try {
-        await api.downloadUpdate()
-      } catch (error) {
-        // 'update-downloaded' drives the success path; on failure the button
-        // must come back so the user can retry and see why it failed (#56).
-        updateBannerTextEl().textContent = `下载失败：${error instanceof Error ? error.message : String(error)}`
-        updateBannerActionEl().textContent = '更新'
-        updateBannerActionEl().disabled = false
-      }
+      await api.downloadUpdate()
     }
   })
   document.getElementById('update-banner-dismiss')!.addEventListener('click', () => {
