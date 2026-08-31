@@ -626,7 +626,15 @@ async function init(): Promise<void> {
     } else {
       updateBannerActionEl().textContent = '下载中…'
       updateBannerActionEl().disabled = true
-      await api.downloadUpdate()
+      try {
+        await api.downloadUpdate()
+      } catch (error) {
+        // 'update-downloaded' drives the success path; on failure the button
+        // must come back so the user can retry and see why it failed (#56).
+        updateBannerTextEl().textContent = `下载失败：${error instanceof Error ? error.message : String(error)}`
+        updateBannerActionEl().textContent = '更新'
+        updateBannerActionEl().disabled = false
+      }
     }
   })
   document.getElementById('update-banner-dismiss')!.addEventListener('click', () => {
