@@ -4,6 +4,13 @@
 
 ---
 
+## v2.0.2 · Large-document & navigation fixes
+
+- **大文档打开优化**：超过 512 KiB 的 Markdown 直接以源码模式打开，避免 Windows 上完整可视化解析造成长时间卡顿
+- **文件切换位置**：从侧栏打开另一篇文档时，阅读位置回到文档开头
+- **可调侧栏**：拖动侧栏右边缘调整宽度，设置会保留
+- **阅读进度大纲**：大纲会高亮当前正在阅读的标题
+
 ## v2.0.1 · Universal macOS build
 
 - **macOS Universal**：提供同时支持 Apple silicon 与 Intel 的通用版 `.dmg` 和 `.zip`

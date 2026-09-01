@@ -243,7 +243,8 @@ body {
   top: 40px;
   left: 0;
   bottom: 0;
-  width: 220px;
+  width: var(--file-panel-width, 220px);
+  box-sizing: border-box;
   z-index: 5;
   display: flex;
   flex-direction: column;
@@ -251,6 +252,32 @@ body {
   border-right: 1px solid var(--border-color);
   overflow-y: auto;
   padding: 10px 8px;
+}
+
+#file-panel-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+}
+
+#file-panel-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+#file-panel-resizer:hover::after,
+#file-panel-resizer:active::after {
+  background: var(--link-color);
 }
 
 #file-panel[hidden] {
@@ -396,6 +423,11 @@ body {
   font-weight: 500;
 }
 
+#outline-list button.active {
+  background: rgba(241, 117, 45, 0.14);
+  color: #F1752D;
+}
+
 #file-list button.parent {
   color: var(--text-secondary, var(--text-muted));
   border-bottom: 1px solid var(--border-color);
@@ -409,7 +441,7 @@ body {
 
 body.show-file-panel #editor,
 body.show-file-panel #source-editor {
-  margin-left: 220px;
+  margin-left: var(--file-panel-width, 220px);
 }
 
 #editor.hidden {
