@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ColaMD · 临时文档切换条</title>
+  <style>
+    :root {
+      --bg: #fbfaf7;
+      --paper: #fffefa;
+      --ink: #2d2c2a;
+      --muted: #8b8881;
+      --line: #e7e2d9;
+      --soft: #f4f0e9;
+      --accent: #f1752d;
+      --sidebar: 232px;
+      --shadow: 0 18px 60px rgba(62, 53, 42, .12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 760px;
+      min-height: 100vh;
+      background: #e9e4db;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+      letter-spacing: .01em;
+    }
+    .window {
+      width: min(1160px, calc(100vw - 64px));
+      height: min(760px, calc(100vh - 64px));
+      min-height: 560px;
+      margin: 32px auto;
+      overflow: hidden;
+      border: 1px solid rgba(81, 72, 59, .12);
+      border-radius: 13px;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: 42px 31px 1fr;
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 254, 250, .72);
+      user-select: none;
+    }
+    .traffic { display: flex; gap: 7px; width: 160px; }
+    .traffic i { width: 11px; height: 11px; border-radius: 50%; background: #d8d4cd; }
+    .title {
+      min-width: 0;
+      flex: 1;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      font-weight: 520;
+    }
+    .edited { margin-left: 10px; color: var(--muted); font-size: 11px; font-weight: 400; }
+    .tools { width: 160px; display: flex; justify-content: flex-end; gap: 10px; color: var(--muted); font-size: 15px; }
+    .switcher {
+      display: flex;
+      align-items: stretch;
+      overflow: hidden;
+      padding: 0 10px;
+      background: var(--soft);
+      border-bottom: 1px solid var(--line);
+    }
+    .tab {
+      position: relative;
+      max-width: 204px;
+      min-width: 102px;
+      border: 0;
+      border-right: 1px solid rgba(122, 112, 98, .14);
+      padding: 0 28px 0 13px;
+      overflow: hidden;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: color .16s, background .16s;
+    }
+    .tab:hover { color: var(--ink); background: rgba(255,255,255,.38); }
+    .tab.active { color: var(--ink); background: var(--paper); font-weight: 520; box-shadow: inset 0 -1px 0 rgba(45, 44, 42, .12); }
+    .close {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      display: grid;
+      width: 15px;
+      height: 15px;
+      place-items: center;
+      border-radius: 4px;
+      opacity: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1;
+      transition: opacity .16s, background .16s, color .16s;
+    }
+    .tab:hover .close, .tab.active .close { opacity: .72; }
+    .close:hover { background: rgba(0,0,0,.08); color: var(--ink); }
+    .more { margin-left: auto; border: 0; background: transparent; color: var(--muted); padding: 0 11px; cursor: pointer; font-size: 16px; }
+    .workspace { display: grid; grid-template-columns: var(--sidebar) 1fr; min-height: 0; }
+    aside { overflow: auto; padding: 14px 8px; border-right: 1px solid var(--line); background: rgba(255,255,255,.28); }
+    .side-head { display: flex; justify-content: space-between; padding: 0 8px 9px; color: var(--muted); font-size: 11px; }
+    .side-head strong { color: var(--ink); font-weight: 560; }
+    .file { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-radius: 6px; padding: 7px 8px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; font: inherit; font-size: 12px; }
+    .file:hover { background: rgba(127,127,127,.09); }
+    .file.active { background: rgba(241,117,45,.12); color: #bd5220; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #cfc8bd; flex: none; }
+    .file.active .dot { background: var(--accent); }
+    main { overflow: auto; background: var(--bg); }
+    article { width: min(720px, calc(100% - 96px)); padding: 58px 0 90px; margin: 0 auto; font-family: ui-serif, Georgia, "Songti SC", serif; font-size: 16px; line-height: 1.9; }
+    h1 { margin: 0 0 28px; color: #272420; font-size: 34px; letter-spacing: -.03em; line-height: 1.28; }
+    h2 { margin: 42px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 18px; letter-spacing: -.01em; }
+    p { margin: 0 0 19px; color: #49453f; }
+    code { padding: 2px 5px; border-radius: 4px; background: #efeae1; color: #b34a1d; font-family: "SF Mono", Menlo, monospace; font-size: .84em; }
+    .hint { display: flex; gap: 8px; align-items: center; margin-top: 42px; padding: 14px 16px; border-left: 2px solid var(--accent); background: #f7f1e8; color: #746d63; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 12px; line-height: 1.6; }
+    .hint b { color: #6b3a23; }
+    @media (max-width: 820px) { body { min-width: 0; } .window { width: 100%; height: 100vh; margin: 0; border: 0; border-radius: 0; } .workspace { grid-template-columns: 0 1fr; } aside { display: none; } article { width: calc(100% - 46px); padding-top: 38px; } .traffic { width: 40px; } .traffic i:not(:first-child) { display: none; } .tools { width: 40px; } .tools span:not(:first-child) { display:none; } }
+  </style>
+</head>
+<body>
+  <section class="window">
+    <header class="titlebar">
+      <div class="traffic"><i></i><i></i><i></i></div>
+      <div class="title"><span id="window-title">project-notes.md</span><span class="edited" id="edited">已编辑</span></div>
+      <div class="tools"><span>⌘/</span><span>☷</span></div>
+    </header>
+    <nav class="switcher" id="switcher" aria-label="已打开文档">
+      <button class="more" title="更多已打开文档">···</button>
+    </nav>
+    <div class="workspace">
+      <aside>
+        <div class="side-head"><strong>文件</strong><span>同一目录</span></div>
+        <button class="file active" data-id="notes"><i class="dot"></i>project-notes.md</button>
+        <button class="file" data-id="todo"><i class="dot"></i>todo.md</button>
+        <button class="file" data-id="changelog"><i class="dot"></i>changelog.md</button>
+        <button class="file" data-id="ideas"><i class="dot"></i>ideas.md</button>
+      </aside>
+      <main id="reader"><article id="article"></article></main>
+    </div>
+  </section>
+  <script>
+    const docs = {
+      notes: { name: 'project-notes.md', edited: true, title: '项目笔记', body: ['这不是一个工作区。文件仍然就是文件，目录仍然就是目录。', '当你在同一个目录里来回写几篇文档时，切换条只帮你记住此刻打开的几篇。它不要求你管理一套 Tabs。'], headings: ['为什么存在', '保持轻量'] },
+      todo: { name: 'todo.md', edited: false, title: '本周待办', body: ['- 整理 Windows 大文档打开的真实耗时', '- 处理切换文件后的阅读位置', '- 做一次 Universal 包体积说明'], headings: ['今天', '等待验证'] },
+      changelog: { name: 'changelog.md', edited: false, title: 'v2.0.2', body: ['Windows 大文档会直接进入源码模式，避免完整富文本渲染把窗口拖住。', '侧栏可以调整宽度；大纲会指出此刻读到哪里。'], headings: ['大文档', '导航'] },
+      ideas: { name: 'ideas.md', edited: true, title: '临时切换条', body: ['最多三篇，只限同目录。关闭应用时不恢复，不形成 workspace。', '如果所有可替换的文档都有未保存修改，宁愿开新窗口，也不能悄悄移走内容。'], headings: ['边界', '取舍'] }
+    };
+    let open = ['notes', 'todo', 'changelog'];
+    let current = 'notes';
+    const switcher = document.getElementById('switcher');
+    const article = document.getElementById('article');
+    function render() {
+      switcher.querySelectorAll('.tab').forEach(x => x.remove());
+      open.forEach(id => {
+        const d = docs[id], button = document.createElement('button');
+        button.className = 'tab' + (id === current ? ' active' : '');
+        button.innerHTML = `<span>${d.name}</span><i class="close" title="关闭">×</i>`;
+        button.onclick = e => { if (!e.target.closest('.close')) select(id); };
+        button.querySelector('.close').onclick = e => { e.stopPropagation(); close(id); };
+        switcher.insertBefore(button, switcher.querySelector('.more'));
+      });
+      const d = docs[current];
+      document.getElementById('window-title').textContent = d.name;
+      document.getElementById('edited').style.visibility = d.edited ? 'visible' : 'hidden';
+      document.querySelectorAll('.file').forEach(x => x.classList.toggle('active', x.dataset.id === current));
+      article.innerHTML = `<h1>${d.title}</h1>${d.body.map(x => `<p>${x}</p>`).join('')}${d.headings.map(x => `<h2>${x}</h2><p>这里是 ${x} 的内容。切换文档时，阅读位置回到开头；再次切回时才会恢复这一篇的阅读位置。</p>`).join('')}<div class="hint"><b>临时切换</b><span>只保存当前窗口里的上下文；退出后不恢复成工作区。</span></div>`;
+      document.getElementById('reader').scrollTop = 0;
+    }
+    function select(id) { if (!open.includes(id)) { if (open.length === 3) open.shift(); open.push(id); } current = id; render(); }
+    function close(id) { if (open.length === 1) return; const index = open.indexOf(id); open.splice(index, 1); if (current === id) current = open[Math.max(0, index - 1)]; render(); }
+    document.querySelectorAll('.file').forEach(button => button.onclick = () => select(button.dataset.id));
+    render();
+  </script>
+</body>
+</html>

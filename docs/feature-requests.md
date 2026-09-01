@@ -94,6 +94,16 @@ These features are implemented on `main` and await release verification.
 
 ## Candidates
 
+### Temporary same-directory document switcher
+
+**Source:** User feedback and the temporary design prototype ([`temporary-document-switcher-prototype.html`](temporary-document-switcher-prototype.html), 2026-09-01)
+
+**Need:** Reduce repeated new-window creation when moving among a few Markdown files in the same directory, especially on Windows, without introducing a workspace model.
+
+**Scope:** A quiet switcher below the title bar, shown only with two or more documents. Start with up to three same-directory documents; preserve each document's content, dirty state, scroll position, and source/visual mode while switching. Do not support cross-directory tabs, drag sorting, pinned tabs, persistence, or startup session restoration. Current-item distinction should rely on subtle light/dark surfaces—not an accent-color underline. Refine the left-side visual spacing before implementation.
+
+**Status:** Candidate. Prototype accepted as direction; not scheduled.
+
 ### Markdown formatting shortcuts
 
 **Source:** [#58](https://github.com/marswaveai/ColaMD/issues/58)
@@ -154,8 +164,8 @@ Translation introduces provider, configuration, privacy, and product-scope compl
 
 ### Tabs and persistent multi-document workspace
 
-ColaMD deliberately avoids workspace and tab-system complexity. Existing file opening and lightweight directory browsing remain the primary document navigation model.
+ColaMD deliberately avoids workspace and tab-system complexity. Existing file opening and lightweight directory browsing remain the primary document navigation model. A narrowly scoped temporary same-directory switcher is tracked separately as a candidate.
 
 ### Resizable file panel
 
-The file panel remains a fixed 220px lightweight list. Long names reveal themselves through hover scrolling, avoiding a persisted layout state and drag affordance.
+Implemented in the `2.0.2` candidate: the file panel width can be adjusted and is retained locally.
