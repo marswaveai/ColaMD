@@ -253,6 +253,32 @@ body {
   padding: 10px 8px;
 }
 
+#file-panel-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+}
+
+#file-panel-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+#file-panel-resizer:hover::after,
+#file-panel-resizer:active::after {
+  background: var(--link-color);
+}
+
 #file-panel[hidden] {
   display: none;
 }
@@ -451,6 +477,11 @@ body.panel-resizing {
 #file-list button.directory {
   color: var(--text-color);
   font-weight: 500;
+}
+
+#outline-list button.active {
+  background: rgba(241, 117, 45, 0.14);
+  color: #F1752D;
 }
 
 #file-list button.parent {
