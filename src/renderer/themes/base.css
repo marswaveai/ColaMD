@@ -865,8 +865,10 @@ body.theme-elegant #editor .ProseMirror table td {
   right: 56px;
   z-index: 1000;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
+  width: 306px;
   padding: 6px 8px;
   background: var(--bg-color);
   border: 1px solid var(--border-color);
@@ -897,8 +899,40 @@ body.theme-elegant #editor .ProseMirror table td {
   text-align: center;
 }
 
+.search-replace-row {
+  display: flex;
+  width: 100%;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.search-replace-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-action {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 7px;
+  background: none;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-action:hover {
+  background: var(--code-bg);
+  color: var(--text-color);
+}
+
 .search-btn {
-  padding: 2px 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: none;
@@ -913,7 +947,7 @@ body.theme-elegant #editor .ProseMirror table td {
 }
 
 .search-close {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .search-match {

@@ -181,12 +181,8 @@ Translation introduces provider, configuration, privacy, and product-scope compl
 
 ### Tabs and persistent multi-document workspace
 
-<<<<<<< HEAD
-ColaMD deliberately avoids workspace and tab-system complexity. Existing file opening and lightweight directory browsing remain the primary document navigation model.
-=======
 ColaMD deliberately avoids workspace and tab-system complexity. Existing file opening and lightweight directory browsing remain the primary document navigation model. A narrowly scoped temporary same-directory switcher is tracked separately as a candidate.
 
 ### Resizable file panel
 
 Implemented in the `2.0.2` candidate: the file panel width can be adjusted and is retained locally.
->>>>>>> cf462d0 (docs: record temporary document switcher direction)
