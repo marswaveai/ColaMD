@@ -9,6 +9,7 @@ export interface SiblingFile {
 type FileOpenedData = { path: string | null; content: string }
 type ImageExportPreset = 'desktop' | 'mobile'
 type ImageExportSnapshot = { html: string; styles: string; bodyClass: string; background: string }
+export type PageLayoutMode = 'continuous' | 'two' | 'three'
 
 const pendingFileOpened: FileOpenedData[] = []
 let fileOpenedHandler: ((data: FileOpenedData) => void) | null = null
@@ -37,6 +38,7 @@ export interface ElectronAPI {
   loadCustomTheme: () => Promise<{ name: string; css: string } | null>
   loadThemeCSS: (fileName: string) => Promise<string | null>
   reportTheme: (theme: string) => Promise<void>
+  reportPageLayout: (mode: PageLayoutMode) => Promise<void>
   getPathForFile: (file: File) => string
   openExternal: (url: string) => void
   onFileChanged: (callback: (content: string) => void) => void
@@ -58,6 +60,7 @@ export interface ElectronAPI {
   onSiblingsChanged: (callback: (files: SiblingFile[]) => void) => void
   onToggleFilePanel: (callback: () => void) => void
   onToggleSourceMode: (callback: () => void) => void
+  onSetPageLayout: (callback: (mode: PageLayoutMode) => void) => void
   setEditorFont: (prefs: { family: string; size: number }) => Promise<void>
   listSystemFonts: () => Promise<string[]>
   onEditorFontChanged: (callback: (prefs: { family: string; size: number }) => void) => void
@@ -88,6 +91,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadCustomTheme: () => ipcRenderer.invoke('load-custom-theme'),
   loadThemeCSS: (fileName: string) => ipcRenderer.invoke('load-theme-css', fileName),
   reportTheme: (theme: string) => ipcRenderer.invoke('report-theme', theme),
+  reportPageLayout: (mode: PageLayoutMode) => ipcRenderer.invoke('report-page-layout', mode),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
   onFileChanged: (callback: (content: string) => void) => {
@@ -149,6 +153,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onToggleSourceMode: (callback: () => void) => {
     ipcRenderer.on('toggle-source-mode', () => callback())
+  },
+  onSetPageLayout: (callback: (mode: PageLayoutMode) => void) => {
+    ipcRenderer.on('set-page-layout', (_event, mode) => {
+      if (mode === 'continuous' || mode === 'two' || mode === 'three') callback(mode)
+    })
   },
   setEditorFont: (prefs: { family: string; size: number }) => {
     return ipcRenderer.invoke('set-editor-font', prefs)

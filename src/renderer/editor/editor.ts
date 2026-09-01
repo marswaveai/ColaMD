@@ -273,6 +273,9 @@ function setupCodeBlockCopy(root: HTMLElement): void {
 
   // #editor is the scroll container; reposition when the block moves.
   root.addEventListener('scroll', positionActive, { passive: true })
+  // Paged layouts scroll the centered Milkdown stage horizontally while the
+  // outer editor remains fixed, so follow that inner scroller as well.
+  root.querySelector(':scope > .milkdown')?.addEventListener('scroll', positionActive, { passive: true })
   window.addEventListener('scroll', positionActive, { passive: true })
   const resizeObserver = new ResizeObserver(positionActive)
   resizeObserver.observe(root)
