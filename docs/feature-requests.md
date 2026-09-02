@@ -94,6 +94,18 @@ These features are implemented on `main` and await release verification.
 
 ## Candidates
 
+### Portable build (zip distribution)
+
+**Sources:** [#63](https://github.com/marswaveai/ColaMD/issues/63)
+
+Publish the existing mac zip artifact as a visible download alongside the dmg so the app can run unzipped without installation. Windows portable packaging TBD.
+
+### Slow second-file open
+
+**Sources:** [#63](https://github.com/marswaveai/ColaMD/issues/63)
+
+Bug report: opening the first .md is fast, but opening another file while one is already open stalls for a long time. Profile the second-open path (window reuse, watcher re-establish, editor re-init) before optimizing; measure first per the Windows startup performance precedent.
+
 ### Markdown formatting shortcuts
 
 **Source:** [#58](https://github.com/marswaveai/ColaMD/issues/58)
@@ -155,7 +167,3 @@ Translation introduces provider, configuration, privacy, and product-scope compl
 ### Tabs and persistent multi-document workspace
 
 ColaMD deliberately avoids workspace and tab-system complexity. Existing file opening and lightweight directory browsing remain the primary document navigation model.
-
-### Resizable file panel
-
-The file panel remains a fixed 220px lightweight list. Long names reveal themselves through hover scrolling, avoiding a persisted layout state and drag affordance.
