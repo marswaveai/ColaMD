@@ -391,6 +391,35 @@ body {
   color: #F1752D;
 }
 
+/* Reading-position entry: derived from the theme link color so every theme
+   adapts without per-theme values (#64). */
+#outline-list button.active {
+  background: color-mix(in srgb, var(--link-color) 12%, transparent);
+  color: var(--link-color);
+}
+
+#outline-list button.active:hover {
+  background: color-mix(in srgb, var(--link-color) 18%, transparent);
+}
+
+/* Outline-jump feedback: the landing heading flashes once and fades (#64). */
+@keyframes heading-flash {
+  0% {
+    background-color: color-mix(in srgb, var(--link-color) 28%, transparent);
+  }
+  70% {
+    background-color: color-mix(in srgb, var(--link-color) 14%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.heading-flash {
+  animation: heading-flash 1.6s ease-out;
+  border-radius: 4px;
+}
+
 #file-list button.directory {
   color: var(--text-color);
   font-weight: 500;

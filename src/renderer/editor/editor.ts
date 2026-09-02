@@ -1,6 +1,6 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
-import { DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
+import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
 import remarkBreaks from 'remark-breaks'
 import { commonmark } from '@milkdown/kit/preset/commonmark'
 import { gfm } from '@milkdown/kit/preset/gfm'
@@ -59,6 +59,77 @@ function findHeadingAnchor(root: HTMLElement, rawTarget: string): Element | null
     map.get(slugifyHeading(decoded).toLowerCase()) ??
     null
   )
+}
+
+// --- Heading jump feedback (#64) ---
+
+// The landing band is a ProseMirror decoration, not a DOM class: external
+// class changes trip ProseMirror's unexpected-mutation redraw, which recreates
+// the heading node and destroys the band instantly.
+const headingFlashPluginKey = new PluginKey('heading-flash')
+
+const headingFlashPlugin = $prose(() => {
+  return new Plugin({
+    key: headingFlashPluginKey,
+    state: {
+      init() {
+        return DecorationSet.empty
+      },
+      apply(tr, old) {
+        const meta = tr.getMeta(headingFlashPluginKey)
+        if (meta !== undefined) return meta
+        return old.map(tr.mapping, tr.doc)
+      }
+    },
+    props: {
+      decorations(state) {
+        return headingFlashPluginKey.getState(state)
+      }
+    }
+  })
+})
+
+let headingFlashTimer: ReturnType<typeof setTimeout> | null = null
+
+// Jump feedback must be visible where the user is actually looking, so hold
+// the flash until the smooth scroll settles (`scrollend`) instead of playing
+// it while the target is still off-screen (#64).
+export function flashHeadingOnArrival(heading: Element): void {
+  const container = document.getElementById('editor')
+  if (!container) return
+  let done = false
+  const finish = () => {
+    if (done) return
+    done = true
+    container.removeEventListener('scrollend', finish)
+    applyHeadingFlash(heading)
+  }
+  container.addEventListener('scrollend', finish)
+  // Fallback when no scroll is needed and `scrollend` never fires.
+  setTimeout(finish, 900)
+}
+
+function applyHeadingFlash(heading: Element): void {
+  const view = getEditorView()
+  if (!view || !(heading instanceof HTMLElement) || !heading.isConnected) return
+  let from: number
+  let to: number
+  try {
+    const $pos = view.state.doc.resolve(view.posAtDOM(heading, 0))
+    from = $pos.before($pos.depth)
+    to = $pos.after($pos.depth)
+  } catch {
+    return
+  }
+  const decorations = DecorationSet.create(view.state.doc, [
+    Decoration.node(from, to, { class: 'heading-flash' })
+  ])
+  view.dispatch(view.state.tr.setMeta(headingFlashPluginKey, decorations))
+  if (headingFlashTimer) clearTimeout(headingFlashTimer)
+  headingFlashTimer = setTimeout(() => {
+    const current = getEditorView()
+    if (current) current.dispatch(current.state.tr.setMeta(headingFlashPluginKey, DecorationSet.empty))
+  }, 1600)
 }
 
 const searchHighlight = $prose(() => {
@@ -357,6 +428,7 @@ export async function createEditor(
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
     .use(searchHighlight)
+    .use(headingFlashPlugin)
 
   if (documentChangePlugin) editor = editor.use(documentChangePlugin)
   editorInstance = await editor.create()
@@ -384,7 +456,10 @@ export async function createEditor(
     e.preventDefault()
     e.stopPropagation()
     const heading = findHeadingAnchor(root, href.slice(1))
-    if (heading) heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (heading) {
+      heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      flashHeadingOnArrival(heading)
+    }
   }, true)
 
   // Cmd/Ctrl+click (Mac/Win/Linux) opens other links in the browser.
