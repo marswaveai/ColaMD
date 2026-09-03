@@ -91,22 +91,46 @@ const headingFlashPlugin = $prose(() => {
 
 let headingFlashTimer: ReturnType<typeof setTimeout> | null = null
 
+// Navigation jumps started inside the editor (anchor links) emit a phase
+// signal so the outline can hold its reading-position highlight for the
+// whole jump, exactly like outline-driven jumps (#64, review on #68).
+export type EditorJumpPhase = 'start' | 'settle'
+let editorJumpPhaseListener: ((phase: EditorJumpPhase) => void) | null = null
+export function onEditorJumpPhase(listener: ((phase: EditorJumpPhase) => void) | null): void {
+  editorJumpPhaseListener = listener
+}
+
 // Jump feedback must be visible where the user is actually looking, so hold
 // the flash until the smooth scroll settles (`scrollend`) instead of playing
 // it while the target is still off-screen (#64).
 export function flashHeadingOnArrival(heading: Element): void {
   const container = document.getElementById('editor')
   if (!container) return
+  editorJumpPhaseListener?.('start')
+  let startTop = container.scrollTop
   let done = false
+  let fallbackTimer: ReturnType<typeof setTimeout> | null = null
   const finish = () => {
     if (done) return
     done = true
     container.removeEventListener('scrollend', finish)
+    if (fallbackTimer) clearTimeout(fallbackTimer)
+    editorJumpPhaseListener?.('settle')
     applyHeadingFlash(heading)
   }
   container.addEventListener('scrollend', finish)
-  // Fallback when no scroll is needed and `scrollend` never fires.
-  setTimeout(finish, 900)
+  // Fallback for the no-scroll case where `scrollend` never fires. While the
+  // position keeps changing (long smooth scroll), re-arm instead of playing
+  // the band away from the landing spot (review on #68).
+  fallbackTimer = setTimeout(function armFallback() {
+    if (done) return
+    if (container.scrollTop !== startTop) {
+      startTop = container.scrollTop
+      fallbackTimer = setTimeout(armFallback, 400)
+      return
+    }
+    finish()
+  }, 1500)
 }
 
 function applyHeadingFlash(heading: Element): void {

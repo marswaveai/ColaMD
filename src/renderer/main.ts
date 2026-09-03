@@ -1,4 +1,4 @@
-import { createEditor, flashHeadingOnArrival, getMarkdown, setMarkdown, showMathModal } from './editor/editor'
+import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal } from './editor/editor'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
@@ -46,6 +46,7 @@ let outlineSyncQueued = false
 // is released on `scrollend` or by a fallback timer when no scroll happens.
 let outlineJumping = false
 let outlineJumpTimer: ReturnType<typeof setTimeout> | null = null
+let outlineJumpStartTop = 0
 
 function setMarkdownProgrammatically(content: string): void {
   applyingProgrammaticChange = true
@@ -299,7 +300,8 @@ function renderOutline(): void {
     const button = document.createElement('button')
     button.type = 'button'
     button.textContent = item.title
-    // The panel width is fixed; the tooltip keeps long headings readable (#64).
+    // Hover keeps truncated headings readable while the panel width stays
+    // as-is in this change (#64).
     button.title = item.title
     button.style.paddingLeft = `${8 + (item.level - 1) * 12}px`
     button.addEventListener('click', () => {
@@ -308,7 +310,8 @@ function renderOutline(): void {
       const current = (sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline())[index]
       if (!current) return
       if (current.element) {
-        beginOutlineJump()
+        // flashHeadingOnArrival signals the jump phase, which engages the
+        // outline jump lock for visual-mode jumps.
         current.element.scrollIntoView({ behavior: 'smooth', block: 'start' })
         flashHeadingOnArrival(current.element)
       } else if (current.line !== undefined) {
@@ -357,8 +360,22 @@ function revealOutlineEntry(button: HTMLButtonElement): void {
 function beginOutlineJump(): void {
   outlineJumping = true
   if (outlineJumpTimer) clearTimeout(outlineJumpTimer)
-  // Fallback for the no-scroll case where `scrollend` never fires.
-  outlineJumpTimer = setTimeout(endOutlineJump, 900)
+  outlineJumpStartTop = (sourceModeActive ? sourceEl() : editorEl()).scrollTop
+  // scrollend releases the lock earlier; this fallback exists for the
+  // no-scroll case. Re-arming while the position keeps changing keeps long
+  // smooth jumps locked for their whole duration (review on #68).
+  outlineJumpTimer = setTimeout(releaseOutlineJumpIfSettled, 1500)
+}
+
+function releaseOutlineJumpIfSettled(): void {
+  if (!outlineJumping) return
+  const top = (sourceModeActive ? sourceEl() : editorEl()).scrollTop
+  if (top !== outlineJumpStartTop) {
+    outlineJumpStartTop = top
+    outlineJumpTimer = setTimeout(releaseOutlineJumpIfSettled, 400)
+    return
+  }
+  endOutlineJump()
 }
 
 function endOutlineJump(): void {
@@ -399,12 +416,15 @@ function visualActiveIndex(): number {
   const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 2
   if (atBottom) return outlineItems.length - 1
   const threshold = container.getBoundingClientRect().top + Math.min(96, container.clientHeight * 0.2)
-  // Live query: cached heading references may be detached after a content
-  // re-set, and a detached node must never win the race (#64).
-  const headings = visualOutline()
+  // Cached references are refreshed by renderOutline; the loop stops at the
+  // first heading below the viewport top, so steady-state scrolling only
+  // touches the entries it activates. Fall back to a live query when a cached
+  // node went missing (content re-set mid-frame) — a detached node must never
+  // win the race (#64).
+  const items = outlineItems.some((item) => !item.element?.isConnected) ? visualOutline() : outlineItems
   let index = -1
-  for (let i = 0; i < headings.length; i += 1) {
-    const element = headings[i].element
+  for (let i = 0; i < items.length; i += 1) {
+    const element = items[i].element
     if (!element || !element.isConnected) continue
     if (element.getBoundingClientRect().top > threshold) break
     index = i
@@ -656,11 +676,15 @@ async function init(): Promise<void> {
   })
   // The outline tracks scrolling in both modes so it doubles as a progress
   // view (#64); rAF keeps the rect reads to one batch per frame. `scrollend`
-  // also releases the outline-jump lock as soon as a jump scroll settles.
+  // also releases the outline jump lock as soon as a jump scroll settles.
   editorEl().addEventListener('scroll', scheduleOutlineActiveSync, { passive: true })
   sourceEl().addEventListener('scroll', scheduleOutlineActiveSync, { passive: true })
   editorEl().addEventListener('scrollend', endOutlineJump)
   sourceEl().addEventListener('scrollend', endOutlineJump)
+  // Anchor-link jumps start inside the editor; the phase signal engages the
+  // same jump lock the outline clicks use, so the highlight cannot be stolen
+  // by sections passed along the way (review on #68).
+  onEditorJumpPhase((phase) => (phase === 'start' ? beginOutlineJump() : endOutlineJump()))
 
   api.onSiblingsChanged((files) => renderFileList(files))
   updatePanelVisibility()
