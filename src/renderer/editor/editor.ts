@@ -13,7 +13,7 @@ import { htmlView } from './html-view'
 import { mermaidView } from './mermaid-view'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
-import { isPagedLayoutActive, revealElementInPagedLayout } from './page-layout'
+import { isPagedLayoutActive, revealElementInPagedLayout, revealInPagedLayout } from './page-layout'
 
 import 'katex/dist/katex.min.css'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
@@ -51,7 +51,18 @@ const pagedColumnNavigation = $prose(() => new Plugin({
       const boundary = direction > 0 ? $head.after() : $head.before()
       const next = Selection.findFrom(view.state.doc.resolve(boundary), direction, true)
       if (!next) return false
-      view.dispatch(view.state.tr.setSelection(next).scrollIntoView())
+      // ProseMirror's generic scrollIntoView walks every scrollable ancestor.
+      // With CSS columns that can move the horizontal scroller by several
+      // spreads even though the adjacent column is already visible. Update the
+      // selection first, then let the paged controller reveal exactly the
+      // spread containing the new caret.
+      view.dispatch(view.state.tr.setSelection(next))
+      const nextCaret = view.coordsAtPos(view.state.selection.head, 1)
+      revealInPagedLayout({
+        left: nextCaret.left,
+        right: nextCaret.right,
+        width: Math.max(0, nextCaret.right - nextCaret.left),
+      })
       return true
     },
   },
