@@ -42,6 +42,10 @@ export function revealElementInPagedLayout(element: HTMLElement): boolean {
   return true
 }
 
+export function isPagedLayoutActive(): boolean {
+  return activeController?.isPaged() ?? false
+}
+
 export class PageLayoutController {
   private readonly pagedScroller: HTMLElement
   private mode: PageLayoutMode = 'continuous'

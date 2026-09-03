@@ -1,5 +1,5 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
-import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
+import { Plugin, PluginKey, Selection, TextSelection } from '@milkdown/kit/prose/state'
 import { DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
 import remarkBreaks from 'remark-breaks'
 import { commonmark } from '@milkdown/kit/preset/commonmark'
@@ -13,12 +13,49 @@ import { htmlView } from './html-view'
 import { mermaidView } from './mermaid-view'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
-import { revealElementInPagedLayout } from './page-layout'
+import { isPagedLayoutActive, revealElementInPagedLayout } from './page-layout'
 
 import 'katex/dist/katex.min.css'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
 
 export const searchPluginKey = new PluginKey('search-highlight')
+
+// Chromium can leave a collapsed caret stuck at a textblock boundary when
+// that boundary is also the top or bottom of a CSS column. Handle only that
+// narrow case; all ordinary arrow-key movement remains native.
+const pagedColumnNavigation = $prose(() => new Plugin({
+  props: {
+    handleKeyDown(view, event) {
+      if (!isPagedLayoutActive() || event.isComposing || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return false
+
+      const { selection } = view.state
+      if (!(selection instanceof TextSelection) || !selection.empty) return false
+      const direction = event.key === 'ArrowDown' ? 1 : -1
+      const { $head } = selection
+      const atTextblockEdge = direction > 0
+        ? $head.parentOffset === $head.parent.content.size
+        : $head.parentOffset === 0
+      if (!atTextblockEdge || $head.depth === 0) return false
+
+      const scroller = view.dom.closest('#editor')?.querySelector<HTMLElement>(':scope > .milkdown')
+      if (!scroller) return false
+      const viewport = scroller.getBoundingClientRect()
+      const caret = view.coordsAtPos($head.pos)
+      const lineHeight = Number.parseFloat(getComputedStyle(view.dom).lineHeight) || 28
+      const atColumnEdge = direction > 0
+        ? viewport.bottom - caret.bottom <= lineHeight * 1.5
+        : caret.top - viewport.top <= lineHeight * 1.5
+      if (!atColumnEdge) return false
+
+      const boundary = direction > 0 ? $head.after() : $head.before()
+      const next = Selection.findFrom(view.state.doc.resolve(boundary), direction, true)
+      if (!next) return false
+      view.dispatch(view.state.tr.setSelection(next).scrollIntoView())
+      return true
+    },
+  },
+}))
 
 // --- Heading anchors for intra-document links (#50) ---
 
@@ -358,6 +395,7 @@ export async function createEditor(
     .use(clipboard)
     .use(htmlView)
     .use(mermaidView)
+    .use(pagedColumnNavigation)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
     .use(searchHighlight)
