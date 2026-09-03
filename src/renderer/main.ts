@@ -34,6 +34,23 @@ let manualHidden = localStorage.getItem('file-panel-hidden') !== '0'
 let panelMode: 'files' | 'outline' = 'files'
 let outlineUpdateQueued = false
 
+// Resizable file panel: default 220px, drag range 180-420px, persisted
+// locally (design.md). Applied at module load so the first paint already
+// uses the saved width.
+const FILE_PANEL_MIN_WIDTH = 180
+const FILE_PANEL_MAX_WIDTH = 420
+const FILE_PANEL_DEFAULT_WIDTH = 220
+
+function clampFilePanelWidth(width: number): number {
+  return Math.min(FILE_PANEL_MAX_WIDTH, Math.max(FILE_PANEL_MIN_WIDTH, Math.round(width)))
+}
+
+function applyFilePanelWidth(width: number): void {
+  document.documentElement.style.setProperty('--file-panel-width', `${width}px`)
+}
+
+applyFilePanelWidth(clampFilePanelWidth(Number.parseInt(localStorage.getItem('file-panel-width') ?? '', 10) || FILE_PANEL_DEFAULT_WIDTH))
+
 function setMarkdownProgrammatically(content: string): void {
   applyingProgrammaticChange = true
   try {
@@ -314,6 +331,36 @@ function togglePanel(): void {
   updatePanelVisibility()
 }
 
+// Drag the panel's right edge to resize it; the width clamps to the
+// design.md range and persists on release. Pointer capture keeps the drag
+// alive over iframes and selected text.
+function initPanelResize(): void {
+  const resizer = document.getElementById('panel-resizer') as HTMLDivElement | null
+  if (!resizer) return
+  resizer.addEventListener('pointerdown', (event) => {
+    event.preventDefault()
+    resizer.setPointerCapture(event.pointerId)
+    resizer.classList.add('dragging')
+    document.body.classList.add('panel-resizing')
+    let width = FILE_PANEL_DEFAULT_WIDTH
+    const move = (moveEvent: PointerEvent) => {
+      width = clampFilePanelWidth(moveEvent.clientX)
+      applyFilePanelWidth(width)
+    }
+    const finish = () => {
+      resizer.removeEventListener('pointermove', move)
+      resizer.removeEventListener('pointerup', finish)
+      resizer.removeEventListener('pointercancel', finish)
+      resizer.classList.remove('dragging')
+      document.body.classList.remove('panel-resizing')
+      localStorage.setItem('file-panel-width', String(width))
+    }
+    resizer.addEventListener('pointermove', move)
+    resizer.addEventListener('pointerup', finish)
+    resizer.addEventListener('pointercancel', finish)
+  })
+}
+
 function updateFileTitle(): void {
   const name = currentFilePath ? (currentFilePath.split(/[\\/]/).pop() || currentFilePath) : '未命名'
   fileTitleEl().textContent = name
@@ -501,6 +548,7 @@ async function init(): Promise<void> {
   })
 
   fileToggleBtnEl().addEventListener('click', togglePanel)
+  initPanelResize()
   fileTabEl().addEventListener('click', () => setPanelMode('files'))
   outlineTabEl().addEventListener('click', () => setPanelMode('outline'))
   api.onToggleFilePanel(() => togglePanel())

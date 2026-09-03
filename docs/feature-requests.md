@@ -24,6 +24,12 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Adds a Files / Outline switch in the existing sidebar. Headings navigate in both visual and Markdown source modes.
 
+### Resizable file panel
+
+**Sources:** [#64](https://github.com/marswaveai/ColaMD/issues/64)
+
+**Status:** The panel's right edge offers a lightweight drag hot zone (no permanent handle icon, hover stripe only, per design.md) to resize between 180px and 420px. The choice persists locally, the default stays 220px, and the hot zone hides with the panel.
+
 ### Windows startup performance
 
 **Sources:** [#32](https://github.com/marswaveai/ColaMD/issues/32)
