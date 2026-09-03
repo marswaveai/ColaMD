@@ -13,6 +13,7 @@ import { htmlView } from './html-view'
 import { mermaidView } from './mermaid-view'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
+import { revealElementInPagedLayout } from './page-layout'
 
 import 'katex/dist/katex.min.css'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
@@ -387,7 +388,9 @@ export async function createEditor(
     e.preventDefault()
     e.stopPropagation()
     const heading = findHeadingAnchor(root, href.slice(1))
-    if (heading) heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (heading instanceof HTMLElement && !revealElementInPagedLayout(heading)) {
+      heading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   }, true)
 
   // Cmd/Ctrl+click (Mac/Win/Linux) opens other links in the browser.

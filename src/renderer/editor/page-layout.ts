@@ -6,6 +6,8 @@ const PAGE_MAX_WIDTH = 780
 const PAGE_MIN_WIDTH = 320
 const WHEEL_THRESHOLD = 42
 const WHEEL_GESTURE_END_MS = 180
+const SCROLL_SNAP_IDLE_MS = 180
+const SCROLL_SNAP_EPSILON = 1
 
 const pageCounts: Record<PageLayoutMode, number> = {
   continuous: 1,
@@ -34,6 +36,12 @@ export function revealInPagedLayout(rect: Pick<DOMRect, 'left' | 'right' | 'widt
   return true
 }
 
+export function revealElementInPagedLayout(element: HTMLElement): boolean {
+  if (!activeController?.isPaged()) return false
+  activeController.revealElement(element)
+  return true
+}
+
 export class PageLayoutController {
   private readonly pagedScroller: HTMLElement
   private mode: PageLayoutMode = 'continuous'
@@ -44,6 +52,7 @@ export class PageLayoutController {
   private wheelDirection = 0
   private wheelCommitted = false
   private wheelEndTimer: ReturnType<typeof setTimeout> | null = null
+  private scrollSnapTimer: ReturnType<typeof setTimeout> | null = null
   private resizeFrame = 0
   private resizeObserver: ResizeObserver
 
@@ -58,6 +67,7 @@ export class PageLayoutController {
     this.resizeObserver.observe(editor)
     editor.addEventListener('wheel', this.onWheel, { passive: false })
     editor.addEventListener('keydown', this.onKeyDown, true)
+    this.pagedScroller.addEventListener('scroll', this.onScrollerScroll, { passive: true })
     this.applyMode(initialMode, false)
     this.publishMode()
   }
@@ -135,6 +145,7 @@ export class PageLayoutController {
     if (this.isPaged()) {
       this.updateDimensions()
     } else {
+      this.cancelPendingSnap()
       this.clearDimensions()
     }
 
@@ -214,8 +225,30 @@ export class PageLayoutController {
   private snapTarget(value: number): number {
     const max = Math.max(0, this.pagedScroller.scrollWidth - this.pagedScroller.clientWidth)
     if (this.spreadStep <= 0) return Math.max(0, Math.min(max, value))
-    const snapped = Math.round(value / this.spreadStep) * this.spreadStep
-    return Math.max(0, Math.min(max, snapped))
+    const clamped = Math.max(0, Math.min(max, value))
+    const lower = Math.floor(clamped / this.spreadStep) * this.spreadStep
+    const upper = Math.min(max, lower + this.spreadStep)
+    return Math.abs(clamped - lower) <= Math.abs(upper - clamped) ? lower : upper
+  }
+
+  private cancelPendingSnap(): void {
+    if (!this.scrollSnapTimer) return
+    clearTimeout(this.scrollSnapTimer)
+    this.scrollSnapTimer = null
+  }
+
+  private snapAfterScroll(): void {
+    this.scrollSnapTimer = null
+    if (!this.isPaged() || this.spreadStep <= 0) return
+    const target = this.snapTarget(this.pagedScroller.scrollLeft)
+    if (Math.abs(target - this.pagedScroller.scrollLeft) <= SCROLL_SNAP_EPSILON) return
+    this.pagedScroller.scrollTo({ left: target, top: 0, behavior: this.scrollBehavior() })
+  }
+
+  private onScrollerScroll = (): void => {
+    if (!this.isPaged()) return
+    this.cancelPendingSnap()
+    this.scrollSnapTimer = setTimeout(() => this.snapAfterScroll(), SCROLL_SNAP_IDLE_MS)
   }
 
   private turnSpread(direction: number): void {
@@ -239,7 +272,12 @@ export class PageLayoutController {
   private onWheel = (event: WheelEvent): void => {
     if (!this.isPaged() || event.ctrlKey) return
 
-    const rawDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    // Leave horizontal gestures native so wide code, diagrams, and other
+    // constrained content can scroll. The scroller-level idle handler snaps
+    // any resulting outer scroll back to the nearest complete spread.
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
+
+    const rawDelta = event.deltaY
     if (!rawDelta) return
     event.preventDefault()
 
