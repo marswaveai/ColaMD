@@ -243,7 +243,7 @@ body {
   top: 40px;
   left: 0;
   bottom: 0;
-  width: 220px;
+  width: var(--file-panel-width, 220px);
   z-index: 5;
   display: flex;
   flex-direction: column;
@@ -255,6 +255,34 @@ body {
 
 #file-panel[hidden] {
   display: none;
+}
+
+/* Edge hot zone for resizing the panel; deliberately handle-free — a hover
+   stripe is the only affordance (design.md). */
+#panel-resizer {
+  position: fixed;
+  top: 40px;
+  bottom: 0;
+  left: calc(var(--file-panel-width, 220px) - 3px);
+  width: 6px;
+  cursor: col-resize;
+  z-index: 6;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+body:not(.show-file-panel) #panel-resizer {
+  display: none;
+}
+
+#panel-resizer:hover,
+#panel-resizer.dragging {
+  background: color-mix(in srgb, var(--link-color) 30%, transparent);
+}
+
+body.panel-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .file-panel-tabs {
@@ -409,7 +437,7 @@ body {
 
 body.show-file-panel #editor,
 body.show-file-panel #source-editor {
-  margin-left: 220px;
+  margin-left: var(--file-panel-width, 220px);
 }
 
 #editor.hidden {
