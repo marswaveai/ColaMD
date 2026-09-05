@@ -21,7 +21,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          # macos-15 pinned: macos-latest (macos-26.6.2 image) breaks electron-builder
+          # keychain import (security set-key-partition-list, upstream #10101).
+          # Backport lands in a future 26.16.x release, then this can go back to macos-latest.
+          - os: macos-15
             platform: mac
             sign: true
           - os: windows-latest
