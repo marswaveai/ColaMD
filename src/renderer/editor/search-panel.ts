@@ -1,5 +1,6 @@
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import { getEditorView, searchPluginKey } from './editor'
+import { revealInPagedLayout } from './page-layout'
 
 export class SearchPanel {
   private container: HTMLDivElement
@@ -186,6 +187,11 @@ export class SearchPanel {
     if (!editorEl) return
 
     const rect = editorEl.getBoundingClientRect()
+    if (revealInPagedLayout({
+      left: coords.left,
+      right: coords.right,
+      width: Math.max(1, coords.right - coords.left),
+    })) return
     const targetTop = editorEl.scrollTop + coords.top - rect.top - rect.height / 3
     editorEl.scrollTo({ top: targetTop, behavior: 'smooth' })
   }

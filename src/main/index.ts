@@ -959,6 +959,9 @@ ipcMain.handle('load-theme-css', async (_event, fileName: string) => {
 // inside a menu-triggered path hangs the main process).
 let currentTheme = 'elegant'
 let themeMenuItems: Array<{ id: string; theme: string }> = []
+type PageLayoutMode = 'continuous' | 'two' | 'three'
+let currentPageLayout: PageLayoutMode = 'continuous'
+let pageLayoutMenuItems: Array<{ id: string; mode: PageLayoutMode }> = []
 // Enumerate installed system font families for the font settings dialog (#7752855).
 // Uses NSFontManager via JXA — the same source as the macOS font panel — so the
 // list matches what the system and other apps (e.g. Typora) show, with
@@ -1046,6 +1049,13 @@ ipcMain.handle('report-theme', (_event, theme: unknown) => {
   if (next === currentTheme) return
   currentTheme = next
   updateThemeMenuChecks()
+})
+
+ipcMain.handle('report-page-layout', (_event, mode: unknown) => {
+  if (mode !== 'continuous' && mode !== 'two' && mode !== 'three') return
+  if (mode === currentPageLayout) return
+  currentPageLayout = mode
+  updatePageLayoutMenuChecks()
 })
 
 // Menu — targets the focused window
@@ -1165,6 +1175,7 @@ function buildMenu(): void {
         cheatsheet: 'Markdown 语法', about: '关于 ColaMD', checkForUpdates: '检查更新...', updateAvailable: '发现新版本', close: '关闭窗口',
         undo: '撤销', redo: '重做', cut: '剪切', copy: '复制', paste: '粘贴', selectAll: '全选',
         actualSize: '实际大小', zoomIn: '放大', zoomOut: '缩小', fullscreen: '切换全屏',
+        pageLayout: '页面布局', continuousLayout: '连续滚动', twoPageLayout: '双页翻页', threePageLayout: '三页翻页',
         fontSettings: '编辑器字体…',
         hide: '隐藏 ColaMD', hideOthers: '隐藏其他应用', showAll: '显示全部', quit: '退出 ColaMD',
       }
@@ -1182,6 +1193,7 @@ function buildMenu(): void {
         cheatsheet: 'Markdown Syntax', about: 'About ColaMD', checkForUpdates: 'Check for Updates...', updateAvailable: 'Update Available', close: 'Close Window',
         undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
         actualSize: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
+        pageLayout: 'Page Layout', continuousLayout: 'Continuous Scroll', twoPageLayout: 'Two-Page Spread', threePageLayout: 'Three-Page Spread',
         fontSettings: 'Editor Font…',
         hide: 'Hide ColaMD', hideOthers: 'Hide Others', showAll: 'Show All', quit: 'Quit ColaMD',
       }
@@ -1222,6 +1234,30 @@ function buildMenu(): void {
     label: labels.importTheme,
     click: () => sendToFocused('menu-import-theme')
   })
+
+  const pageLayoutSubmenu: Electron.MenuItemConstructorOptions[] = [
+    {
+      id: 'page-layout-continuous',
+      label: labels.continuousLayout,
+      type: 'radio',
+      checked: currentPageLayout === 'continuous',
+      click: () => sendToFocused('set-page-layout', 'continuous')
+    },
+    {
+      id: 'page-layout-two',
+      label: labels.twoPageLayout,
+      type: 'radio',
+      checked: currentPageLayout === 'two',
+      click: () => sendToFocused('set-page-layout', 'two')
+    },
+    {
+      id: 'page-layout-three',
+      label: labels.threePageLayout,
+      type: 'radio',
+      checked: currentPageLayout === 'three',
+      click: () => sendToFocused('set-page-layout', 'three')
+    }
+  ]
 
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac ? [{
@@ -1357,6 +1393,11 @@ function buildMenu(): void {
           click: () => sendToFocused('toggle-source-mode')
         },
         { type: 'separator' },
+        {
+          label: labels.pageLayout,
+          submenu: pageLayoutSubmenu
+        },
+        { type: 'separator' },
         { label: labels.fontSettings, click: () => sendToFocused('open-font-settings') },
         { type: 'separator' },
         { label: labels.fullscreen, role: 'togglefullscreen' }
@@ -1400,6 +1441,11 @@ function buildMenu(): void {
     ...themeSubmenu.filter((item): item is Electron.MenuItemConstructorOptions & { id: string } => typeof item.id === 'string')
       .map((item) => ({ id: item.id, theme: themeIdByLabel.get(item.label ?? '') ?? (item.id.startsWith('theme-custom-') ? `custom:${String(item.label)}.css` : '') })),
   ]
+  pageLayoutMenuItems = [
+    { id: 'page-layout-continuous', mode: 'continuous' },
+    { id: 'page-layout-two', mode: 'two' },
+    { id: 'page-layout-three', mode: 'three' },
+  ]
 }
 
 function updateThemeMenuChecks(): void {
@@ -1408,6 +1454,15 @@ function updateThemeMenuChecks(): void {
   for (const entry of themeMenuItems) {
     const item = menu.getMenuItemById(entry.id)
     if (item) item.checked = entry.theme === currentTheme
+  }
+}
+
+function updatePageLayoutMenuChecks(): void {
+  const menu = Menu.getApplicationMenu()
+  if (!menu) return
+  for (const entry of pageLayoutMenuItems) {
+    const item = menu.getMenuItemById(entry.id)
+    if (item) item.checked = entry.mode === currentPageLayout
   }
 }
 

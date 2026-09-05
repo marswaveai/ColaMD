@@ -50,6 +50,7 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 - **Themes** — Twelve built-in themes for focused writing in light or dark environments.
 - **Recent Files & Session Restore** — Jump back to the last 10 documents from the File menu, and reopen where you left off at launch.
 - **Editor Font Settings** — Pick any installed system font and size for the editor; your choice wins over theme defaults.
+- **Ultrawide Page Layouts** — View two- or three-page spreads with readable line lengths; long tables stay within a page and continue between complete rows on following pages.
 - **Multiple Windows** — Independent editor windows, each with its own save queue and close protection.
 - **Save Status Hint** — A quiet titlebar indicator shows unsaved/saved, then fades away.
 - **Heading Anchors** — Click intra-document anchor links to jump between headings, CJK included.

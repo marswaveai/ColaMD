@@ -2,10 +2,12 @@ import { createEditor, getMarkdown, setMarkdown, showMathModal } from './editor/
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
+import { PageLayoutController, loadSavedPageLayout } from './editor/page-layout'
 import './themes/base.css'
 import './themes/premium.css'
 
 let sourceModeActive = false
+let pageLayoutController: PageLayoutController | null = null
 const editorEl = () => document.getElementById('editor') as HTMLElement
 const sourceEl = () => document.getElementById('source-editor') as HTMLTextAreaElement
 const filePanelEl = () => document.getElementById('file-panel') as HTMLElement
@@ -223,10 +225,11 @@ function toggleSourceMode(): void {
     // Source → WYSIWYG: re-parse the textarea content back into the editor
     exitSourceMode()
     setMarkdownProgrammatically(sourceEl().value)
-    restoreScrollRatio(editorEl(), ratio)
+    if (pageLayoutController) pageLayoutController.restoreProgress(ratio)
+    else restoreScrollRatio(editorEl(), ratio)
   } else {
     // WYSIWYG → Source: serialize the current editor content into the textarea
-    enterSourceMode(getMarkdown(), scrollRatio(editorEl()))
+    enterSourceMode(getMarkdown(), pageLayoutController?.getProgress() ?? scrollRatio(editorEl()))
   }
   updateWordCount()
   scheduleOutlineUpdate()
@@ -286,7 +289,8 @@ function renderOutline(): void {
     button.style.paddingLeft = `${8 + (item.level - 1) * 12}px`
     button.addEventListener('click', () => {
       if (item.element) {
-        item.element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        if (pageLayoutController?.isPaged()) pageLayoutController.revealElement(item.element)
+        else item.element.scrollIntoView({ behavior: 'smooth', block: 'start' })
       } else if (item.line !== undefined) {
         const source = sourceEl()
         const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight) || 24
@@ -412,7 +416,9 @@ function getExportSnapshot(content: string): {
     content,
     html: document.querySelector('#editor .ProseMirror')?.innerHTML ?? '',
     styles,
-    bodyClass: Array.from(document.body.classList).filter((name) => name !== 'show-file-panel').join(' '),
+    bodyClass: Array.from(document.body.classList)
+      .filter((name) => name !== 'show-file-panel' && !name.startsWith('page-layout-'))
+      .join(' '),
     background: getComputedStyle(document.body).backgroundColor,
   }
 }
@@ -482,6 +488,12 @@ async function init(): Promise<void> {
     if (!applyingProgrammaticChange) setDirty()
     scheduleOutlineUpdate()
   })
+  pageLayoutController = new PageLayoutController(
+    editorEl(),
+    loadSavedPageLayout(),
+    (mode) => { void api.reportPageLayout(mode) },
+  )
+  api.onSetPageLayout((mode) => pageLayoutController?.setMode(mode))
   updateWordCount()
 
   // Main asks for an authoritative snapshot before any close or quit.
@@ -530,11 +542,16 @@ async function init(): Promise<void> {
   api.onMenuExportDOCX(() => { void api.exportDOCX(getContent()) })
   api.onMenuExportImage((preset) => { void exportCurrentImage(preset) })
 
-  api.onNewFile(() => { exitSourceMode(); applyContent('') })
+  api.onNewFile(() => {
+    exitSourceMode()
+    applyContent('')
+    pageLayoutController?.restoreProgress(0)
+  })
   api.onFileOpened((data) => {
     currentFilePath = data.path
     resetDirty()
     setContent(data.content)
+    pageLayoutController?.restoreProgress(0)
     updateFileTitle()
     updatePanelVisibility()
     refreshSiblings()

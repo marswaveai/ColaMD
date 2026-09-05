@@ -426,6 +426,106 @@ body.show-file-panel #source-editor {
   color: var(--text-color);
 }
 
+/* Two/three-page spreads for ultrawide displays. The editor remains one
+   ProseMirror document; CSS columns only change its visual flow, so editing,
+   autosave, search, agent sync, and Markdown serialization stay unchanged. */
+body.page-layout-paged #editor {
+  overflow-x: hidden;
+  overflow-y: hidden;
+  padding: 24px 40px 28px;
+}
+
+body.page-layout-paged #editor > .milkdown {
+  width: var(--page-layout-spread-width);
+  max-width: 100%;
+  height: 100%;
+  margin: 0 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+}
+
+body.page-layout-paged #editor .ProseMirror {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  column-count: var(--page-layout-count);
+  column-width: var(--page-layout-page-width);
+  column-gap: var(--page-layout-gap);
+  column-fill: auto;
+  column-rule: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+}
+
+/* A table must never use the full multicolumn container as its containing
+   block: that lets it paint across later pages. Constrain it to one page and
+   let long tables fragment between complete rows across following pages. */
+body.page-layout-paged #editor .ProseMirror table {
+  width: var(--page-layout-page-width) !important;
+  max-width: var(--page-layout-page-width) !important;
+  table-layout: fixed;
+  break-inside: auto;
+}
+
+body.page-layout-paged #editor .ProseMirror table th,
+body.page-layout-paged #editor .ProseMirror table td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+body.page-layout-paged #editor .ProseMirror table tr {
+  break-inside: avoid-column;
+}
+
+/* Keep compact visual units together when possible. Long paragraphs and
+   lists may flow naturally across pages; media and structured blocks do not
+   get cut through the middle unless they are taller than a full page. */
+body.page-layout-paged #editor .ProseMirror h1,
+body.page-layout-paged #editor .ProseMirror h2,
+body.page-layout-paged #editor .ProseMirror h3,
+body.page-layout-paged #editor .ProseMirror h4,
+body.page-layout-paged #editor .ProseMirror h5,
+body.page-layout-paged #editor .ProseMirror h6 {
+  break-after: avoid-column;
+}
+
+body.page-layout-paged #editor .ProseMirror pre,
+body.page-layout-paged #editor .ProseMirror blockquote,
+body.page-layout-paged #editor .ProseMirror .colamd-code-block,
+body.page-layout-paged #editor .ProseMirror .math-block,
+body.page-layout-paged #editor .ProseMirror .mermaid-diagram,
+body.page-layout-paged #editor .ProseMirror img {
+  break-inside: avoid-column;
+}
+
+/* PDF export is a print layout, never the interactive horizontal spread. */
+@media print {
+  body.page-layout-paged #editor {
+    overflow: visible !important;
+    padding: 20mm !important;
+  }
+
+  body.page-layout-paged #editor .ProseMirror {
+    width: auto !important;
+    max-width: 780px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 auto !important;
+    column-count: auto !important;
+    column-width: auto !important;
+    column-rule: none !important;
+  }
+
+  body.page-layout-paged #editor > .milkdown {
+    width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+}
+
 #editor .ProseMirror > * + * {
   margin-top: 0.75em;
 }
