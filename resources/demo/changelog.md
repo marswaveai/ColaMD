@@ -4,6 +4,12 @@
 
 ---
 
+## v2.0.2 · 可调面板与大纲进度
+
+- **文件面板可调宽**：拖拽面板边缘即可调整宽度（180–420px），应用会记住你的选择
+- **大纲进度视图**：阅读时大纲自动高亮当前章节；点击大纲或文内锚点跳转后，落点标题会闪一次主题色高亮带（[#64](https://github.com/marswaveai/ColaMD/issues/64)）
+- **打包安全加固**：打包脚本不再将路径拼接进 shell 字符串（[#69](https://github.com/marswaveai/ColaMD/pull/69)）
+
 ## v2.0.1 · Universal macOS build
 
 - **macOS Universal**：提供同时支持 Apple silicon 与 Intel 的通用版 `.dmg` 和 `.zip`
