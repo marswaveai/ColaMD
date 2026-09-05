@@ -1,4 +1,4 @@
-import { createEditor, getMarkdown, setMarkdown, showMathModal } from './editor/editor'
+import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal } from './editor/editor'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
@@ -33,6 +33,20 @@ let applyingProgrammaticChange = false
 let manualHidden = localStorage.getItem('file-panel-hidden') !== '0'
 let panelMode: 'files' | 'outline' = 'files'
 let outlineUpdateQueued = false
+// Outline doubles as a reading-progress view (#64): the entry for the section
+// currently at the top of the viewport is highlighted and kept visible.
+// outlineItems only caches source-mode line numbers; visual mode re-queries
+// the live DOM at use time because Milkdown recreates heading nodes whenever
+// the content is re-set, which silently detaches cached element references.
+let outlineItems: OutlineItem[] = []
+let outlineActiveIndex = -1
+let outlineSyncQueued = false
+// While an outline click drives a smooth scroll, scrollspy updates are paused
+// so the in-flight scroll events cannot overwrite the clicked entry; the lock
+// is released on `scrollend` or by a fallback timer when no scroll happens.
+let outlineJumping = false
+let outlineJumpTimer: ReturnType<typeof setTimeout> | null = null
+let outlineJumpStartTop = 0
 
 // Resizable file panel: default 220px, drag range 180-420px, persisted
 // locally (design.md). Applied at module load so the first paint already
@@ -292,28 +306,175 @@ function visualOutline(): OutlineItem[] {
 
 function renderOutline(): void {
   const list = outlineListEl()
-  const items = sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline()
+  outlineItems = sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline()
   list.innerHTML = ''
-  if (items.length === 0) return
-  for (const item of items) {
+  if (outlineItems.length === 0) {
+    outlineActiveIndex = -1
+    return
+  }
+  outlineItems.forEach((item, index) => {
     const entry = document.createElement('li')
     const button = document.createElement('button')
     button.type = 'button'
     button.textContent = item.title
+    // Hover keeps truncated headings readable while the panel width stays
+    // as-is in this change (#64).
+    button.title = item.title
     button.style.paddingLeft = `${8 + (item.level - 1) * 12}px`
     button.addEventListener('click', () => {
-      if (item.element) {
-        item.element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      } else if (item.line !== undefined) {
+      // Re-resolve the entry against the live DOM: cached element references
+      // die when the editor content is re-set (#64).
+      const current = (sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline())[index]
+      if (!current) return
+      if (current.element) {
+        // flashHeadingOnArrival signals the jump phase, which engages the
+        // outline jump lock for visual-mode jumps.
+        current.element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        flashHeadingOnArrival(current.element)
+      } else if (current.line !== undefined) {
+        beginOutlineJump()
         const source = sourceEl()
         const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight) || 24
-        source.scrollTop = Math.max(0, item.line * lineHeight - lineHeight)
+        source.scrollTop = Math.max(0, current.line * lineHeight - lineHeight)
         source.focus()
+        revealSourceHeading(source, current.line)
       }
+      setActiveOutlineIndex(index)
     })
     entry.appendChild(button)
     list.appendChild(entry)
+  })
+  applyOutlineActive()
+  scheduleOutlineActiveSync()
+}
+
+function applyOutlineActive(): void {
+  const list = outlineListEl()
+  const buttons = list.querySelectorAll<HTMLButtonElement>('button')
+  buttons.forEach((button, index) => {
+    button.classList.toggle('active', index === outlineActiveIndex)
+  })
+  // Keep the tracked section visible in long documents.
+  const active = buttons[outlineActiveIndex]
+  if (active) revealOutlineEntry(active)
+}
+
+// Manual reveal of the active entry inside the panel. scrollIntoView() must
+// not be used here: it would also interrupt the smooth scroll of the content
+// pane started by an outline click, so only the panel's own scroller moves.
+function revealOutlineEntry(button: HTMLButtonElement): void {
+  const panel = filePanelEl()
+  const panelTop = panel.getBoundingClientRect().top
+  const top = button.getBoundingClientRect().top - panelTop + panel.scrollTop
+  const bottom = top + button.offsetHeight
+  if (top < panel.scrollTop) {
+    panel.scrollTop = top
+  } else if (bottom > panel.scrollTop + panel.clientHeight) {
+    panel.scrollTop = bottom - panel.clientHeight
   }
+}
+
+function beginOutlineJump(): void {
+  outlineJumping = true
+  if (outlineJumpTimer) clearTimeout(outlineJumpTimer)
+  outlineJumpStartTop = (sourceModeActive ? sourceEl() : editorEl()).scrollTop
+  // scrollend releases the lock earlier; this fallback exists for the
+  // no-scroll case. Re-arming while the position keeps changing keeps long
+  // smooth jumps locked for their whole duration (review on #68).
+  outlineJumpTimer = setTimeout(releaseOutlineJumpIfSettled, 1500)
+}
+
+function releaseOutlineJumpIfSettled(): void {
+  if (!outlineJumping) return
+  const top = (sourceModeActive ? sourceEl() : editorEl()).scrollTop
+  if (top !== outlineJumpStartTop) {
+    outlineJumpStartTop = top
+    outlineJumpTimer = setTimeout(releaseOutlineJumpIfSettled, 400)
+    return
+  }
+  endOutlineJump()
+}
+
+function endOutlineJump(): void {
+  if (!outlineJumping) return
+  outlineJumping = false
+  if (outlineJumpTimer) {
+    clearTimeout(outlineJumpTimer)
+    outlineJumpTimer = null
+  }
+  scheduleOutlineActiveSync()
+}
+
+function setActiveOutlineIndex(index: number): void {
+  if (index === outlineActiveIndex) return
+  outlineActiveIndex = index
+  applyOutlineActive()
+}
+
+function scheduleOutlineActiveSync(): void {
+  if (outlineJumping) return
+  if (outlineSyncQueued) return
+  outlineSyncQueued = true
+  requestAnimationFrame(() => {
+    outlineSyncQueued = false
+    syncOutlineActive()
+  })
+}
+
+// Scrollspy: highlight the outline entry for the section at the top of the
+// viewport so the outline tracks reading progress (#64).
+function syncOutlineActive(): void {
+  if (outlineItems.length === 0) return
+  setActiveOutlineIndex(sourceModeActive ? sourceActiveIndex() : visualActiveIndex())
+}
+
+function visualActiveIndex(): number {
+  const container = editorEl()
+  const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 2
+  if (atBottom) return outlineItems.length - 1
+  const threshold = container.getBoundingClientRect().top + Math.min(96, container.clientHeight * 0.2)
+  // Cached references are refreshed by renderOutline; the loop stops at the
+  // first heading below the viewport top, so steady-state scrolling only
+  // touches the entries it activates. Fall back to a live query when a cached
+  // node went missing (content re-set mid-frame) — a detached node must never
+  // win the race (#64).
+  const items = outlineItems.some((item) => !item.element?.isConnected) ? visualOutline() : outlineItems
+  let index = -1
+  for (let i = 0; i < items.length; i += 1) {
+    const element = items[i].element
+    if (!element || !element.isConnected) continue
+    if (element.getBoundingClientRect().top > threshold) break
+    index = i
+  }
+  return index
+}
+
+function sourceActiveIndex(): number {
+  const source = sourceEl()
+  const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight) || 24
+  const firstLine = Math.round(source.scrollTop / lineHeight)
+  let index = -1
+  for (let i = 0; i < outlineItems.length; i += 1) {
+    if ((outlineItems[i].line ?? 0) > firstLine + 1) break
+    index = i
+  }
+  return index
+}
+
+// Source mode cannot render a heading band; selecting the heading line gives
+// the same "you have arrived" feedback as the visual flash (#64).
+function revealSourceHeading(source: HTMLTextAreaElement, line: number): void {
+  let start = 0
+  for (let i = 0; i < line; i += 1) {
+    const next = source.value.indexOf('\n', start)
+    if (next === -1) {
+      start = source.value.length
+      break
+    }
+    start = next + 1
+  }
+  const end = source.value.indexOf('\n', start)
+  source.setSelectionRange(start, end === -1 ? source.value.length : end)
 }
 
 function scheduleOutlineUpdate(): void {
@@ -561,6 +722,17 @@ async function init(): Promise<void> {
     updateWordCount()
     scheduleOutlineUpdate()
   })
+  // The outline tracks scrolling in both modes so it doubles as a progress
+  // view (#64); rAF keeps the rect reads to one batch per frame. `scrollend`
+  // also releases the outline jump lock as soon as a jump scroll settles.
+  editorEl().addEventListener('scroll', scheduleOutlineActiveSync, { passive: true })
+  sourceEl().addEventListener('scroll', scheduleOutlineActiveSync, { passive: true })
+  editorEl().addEventListener('scrollend', endOutlineJump)
+  sourceEl().addEventListener('scrollend', endOutlineJump)
+  // Anchor-link jumps start inside the editor; the phase signal engages the
+  // same jump lock the outline clicks use, so the highlight cannot be stolen
+  // by sections passed along the way (review on #68).
+  onEditorJumpPhase((phase) => (phase === 'start' ? beginOutlineJump() : endOutlineJump()))
 
   api.onSiblingsChanged((files) => renderFileList(files))
   updatePanelVisibility()
