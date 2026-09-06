@@ -27,9 +27,17 @@ let toolbar: HTMLDivElement | null = null
 let captionRow: HTMLDivElement | null = null
 let captionInput: HTMLInputElement | null = null
 let handles: HTMLDivElement[] = []
+let alignButtons: Array<{ button: HTMLButtonElement; align: ImageAlign }> = []
 let host: HTMLElement | null = null
 let showTimer: ReturnType<typeof setTimeout> | null = null
 let hideTimer: ReturnType<typeof setTimeout> | null = null
+
+// Fixed SVG templates (design.md §图标规范: linear 16×16, stroke 1.3, round).
+const ALIGN_ICON: Record<ImageAlign, string> = {
+  left: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="9.5" y2="8"/><line x1="2.5" y1="12" x2="11.5" y2="12"/></svg>',
+  center: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><line x1="3.5" y1="4" x2="12.5" y2="4"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="3.5" y1="12" x2="12.5" y2="12"/></svg>',
+  right: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="6.5" y1="8" x2="13.5" y2="8"/><line x1="4.5" y1="12" x2="13.5" y2="12"/></svg>',
+}
 
 function prosemirrorElement(): HTMLElement | null {
   return host?.querySelector('.ProseMirror') ?? null
@@ -55,35 +63,64 @@ interface ImgAttrs {
   title: string
 }
 
-function imgAttrsFromHtmlValue(value: string): ImgAttrs | null {
+type ImageAlign = 'left' | 'center' | 'right'
+
+// Width/alignment persist as inline HTML (Typora model): `![]()` carries
+// neither, so any sizing/alignment converts the node to `<img …>` and every
+// mutation parses the value, changes one field, and rebuilds it — no regex
+// patching that can leave stale attributes behind.
+interface ParsedImgValue extends ImgAttrs {
+  width: number | null
+  align: ImageAlign
+}
+
+function alignStyle(align: ImageAlign): string {
+  if (align === 'center') return 'display:block;margin:0 auto'
+  if (align === 'right') return 'display:block;margin:0 0 0 auto'
+  return ''
+}
+
+function parseImgValue(value: string): ParsedImgValue | null {
   const parsed = new DOMParser().parseFromString(`<body>${value}</body>`, 'text/html')
   const img = parsed.body.querySelector('img')
   if (!img) return null
+  const style = img.getAttribute('style') ?? ''
+  const marginLeftAuto = /margin-left\s*:\s*auto/i.test(style)
+  const marginRightAuto = /margin-right\s*:\s*auto/i.test(style)
+  const align: ImageAlign = marginLeftAuto && marginRightAuto ? 'center' : marginLeftAuto ? 'right' : 'left'
+  const widthAttr = Number.parseInt(img.getAttribute('width') ?? '', 10)
   return {
     src: img.getAttribute('src') ?? '',
     alt: img.getAttribute('alt') ?? '',
     title: img.getAttribute('title') ?? '',
+    width: Number.isFinite(widthAttr) && widthAttr > 0 ? widthAttr : null,
+    align,
   }
 }
 
-function htmlValueFromAttrs(attrs: ImgAttrs, width: number | null): string {
-  let html = `<img src="${escapeHtmlAttr(attrs.src)}"`
-  if (attrs.alt) html += ` alt="${escapeHtmlAttr(attrs.alt)}"`
-  if (attrs.title) html += ` title="${escapeHtmlAttr(attrs.title)}"`
-  if (width != null) html += ` width="${width}"`
+function buildImgValue(parsed: ParsedImgValue): string {
+  let html = `<img src="${escapeHtmlAttr(parsed.src)}"`
+  if (parsed.alt) html += ` alt="${escapeHtmlAttr(parsed.alt)}"`
+  if (parsed.title) html += ` title="${escapeHtmlAttr(parsed.title)}"`
+  const style = alignStyle(parsed.align)
+  if (style) html += ` style="${style}"`
+  if (parsed.width != null) html += ` width="${parsed.width}"`
   return `${html}>`
 }
 
-function htmlValueSetWidth(value: string, width: number | null): string {
-  const stripped = value.replace(/\s+width\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i, '')
-  if (width == null) return stripped
-  return stripped.replace(/>$/, ` width="${width}">`)
+function updateImgValue(value: string, patch: Partial<ParsedImgValue>): string | null {
+  const parsed = parseImgValue(value)
+  if (!parsed) return null
+  return buildImgValue({ ...parsed, ...patch })
 }
 
-function htmlValueSetAlt(value: string, alt: string): string {
-  const stripped = value.replace(/\s+alt\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i, '')
-  if (!alt) return stripped
-  return stripped.replace(/>$/, ` alt="${escapeHtmlAttr(alt)}">`)
+function currentAlign(img: HTMLImageElement): ImageAlign {
+  const info = resolveDocInfo(img)
+  if (info?.type === 'html' && info.nodeValue) {
+    const parsed = parseImgValue(info.nodeValue)
+    if (parsed) return parsed.align
+  }
+  return 'left'
 }
 
 // Locate the document position of any rendered <img>, both node-view images
@@ -154,6 +191,16 @@ function showToolbar(target: Target): void {
   toolbar.hidden = false
   for (const handle of handles) handle.hidden = false
   positionOverlay()
+  refreshAlignButtons()
+}
+
+function refreshAlignButtons(): void {
+  const img = toolbarImage()
+  if (!img) return
+  const active = currentAlign(img)
+  for (const entry of alignButtons) {
+    entry.button.classList.toggle('active', entry.align === active)
+  }
 }
 
 function cancelTimers(): void {
@@ -183,9 +230,9 @@ function scheduleHide(): void {
   hideTimer = setTimeout(() => hideToolbar(), HOVER_HIDE_DELAY)
 }
 
-// Width application converts a markdown image into an inline `<img … width>`
-// node (Typora's model: width cannot live in `![]()` syntax). Removing the
-// width restores the plain markdown form.
+// Width and alignment both persist as inline HTML (Typora model): `![]()`
+// syntax can carry neither, so applying either converts the node to
+// `<img …>`, and removing both converts back.
 function applyWidth(width: number): void {
   if (!editorView || !activeTarget) return
   const view = editorView
@@ -203,12 +250,13 @@ function applyWidth(width: number): void {
     }
     const htmlType = view.state.schema.nodes.html
     if (!htmlType) return
-    const value = htmlValueFromAttrs({
+    const value = buildImgValue({
       src: node.attrs.src ?? '',
       alt: node.attrs.alt ?? '',
       title: node.attrs.title ?? '',
-    }, width)
-    if (!value) return
+      width,
+      align: 'left',
+    })
     view.dispatch(view.state.tr.replaceWith(info.pos, info.pos + node.nodeSize, htmlType.create({ value })))
     rebindAfterConversion(info.pos)
     return
@@ -219,16 +267,72 @@ function applyWidth(width: number): void {
     hideToolbar()
     return
   }
-  view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, {
-    ...node.attrs,
-    value: htmlValueSetWidth(String(node.attrs.value ?? ''), width),
-  }))
-  positionOverlay()
+  const nextValue = updateImgValue(String(node.attrs.value ?? ''), { width })
+  if (!nextValue) {
+    hideToolbar()
+    return
+  }
+  view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, { ...node.attrs, value: nextValue }))
+  rebindHtmlTarget(info.pos)
 }
 
-// After image→html conversion the node occupies the same position (both are
-// leaf nodes); rebind so the overlay stays attached to the new DOM.
-function rebindAfterConversion(pos: number): void {
+// Center / right alignment converts to (or updates) the inline `<img>` form;
+// left alignment strips the alignment style, and drops back to plain
+// markdown when no width remains either.
+function applyAlign(align: ImageAlign): void {
+  if (!editorView || !activeTarget) return
+  const view = editorView
+  const img = activeTarget.img
+  const info = resolveDocInfo(img)
+  if (!info) {
+    hideToolbar()
+    return
+  }
+
+  if (info.type === 'image') {
+    if (align === 'left') return
+    const node = view.state.doc.nodeAt(info.pos)
+    if (!node) return
+    const htmlType = view.state.schema.nodes.html
+    if (!htmlType) return
+    const value = buildImgValue({
+      src: node.attrs.src ?? '',
+      alt: node.attrs.alt ?? '',
+      title: node.attrs.title ?? '',
+      width: null,
+      align,
+    })
+    view.dispatch(view.state.tr.replaceWith(info.pos, info.pos + node.nodeSize, htmlType.create({ value })))
+    rebindAfterConversion(info.pos)
+    refreshAlignButtons()
+    return
+  }
+
+  const node = view.state.doc.nodeAt(info.pos)
+  if (!node) return
+  const parsed = parseImgValue(String(node.attrs.value ?? ''))
+  if (!parsed) return
+  const next: ParsedImgValue = { ...parsed, align }
+  // Back to bare markdown when nothing HTML-specific remains.
+  if (next.align === 'left' && next.width == null) {
+    const imageType = view.state.schema.nodes.image
+    if (imageType) {
+      view.dispatch(view.state.tr.replaceWith(
+        info.pos,
+        info.pos + node.nodeSize,
+        imageType.create({ src: next.src, alt: next.alt, title: next.title })
+      ))
+      hideToolbar()
+      return
+    }
+  }
+  view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, { ...node.attrs, value: buildImgValue(next) }))
+  rebindHtmlTarget(info.pos)
+}
+
+// After any in-place html update (attribute changes rebuild the node view),
+// rebind the overlay to the fresh DOM and refresh the alignment state.
+function rebindHtmlTarget(pos: number): void {
   if (!editorView) return
   const dom = editorView.nodeDOM(pos) as HTMLElement | null
   const img = dom instanceof HTMLElement ? dom.querySelector('img') : null
@@ -238,6 +342,12 @@ function rebindAfterConversion(pos: number): void {
   } else {
     hideToolbar()
   }
+}
+
+// After image→html conversion the node occupies the same position (both are
+// leaf nodes); rebind so the toolbar stays attached to the new DOM.
+function rebindAfterConversion(pos: number): void {
+  rebindHtmlTarget(pos)
 }
 
 async function replaceImage(): Promise<void> {
@@ -255,10 +365,10 @@ async function replaceImage(): Promise<void> {
   if (info.type === 'image') {
     view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, { ...node.attrs, src: asset.fileUrl }))
   } else {
-    view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, {
-      ...node.attrs,
-      value: String(node.attrs.value ?? '').replace(/src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, `src="${escapeHtmlAttr(asset.fileUrl)}"`),
-    }))
+    const nextValue = updateImgValue(String(node.attrs.value ?? ''), { src: asset.fileUrl })
+    if (!nextValue) return
+    view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, { ...node.attrs, value: nextValue }))
+    rebindHtmlTarget(info.pos)
   }
 }
 
@@ -283,10 +393,10 @@ function applyCaption(alt: string): void {
   if (info.type === 'image') {
     view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, { ...node.attrs, alt }))
   } else {
-    view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, {
-      ...node.attrs,
-      value: htmlValueSetAlt(String(node.attrs.value ?? ''), alt),
-    }))
+    const nextValue = updateImgValue(String(node.attrs.value ?? ''), { alt })
+    if (!nextValue) return
+    view.dispatch(view.state.tr.setNodeMarkup(info.pos, undefined, { ...node.attrs, value: nextValue }))
+    rebindHtmlTarget(info.pos)
   }
 }
 
@@ -345,6 +455,23 @@ function makeToolbarDom(): void {
     btn.addEventListener('click', action)
     return btn
   }
+
+  // Alignment trio (Feishu order, first group in the bar).
+  alignButtons = (['left', 'center', 'right'] as const).map((align) => {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.title = align === 'left' ? '左对齐' : align === 'center' ? '居中' : '右对齐'
+    btn.setAttribute('aria-label', btn.title)
+    btn.innerHTML = ALIGN_ICON[align]
+    btn.addEventListener('mousedown', (event) => event.preventDefault())
+    btn.addEventListener('click', () => applyAlign(align))
+    row.appendChild(btn)
+    return { button: btn, align }
+  })
+
+  const alignSeparator = document.createElement('span')
+  alignSeparator.className = 'cmd-image-toolbar-sep'
+  row.appendChild(alignSeparator)
 
   row.appendChild(button('图注', '编辑图片描述（显示在图片下方）', () => {
     if (!captionRow || !captionInput) return

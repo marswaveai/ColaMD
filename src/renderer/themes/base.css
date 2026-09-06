@@ -842,6 +842,21 @@ body.show-file-panel #source-editor {
   color: var(--text-color);
 }
 
+#editor > .cmd-image-toolbar button.active {
+  background: color-mix(in srgb, var(--link-color) 16%, transparent);
+  color: var(--link-color);
+}
+
+/* An inline-HTML image is a block-level unit: the img aligns itself via its
+   margin style, and the caption follows. */
+#editor .ProseMirror .milkdown-html-inline:has(> img) {
+  display: block;
+}
+
+#editor .ProseMirror .milkdown-html-inline:has(> img) img {
+  max-width: 100%;
+}
+
 #editor > .cmd-image-toolbar .cmd-image-toolbar-sep {
   width: 1px;
   height: 16px;
@@ -914,6 +929,15 @@ body.show-file-panel #source-editor {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.6;
+}
+
+/* Inline-HTML image captions follow the image's alignment. */
+#editor .ProseMirror .cmd-image-caption.cmd-align-left {
+  text-align: left;
+}
+
+#editor .ProseMirror .cmd-image-caption.cmd-align-right {
+  text-align: right;
 }
 
 /* Legacy base64 migration banner sits above the update banner. */
