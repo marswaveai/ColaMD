@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, shell } from 'electron'
 import { basename, dirname } from 'node:path'
-import type { ImageInput, ImageSettings, ImageImportResult, ImageSettingsState } from '../image-types'
+import type { ImageInput, ImageSettings, ImageImportResult, ImageSettingsState, ImageMenuAction } from '../image-types'
 import { defaultImageSettings, IMAGE_EXTENSIONS, MAX_IMAGE_BYTES, imageDirectory, loadImageSettings, persistImageSettings, previewImage, storeImage, existingImageInput } from './image-storage'
 import { resolveImagePaths, restoreImagePaths } from './image-paths'
 
@@ -47,18 +47,27 @@ export function registerImageIPC(options: {
     if (!path) return markdown
     return direction === 'display' ? resolveImagePaths(markdown, path) : restoreImagePaths(markdown, path, settings)
   })
-  ipcMain.handle('image-scale-menu', (event, current: unknown) => {
+  ipcMain.handle('image-context-menu', (event, current: unknown) => {
     const win = windowFor(event)
     const chinese = app.getLocale().toLowerCase().startsWith('zh')
-    return new Promise<number | null>((resolve) => {
+    const state = current && typeof current === 'object' ? current as Record<string, unknown> : {}
+    return new Promise<ImageMenuAction | null>((resolve) => {
       const menu = Menu.buildFromTemplate([
-        { label: chinese ? '图片缩放比例' : 'Image Scale', enabled: false },
-        ...[25, 50, 75, 100, 150, 200].map((scale) => ({
-          label: `${scale}%`, type: 'checkbox' as const, checked: current === scale,
-          click: () => resolve(scale)
+        { label: chinese ? '图片对齐' : 'Image Alignment', enabled: false },
+        ...(['left', 'center', 'right'] as const).map((alignment, index) => ({
+          id: `image-align-${alignment}`,
+          label: chinese ? ['靠左', '居中', '靠右'][index] : ['Align Left', 'Center', 'Align Right'][index],
+          type: 'checkbox' as const, checked: state.alignment === alignment,
+          click: () => resolve({ type: 'align', value: alignment })
         })),
         { type: 'separator' },
-        { label: chinese ? '恢复原始大小' : 'Reset to Original Size', click: () => resolve(100) }
+        { label: chinese ? '图片缩放比例' : 'Image Scale', enabled: false },
+        ...[25, 50, 75, 100, 150, 200].map((scale) => ({
+          label: `${scale}%`, type: 'checkbox' as const, checked: state.scale === scale,
+          click: () => resolve({ type: 'scale', value: scale })
+        })),
+        { type: 'separator' },
+        { label: chinese ? '恢复原始大小' : 'Reset to Original Size', click: () => resolve({ type: 'scale', value: 100 }) }
       ])
       menu.popup({ window: win, callback: () => resolve(null) })
     })

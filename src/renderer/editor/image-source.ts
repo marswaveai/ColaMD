@@ -34,9 +34,10 @@ export function setupImageSource(host: { documentId: () => number; documentPath:
       const element = initial.element()
       const target = element && captureImageSource(element)
       if (!target) return
-      const value = await window.electronAPI.showImageScaleMenu(target.scale)
-      if (value === null || host.documentId() !== identity || host.documentPath() !== path || host.source()) return
-      if (!target.setScale(value)) showImageMessage(t('文档已发生变化，请重新选择图片。', 'The document changed. Select the image again.'))
+      const action = await window.electronAPI.showImageContextMenu({ scale: target.scale, alignment: target.alignment })
+      if (action === null || host.documentId() !== identity || host.documentPath() !== path || host.source()) return
+      const applied = action.type === 'scale' ? target.setScale(action.value) : target.setAlignment(action.value)
+      if (!applied) showImageMessage(t('文档已发生变化，请重新选择图片。', 'The document changed. Select the image again.'))
     })().catch((error) => showImageMessage(String(error)))
   }, true)
 

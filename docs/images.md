@@ -96,6 +96,20 @@ scales the maximum-width constraint alongside `zoom` so it cannot cancel the
 visible size change. An explicit custom HTML `max-width` is respected. Other
 viewers may fit images differently or ignore HTML zoom.
 
+The same image context menu offers **Align Left / 靠左**, **Center / 居中**, and
+**Align Right / 靠右**, with a checkmark for the current alignment. Alignment
+applies to the selected image on its own line and leaves surrounding text and
+other images unchanged. It uses standard HTML block display and horizontal
+margins, for example:
+
+```html
+<img src="example.assets/image.png" style="zoom: 50%; display: block; margin-left: auto; margin-right: auto;">
+```
+
+Alignment and scale are independent, survive saving and reopening, and are
+retained when replacing the image from a file. Resetting image size retains its
+alignment. The inline source field also exposes these standard HTML styles.
+
 Interaction references: Typora's [official image demonstration](https://support.typora.io/media/about-image/drag-img.gif)
 shows source above the selected image; its [Resize Images documentation](https://support.typora.io/Resize-Image/)
 describes HTML image dimensions and zoom. Typora's application source is not
@@ -138,7 +152,9 @@ clipboard. The suite checks Enter/Escape, clicking away, source layout, document
 six exact displayed width/height ratios using a 1600×900 image, and repeated
 Chromium mouse clicks on both Markdown and scaled HTML images. The latter check
 asserts no panel/image replacement or removal, scroll movement, or text-selection
-change, followed by collapse on an outside click. Its synthetic binary clipboard and drag events run through the real
+change, followed by collapse on an outside click. Alignment tests measure actual
+left/center/right positions and combine alignment with scale, save/reopen, and
+file replacement. Its synthetic binary clipboard and drag events run through the real
 renderer, preload and filesystem import pipeline. The Electron test output gives
 the temporary location of screenshots for visual review.
 

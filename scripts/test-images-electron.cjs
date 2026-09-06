@@ -22,12 +22,18 @@ syncFS.writeFileSync(sourceImage, png)
 dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [sourceImage] })
 dialog.showSaveDialog = async () => ({ canceled: false, filePath: path.join(root, 'documents', '另存为.md') })
 let scaleChoice = 50
+let alignmentChoice = null
+let expectedAlignment = null
 const originalPopup = Menu.prototype.popup
 Menu.prototype.popup = function (options) {
   const choices = this.items.filter((item) => /^\d+%$/.test(item.label))
   if (choices.length === 6) {
     assert.deepEqual(choices.map((item) => item.label), ['25%', '50%', '75%', '100%', '150%', '200%'])
-    choices.find((item) => item.label === `${scaleChoice}%`).click()
+    const alignments = this.items.filter((item) => item.id?.startsWith('image-align-'))
+    assert.deepEqual(alignments.map((item) => item.id), ['image-align-left', 'image-align-center', 'image-align-right'])
+    if (expectedAlignment) assert.ok(alignments.find((item) => item.id === `image-align-${expectedAlignment}`).checked, 'menu marks the current alignment')
+    if (alignmentChoice) alignments.find((item) => item.id === `image-align-${alignmentChoice}`).click()
+    else choices.find((item) => item.label === `${scaleChoice}%`).click()
     options.callback?.()
   } else originalPopup.call(this, options)
 }
@@ -369,6 +375,53 @@ ipcMain.on('renderer-ready', (event) => {
     assert.equal(await page(() => document.querySelectorAll('.image-source-inline').length), 0)
     command('toggle-source-mode')
     await until(() => page(() => !document.querySelector('#source-editor').classList.contains('visible')), 'return to visual')
+    const imageLayout = () => page(() => {
+      const image = document.querySelector('.ProseMirror img')
+      const rect = image.getBoundingClientRect()
+      const container = image.closest('p').getBoundingClientRect()
+      return { width: rect.width, offset: rect.left - container.left, available: container.width, zoom: Number(getComputedStyle(image).zoom), display: image.style.display }
+    })
+    const checkAlignment = async (alignment, scale = 50) => {
+      const layout = await imageLayout()
+      const expectedOffset = alignment === 'left' ? 0 : (layout.available - layout.width) / (alignment === 'center' ? 2 : 1)
+      assert.ok(Math.abs(layout.offset - expectedOffset) < 2, `${alignment}: expected offset ${expectedOffset}, got ${layout.offset}`)
+      assert.ok(Math.abs(layout.width - full.width * scale / 100) < 2, 'alignment retains displayed scale')
+      assert.equal(layout.zoom, scale / 100)
+      assert.equal(layout.display, 'block')
+      console.log('Image alignment:', alignment, JSON.stringify(layout))
+    }
+    expectedAlignment = 'left'
+    for (const value of ['left', 'center', 'right', 'center']) {
+      alignmentChoice = value
+      await page(() => document.querySelector('.ProseMirror img').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })))
+      await until(() => page((value) => {
+        const style = document.querySelector('.ProseMirror img').style
+        return style.display === 'block' && style.marginLeft === (value === 'left' ? '0px' : 'auto') && style.marginRight === (value === 'right' ? '0px' : 'auto')
+      }, value), 'image alignment ' + value)
+      expectedAlignment = value
+      await checkAlignment(value)
+    }
+    alignmentChoice = null
+    scaleChoice = 25
+    await page(() => document.querySelector('.ProseMirror img').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })))
+    await until(() => page(() => Number(getComputedStyle(document.querySelector('.ProseMirror img')).zoom) === 0.25), 'scaling centered image')
+    await checkAlignment('center', 25)
+    await until(async () => (await fs.readFile(layoutDoc, 'utf8')).includes('margin-left: auto; margin-right: auto;'), 'alignment persists in HTML')
+    await page((doc) => window.electronAPI.openSibling(doc), reopenOther)
+    await until(async () => await count() === 0, 'leave aligned document')
+    await page((doc) => window.electronAPI.openSibling(doc), layoutDoc)
+    await until(() => page(() => document.querySelector('.ProseMirror img')?.naturalWidth === 1600), 'reopen aligned document')
+    await checkAlignment('center', 25)
+    await page(() => document.querySelector('.ProseMirror img').click())
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'aligned image inline source')
+    await repeatImageClicks()
+    await page(() => document.querySelector('.image-source-replace').click())
+    await until(() => page(() => document.querySelector('.ProseMirror img')?.naturalWidth === 1 && !document.querySelector('.image-source-inline')), 'replace aligned image')
+    assert.ok(await page(() => {
+      const style = document.querySelector('.ProseMirror img').style
+      return style.display === 'block' && style.marginLeft === 'auto' && style.marginRight === 'auto' && Number(getComputedStyle(document.querySelector('.ProseMirror img')).zoom) === 0.25
+    }), 'replacement preserves alignment and scale')
+    expectedAlignment = null
     // Opt-in native clipboard check: read the existing system image without
     // replacing the user's clipboard. This uses Chromium's real paste command.
     if (process.env.COLAMD_NATIVE_CLIPBOARD === '1') {
@@ -413,7 +466,7 @@ ipcMain.on('renderer-ready', (event) => {
       await until(() => extra?.webContents.executeJavaScript("document.querySelectorAll('.ProseMirror img[src]').length === 3 && [...document.querySelectorAll('.ProseMirror img[src]')].every(i => i.naturalWidth > 0)"), 'user document images render')
       assert.deepEqual(syncFS.readFileSync(process.env.COLAMD_VERIFY_DOCUMENT), original)
     }
-    console.log(JSON.stringify({ passed: true, checks: ['native Image menu', 'settings options and preview', 'settings persistence', 'binary clipboard import', 'multiple images', 'file picker', 'inline image source layout/Enter/blur/validation/Escape/repeated native clicks without DOM replacement', 'replace image from file', 'six scale presets with exact large-image dimensions', 'scaled HTML source and replacement', 'scale persistence and reset', 'source-mode paste', 'autosave relative paths', 'Save As and reopen with parentheses', 'Base64 collection', 'code example preservation', 'mixed rich-text image paste', 'drop while typing', 'remote download', 'selected root relative paths', 'document switch during import'], artifacts: root }))
+    console.log(JSON.stringify({ passed: true, checks: ['native Image menu', 'settings options and preview', 'settings persistence', 'binary clipboard import', 'multiple images', 'file picker', 'inline image source layout/Enter/blur/validation/Escape/repeated native clicks without DOM replacement', 'replace image from file', 'six scale presets with exact large-image dimensions', 'scaled HTML source and replacement', 'scale persistence and reset', 'left/center/right image positions and menu checkmarks', 'alignment with scale, save/reopen and replacement', 'source-mode paste', 'autosave relative paths', 'Save As and reopen with parentheses', 'Base64 collection', 'code example preservation', 'mixed rich-text image paste', 'drop while typing', 'remote download', 'selected root relative paths', 'document switch during import'], artifacts: root }))
   })().catch(async (error) => { failure = error; console.error(error); console.log('Artifacts:', root); console.log(await page(() => ({dialogs: [...document.querySelectorAll('dialog')].map(d => d.textContent), content: document.querySelector('.ProseMirror')?.innerHTML}))); await fs.writeFile(path.join(root, 'failure.png'), (await win.webContents.capturePage()).toPNG()) }).finally(() => {
     // Leave the temp artifacts for review, but never run normal close-save UI.
     for (const window of BrowserWindow.getAllWindows()) window.destroy()

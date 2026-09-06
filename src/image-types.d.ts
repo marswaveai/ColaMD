@@ -1,6 +1,9 @@
 export type ImageAction = 'copy' | 'reference' | 'embed'
 export type ImageFolder = 'document' | 'assets' | 'hidden' | 'document-assets' | 'hidden-document' | 'root' | 'custom'
 export type ImageNaming = 'original' | 'timestamp' | 'document-timestamp' | 'random' | 'hash' | 'sequence' | 'custom'
+export type ImageAlignment = 'left' | 'center' | 'right'
+export interface ImageMenuState { scale: number; alignment: ImageAlignment }
+export type ImageMenuAction = { type: 'scale'; value: number } | { type: 'align'; value: ImageAlignment }
 
 export interface ImageSettings {
   action: ImageAction

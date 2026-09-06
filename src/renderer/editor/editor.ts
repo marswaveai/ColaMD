@@ -1,4 +1,5 @@
 import { imageInsertionPlugin, clearImageInsertions } from './image-insertion'
+import type { ImageAlignment } from '../../image-types'
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, parserCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import { Transform } from '@milkdown/kit/prose/transform'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
@@ -632,6 +633,8 @@ export function captureImageSource(element: HTMLImageElement) {
     }
     const zoom = originalImage.style.zoom
     const scale = zoom ? parseFloat(zoom) * (zoom.endsWith('%') ? 1 : 100) : 100
+    const alignment: ImageAlignment = originalImage.style.display === 'block' && originalImage.style.marginLeft === 'auto'
+      ? originalImage.style.marginRight === 'auto' ? 'center' : 'right' : 'left'
     return {
       markdown: serialize(image),
       focus: () => view.focus(),
@@ -641,6 +644,7 @@ export function captureImageSource(element: HTMLImageElement) {
       },
       mount: (dom: HTMLElement, onClose: () => void) => mountImageSource(view, position, image.nodeSize, dom, onClose),
       scale: Number.isFinite(scale) && scale > 0 ? scale : 100,
+      alignment,
       path: (source: string): string | null => asImage(parse(source))?.getAttribute('src') ?? null,
       replacement(src: string, alt: string): string {
         if (image.type.name === 'image') return serialize(image.type.create({ ...image.attrs, src, alt }))
@@ -658,6 +662,18 @@ export function captureImageSource(element: HTMLImageElement) {
         const node = plain ? view.state.schema.nodes.image.create({ src: next.getAttribute('src') || '', alt: next.alt, title: next.title })
           : view.state.schema.nodes.html.create({ value: next.outerHTML })
         return replace(node)
+      },
+      setAlignment(value: ImageAlignment): boolean {
+        if (!['left', 'center', 'right'].includes(value)) return false
+        const next = originalImage.cloneNode(true) as HTMLImageElement
+        // Block margins align this image without changing the containing
+        // paragraph's text, other images, or the original image bytes.
+        next.removeAttribute('align')
+        next.style.removeProperty('float')
+        next.style.display = 'block'
+        next.style.marginLeft = value === 'left' ? '0' : 'auto'
+        next.style.marginRight = value === 'right' ? '0' : 'auto'
+        return replace(view.state.schema.nodes.html.create({ value: next.outerHTML }))
       },
       apply(source: string): boolean {
         const node = parse(source)
