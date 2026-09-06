@@ -1,4 +1,6 @@
 import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal, setMathModalLanguage, releaseMermaidRenderer } from './editor/editor'
+import { configureImageExperience, countEmbeddedDataImages } from './editor/image/core'
+import { insertImagesFromPicker } from './editor/image/paste'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { setUiLanguage, isChinese, type UiLanguage } from './ui-language'
@@ -626,6 +628,70 @@ function setContent(content: string): void {
   updateWordCount(content)
 }
 
+// --- Image migration banner (legacy inline base64) ---
+const imageMigrateBannerEl = () => document.getElementById('image-migrate-banner') as HTMLElement
+const imageMigrateTextEl = () => document.getElementById('image-migrate-text') as HTMLElement
+
+let imageMigrationBusy = false
+
+function updateImageMigrationBanner(content: string): void {
+  const banner = imageMigrateBannerEl()
+  if (!banner) return
+  const count = countEmbeddedDataImages(content)
+  banner.hidden = count === 0
+  imageMigrateTextEl().textContent = count > 0
+    ? `检测到 ${count} 张内嵌 Base64 图片：源码会难以阅读、文件体积膨胀。建议提取为本地文件。`
+    : ''
+}
+
+async function extractEmbeddedImagesNow(): Promise<void> {
+  const banner = imageMigrateBannerEl()
+  if (imageMigrationBusy || !banner || banner.hidden) return
+  if (!currentFilePath) {
+    showToast('请先保存文档，图片才能存放到它旁边')
+    return
+  }
+  imageMigrationBusy = true
+  try {
+    const result = await window.electronAPI.extractEmbeddedImages(getContent())
+    if (!result || result.count === 0) {
+      banner.hidden = true
+      return
+    }
+    if (sourceModeActive) {
+      exitSourceMode()
+      setMarkdownProgrammatically(result.content)
+    } else {
+      setMarkdownProgrammatically(result.content)
+    }
+    updateWordCount()
+    scheduleOutlineUpdate()
+    setDirty()
+    banner.hidden = true
+    showToast(`已提取 ${result.count} 张图片到 assets 文件夹`)
+  } finally {
+    imageMigrationBusy = false
+  }
+}
+
+// --- Lightweight toast (image pipeline feedback) ---
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(message: string): void {
+  let toast = document.getElementById('cmd-toast')
+  if (!toast) {
+    toast = document.createElement('div')
+    toast.id = 'cmd-toast'
+    document.body.appendChild(toast)
+  }
+  toast.textContent = message
+  toast.classList.add('visible')
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toast?.classList.remove('visible')
+  }, 2600)
+}
+
 function getContent(): string {
   if (sourceModeActive) return sourceEl().value
   return getMarkdown()
@@ -718,6 +784,39 @@ async function init(): Promise<void> {
   api.onSearch(() => searchPanel.show())
   api.onMathModal(() => showMathModal())
   updateUiLanguage()
+  api.onMenuInsertImage(() => { void insertImagesFromPicker() })
+
+  // The image pipeline only needs a few document hooks from the host app.
+  configureImageExperience({
+    isSourceMode: () => sourceModeActive,
+    ensureDocumentSaved: async () => {
+      if (!currentFilePath || dirty) {
+        const ok = await saveCurrent(!currentFilePath)
+        if (!ok) return null
+      }
+      return currentFilePath
+    },
+    insertSourceText: (text) => {
+      const source = sourceEl()
+      const start = source.selectionStart ?? source.value.length
+      const end = source.selectionEnd ?? start
+      source.value = source.value.slice(0, start) + text + source.value.slice(end)
+      const caret = start + text.length
+      source.setSelectionRange(caret, caret)
+      source.focus()
+      setDirty()
+      updateWordCount()
+      scheduleOutlineUpdate()
+    },
+    notify: showToast,
+  })
+
+  document.getElementById('image-migrate-action')?.addEventListener('click', () => {
+    void extractEmbeddedImagesNow()
+  })
+  document.getElementById('image-migrate-dismiss')?.addEventListener('click', () => {
+    imageMigrateBannerEl().hidden = true
+  })
 
   await createEditor('editor', (markdown) => {
     updateWordCount(markdown)
@@ -785,7 +884,7 @@ async function init(): Promise<void> {
   api.onMenuExportDOCX(() => { void api.exportDOCX(getContent()) })
   api.onMenuExportImage((preset) => { void exportCurrentImage(preset) })
 
-  api.onNewFile(() => { releaseMermaidRenderer(); exitSourceMode(); applyContent('') })
+  api.onNewFile(() => { releaseMermaidRenderer(); exitSourceMode(); applyContent(''); updateImageMigrationBanner('') })
   api.onFileOpened((data) => {
     releaseMermaidRenderer()
     currentFilePath = data.path
@@ -801,8 +900,10 @@ async function init(): Promise<void> {
     updatePanelVisibility()
     refreshSiblings()
     scheduleOutlineUpdate()
+    updateImageMigrationBanner(data.content)
   })
   api.onFileChanged((content) => {
+    updateImageMigrationBanner(content)
     // An external edit landing while the user still has unsaved changes must
     // never clobber the editor, and plain autosave would silently overwrite
     // the external edit. Pause autosave and let the user choose explicitly.
@@ -935,7 +1036,12 @@ async function init(): Promise<void> {
   document.addEventListener('dragover', (e) => e.preventDefault())
   document.addEventListener('drop', async (e) => {
     e.preventDefault()
-    const file = e.dataTransfer?.files[0]
+    const dropped = Array.from(e.dataTransfer?.files ?? [])
+    // Pure image drags go into the document at the drop position; mixed
+    // drags keep the "open the .md file" behavior.
+    const imageFiles = dropped.filter((file) => file.type.startsWith('image/') || /\.(?:png|jpe?g|gif|webp|svg|avif|bmp|tiff?)$/i.test(file.name))
+    if (dropped.length > 0 && imageFiles.length === dropped.length) return // paste.ts capture handler already consumed this
+    const file = dropped[0]
     if (!file) return
     const filePath = api.getPathForFile(file)
     if (!filePath) return
