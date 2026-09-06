@@ -25,6 +25,16 @@ function renderHTML(value: string): HTMLSpanElement {
     }
   })
   dom.append(...Array.from(parsed.body.childNodes))
+
+  // Inline-HTML images show their alt text as a caption below the image,
+  // matching the markdown image node view.
+  const image = dom.querySelector('img')
+  if (image instanceof HTMLImageElement && image.alt) {
+    const caption = document.createElement('span')
+    caption.className = 'cmd-image-caption'
+    caption.textContent = image.alt
+    dom.appendChild(caption)
+  }
   return dom
 }
 
