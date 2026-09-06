@@ -277,6 +277,13 @@ ipcMain.on('renderer-ready', (event) => {
       assert.match(files[0], /^image-\d{8}-\d{6}-\d{3}\.png$/)
       assert.deepEqual(nativeImage.createFromPath(path.join(folder, files[0])).toBitmap(), original.toBitmap())
       assert.ok(!(await fs.readFile(nativeDoc, 'utf8')).includes('data:image/'))
+      const fullWidth = await page(() => document.querySelector('.ProseMirror img[src]').getBoundingClientRect().width)
+      scaleChoice = 50
+      await page(() => document.querySelector('.ProseMirror img[src]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })))
+      await until(() => page(() => Number(getComputedStyle(document.querySelector('.ProseMirror img[src]')).zoom) === 0.5), 'native clipboard image scale')
+      const halfWidth = await page(() => document.querySelector('.ProseMirror img[src]').getBoundingClientRect().width)
+      assert.ok(halfWidth > 0 && halfWidth < fullWidth, `50% must visibly shrink a large image (${fullWidth} -> ${halfWidth})`)
+      console.log(`Native image displayed width: ${fullWidth} -> ${halfWidth} at 50%.`)
       console.log('Native system clipboard image: pasted, rendered, timestamped file saved; pixels match original.')
     }
     // Load a user-specified document read-only for optional local verification.
