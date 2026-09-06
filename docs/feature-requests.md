@@ -6,6 +6,12 @@ This is the holding list for requests that have a clear user need but are not co
 
 These features are implemented on `main` and await release verification.
 
+### Configurable local image import
+
+**Source:** [#21](https://github.com/marswaveai/ColaMD/issues/21)
+
+**Status:** A new implementation restores screenshot paste, local-file insertion and drag-and-drop. A dedicated Image menu provides storage and naming settings, remote-image download, and explicit collection of existing/embedded images. Imports use document-aware insertion bookmarks, non-overwriting writes and portable references. See [image behavior and validation](images.md). This replaces the earlier import implementation removed before v1.9.0.
+
 ### Export Word (.docx)
 
 **Sources:** [#31](https://github.com/marswaveai/ColaMD/issues/31)
@@ -121,16 +127,6 @@ Bug report: opening the first .md is fast, but opening another file while one is
 **Scope:** First evaluate the common commands and conflicts with editor/browser shortcuts. Keep shortcut customization and disable controls out of the initial implementation; they require a broader preferences/keybinding system.
 
 **Status:** Candidate.
-
-### Import local images
-
-**Source:** [#21](https://github.com/marswaveai/ColaMD/issues/21)
-
-**Need:** Insert local images into Markdown without compromising editor stability or document content.
-
-**Status:** Deferred. The initial menu, paste, and drag-and-drop implementation was removed before `v1.9.0` after it proved unreliable.
-
-**Status:** Planned for next week's development review.
 
 ### Publish ColaMD for iOS
 

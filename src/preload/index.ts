@@ -1,3 +1,4 @@
+import type { ImageInput, ImageImportResult, ImageSettings, ImageSettingsState, ImagePreview, ImageMenuState, ImageMenuAction } from '../image-types'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 export interface SiblingFile {
@@ -24,6 +25,16 @@ ipcRenderer.on('file-opened', (_event, data: FileOpenedData) => {
 })
 
 export interface ElectronAPI {
+  getImageSettings: () => Promise<ImageSettingsState>
+  saveImageSettings: (settings: ImageSettings) => Promise<ImageSettings>
+  previewImageSettings: (settings: ImageSettings) => Promise<ImagePreview>
+  chooseImageDirectory: () => Promise<string | null>
+  selectImageFiles: () => Promise<ImageInput[]>
+  importImages: (images: ImageInput[], expectedPath: string, forceCopy?: boolean) => Promise<ImageImportResult>
+  convertImageSource: (markdown: string, expectedPath: string | null, direction: 'display' | 'markdown') => Promise<string>
+  showImageContextMenu: (current: ImageMenuState) => Promise<ImageMenuAction | null>
+  revealImageDirectory: () => Promise<string>
+  onImageCommand: (callback: (command: 'settings' | 'files' | 'url' | 'collect' | 'reveal') => void) => void
   openFile: () => Promise<{ path: string; content: string } | null>
   openFilePath: (path: string) => Promise<{ path: string; content: string } | null>
   listSiblings: () => Promise<SiblingFile[] | null>
@@ -75,6 +86,19 @@ export interface ElectronAPI {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  getImageSettings: () => ipcRenderer.invoke('image-settings-get'),
+  saveImageSettings: (settings: ImageSettings) => ipcRenderer.invoke('image-settings-save', settings),
+  previewImageSettings: (settings: ImageSettings) => ipcRenderer.invoke('image-settings-preview', settings),
+  chooseImageDirectory: () => ipcRenderer.invoke('image-choose-directory'),
+  selectImageFiles: () => ipcRenderer.invoke('image-select-files'),
+  importImages: (images: ImageInput[], expectedPath: string, forceCopy = false) => ipcRenderer.invoke('image-import', images, expectedPath, forceCopy),
+  convertImageSource: (markdown: string, expectedPath: string | null, direction: 'display' | 'markdown') => ipcRenderer.invoke('image-source-convert', markdown, expectedPath, direction),
+  showImageContextMenu: (current: ImageMenuState) => ipcRenderer.invoke('image-context-menu', current),
+  revealImageDirectory: () => ipcRenderer.invoke('image-reveal-directory'),
+  onImageCommand: (callback: (command: 'settings' | 'files' | 'url' | 'collect' | 'reveal') => void) => {
+    const commands = { 'image-open-settings': 'settings', 'image-insert-files': 'files', 'image-insert-url': 'url', 'image-collect': 'collect', 'image-reveal': 'reveal' } as const
+    for (const [channel, command] of Object.entries(commands)) ipcRenderer.on(channel, () => callback(command))
+  },
   openFile: () => ipcRenderer.invoke('open-file'),
   openFilePath: (path: string) => ipcRenderer.invoke('open-file-path', path),
   listSiblings: () => ipcRenderer.invoke('list-siblings'),

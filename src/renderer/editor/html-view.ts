@@ -24,13 +24,30 @@ function renderHTML(value: string): HTMLSpanElement {
       }
     }
   })
+  // Chromium applies a percentage max-width in the zoomed coordinate system.
+  // With just max-width:100%, a large screenshot at 50% can still fill almost
+  // the entire editor. Scale the width limit as well as the intrinsic image:
+  // displayed width = min(intrinsic width, available width) * zoom.
+  // Keep this rendering constraint out of the serialized HTML.
+  parsed.body.querySelectorAll('img').forEach((image) => {
+    const zoom = image.style.zoom
+    const factor = parseFloat(zoom) / (zoom.endsWith('%') ? 100 : 1)
+    if (Number.isFinite(factor) && factor > 0 && !image.style.maxWidth) {
+      image.style.maxWidth = `${factor * 100}%`
+    }
+  })
   dom.append(...Array.from(parsed.body.childNodes))
   return dom
 }
 
 export const htmlView = $view(htmlSchema.node, (): NodeViewConstructor => {
-  return (node) => ({
-    dom: renderHTML(String(node.attrs.value ?? '')),
-    stopEvent: () => true,
-  })
+  return (node) => {
+    const value = String(node.attrs.value ?? '')
+    return {
+      dom: renderHTML(value),
+      // Selection decorations must not rebuild/reload an unchanged image.
+      update: (next) => next.type === node.type && String(next.attrs.value ?? '') === value,
+      stopEvent: () => true,
+    }
+  }
 })

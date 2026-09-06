@@ -1,4 +1,7 @@
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
+import { imageInsertionPlugin, clearImageInsertions } from './image-insertion'
+import type { ImageAlignment } from '../../image-types'
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, parserCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
+import { Transform } from '@milkdown/kit/prose/transform'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
 import remarkBreaks from 'remark-breaks'
@@ -10,6 +13,7 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { replaceAll, $prose } from '@milkdown/kit/utils'
 import { remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema } from '@milkdown/plugin-math'
 import { htmlView } from './html-view'
+import { imageSourcePlugin, mountImageSource, clearImageSource } from './image-source-view'
 import { mermaidView } from './mermaid-view'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
@@ -447,7 +451,9 @@ export async function createEditor(
     .use(history)
     .use(listener)
     .use(clipboard)
+    .use(imageInsertionPlugin)
     .use(htmlView)
+    .use(imageSourcePlugin)
     .use(mermaidView)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
@@ -572,6 +578,8 @@ export function getMarkdown(): string {
 
 export function setMarkdown(content: string): void {
   if (!editorInstance) return
+  const view = getEditorView()
+  if (view) { clearImageInsertions(view); clearImageSource(view) }
   editorInstance.action(replaceAll(content))
 }
 
@@ -582,4 +590,138 @@ export function getEditorView(): EditorView | null {
     view = ctx.get(editorViewCtx)
   })
   return view
+}
+
+export function captureImageSource(element: HTMLImageElement) {
+  if (!editorInstance) return null
+  return editorInstance.action((ctx) => {
+    const view = ctx.get(editorViewCtx)
+    const position = view.posAtDOM(element, 0)
+    const original = view.state.doc
+    const image = original.nodeAt(position)
+    // Scaled images use standard HTML, as in Typora, because Markdown's image
+    // syntax has no size attribute. Only a standalone img is edited here;
+    // arbitrary HTML blocks retain all their surrounding content.
+    const asImage = (node: typeof image): HTMLImageElement | null => {
+      if (!node || !['image', 'html'].includes(node.type.name)) return null
+      const template = document.createElement('template')
+      template.innerHTML = node.type.name === 'html' ? String(node.attrs.value) : '<img>'
+      const children = [...template.content.childNodes].filter((child) => child.nodeType !== Node.TEXT_NODE || child.textContent?.trim())
+      const img = children[0]
+      if (children.length !== 1 || !(img instanceof HTMLImageElement)) return null
+      if (node.type.name === 'image') {
+        for (const key of ['src', 'alt', 'title']) if (node.attrs[key]) img.setAttribute(key, String(node.attrs[key]))
+      }
+      return img
+    }
+    const originalImage = asImage(image)
+    if (!image || !originalImage) return null
+    const serialize = (node: typeof image): string => ctx.get(serializerCtx)(
+      view.state.schema.topNodeType.create(null, view.state.schema.nodes.paragraph.create(null, node))
+    ).trim()
+    const parse = (source: string) => {
+      const doc = ctx.get(parserCtx)(source)
+      const first = doc?.firstChild
+      const node = first?.type.name === 'html' ? first : first?.type.name === 'paragraph' && first.childCount === 1 ? first.firstChild : null
+      return doc?.childCount === 1 && asImage(node) ? node : null
+    }
+    const replace = (node: typeof image): boolean => {
+      if (view.isDestroyed || !view.state.doc.eq(original)) return false
+      view.dispatch(view.state.tr.replaceWith(position, position + image.nodeSize, node))
+      view.focus()
+      return true
+    }
+    const zoom = originalImage.style.zoom
+    const scale = zoom ? parseFloat(zoom) * (zoom.endsWith('%') ? 1 : 100) : 100
+    const alignment: ImageAlignment = originalImage.style.display === 'block' && originalImage.style.marginLeft === 'auto'
+      ? originalImage.style.marginRight === 'auto' ? 'center' : 'right' : 'left'
+    return {
+      markdown: serialize(image),
+      focus: () => view.focus(),
+      element: (): HTMLImageElement | null => {
+        const dom = view.nodeDOM(position)
+        return dom instanceof HTMLImageElement ? dom : dom instanceof Element ? dom.querySelector('img') : null
+      },
+      mount: (dom: HTMLElement, onClose: () => void) => mountImageSource(view, position, image.nodeSize, dom, onClose),
+      scale: Number.isFinite(scale) && scale > 0 ? scale : 100,
+      alignment,
+      path: (source: string): string | null => asImage(parse(source))?.getAttribute('src') ?? null,
+      replacement(src: string, alt: string): string {
+        if (image.type.name === 'image') return serialize(image.type.create({ ...image.attrs, src, alt }))
+        const next = originalImage.cloneNode(true) as HTMLImageElement
+        next.setAttribute('src', src); next.setAttribute('alt', alt)
+        return serialize(image.type.create({ value: next.outerHTML }))
+      },
+      setScale(value: number): boolean {
+        if (![25, 50, 75, 100, 150, 200].includes(value)) return false
+        const next = originalImage.cloneNode(true) as HTMLImageElement
+        if (value === 100) next.style.removeProperty('zoom')
+        else next.style.zoom = `${value}%`
+        if (!next.getAttribute('style')?.trim()) next.removeAttribute('style')
+        const plain = [...next.attributes].every((attribute) => ['src', 'alt', 'title'].includes(attribute.name))
+        const node = plain ? view.state.schema.nodes.image.create({ src: next.getAttribute('src') || '', alt: next.alt, title: next.title })
+          : view.state.schema.nodes.html.create({ value: next.outerHTML })
+        return replace(node)
+      },
+      setAlignment(value: ImageAlignment): boolean {
+        if (!['left', 'center', 'right'].includes(value)) return false
+        const next = originalImage.cloneNode(true) as HTMLImageElement
+        // Block margins align this image without changing the containing
+        // paragraph's text, other images, or the original image bytes.
+        next.removeAttribute('align')
+        next.style.removeProperty('float')
+        next.style.display = 'block'
+        next.style.marginLeft = value === 'left' ? '0' : 'auto'
+        next.style.marginRight = value === 'right' ? '0' : 'auto'
+        return replace(view.state.schema.nodes.html.create({ value: next.outerHTML }))
+      },
+      apply(source: string): boolean {
+        const node = parse(source)
+        return !!node && replace(node)
+      }
+    }
+  })
+}
+
+// Work with parsed image nodes so code examples that happen to contain image
+// syntax are never rewritten by the collection command.
+export function captureImageCollection(source?: string): { sources: string[]; apply: (mapping: Map<string, string>) => string | null } | null {
+  if (!editorInstance) return null
+  let result: ReturnType<typeof captureImageCollection> = null
+  editorInstance.action((ctx) => {
+    const view = ctx.get(editorViewCtx)
+    const doc = source === undefined ? view.state.doc : ctx.get(parserCtx)(source)
+    if (!doc) return
+    const sources = new Set<string>()
+    doc.descendants((node) => {
+      if (node.type.name === 'image') sources.add(String(node.attrs.src))
+      if (node.type.name === 'html') {
+        const dom = new DOMParser().parseFromString(String(node.attrs.value || ''), 'text/html')
+        dom.querySelectorAll('img[src]').forEach((image) => sources.add(image.getAttribute('src')!))
+      }
+    })
+    result = {
+      sources: [...sources],
+      apply(mapping) {
+        if (source === undefined && !view.state.doc.eq(doc)) return null
+        const tr = source === undefined ? view.state.tr : new Transform(doc)
+        doc.descendants((node, position) => {
+          if (node.type.name === 'image' && mapping.has(node.attrs.src)) {
+            tr.setNodeMarkup(position, undefined, { ...node.attrs, src: mapping.get(node.attrs.src) })
+          } else if (node.type.name === 'html') {
+            const dom = new DOMParser().parseFromString(String(node.attrs.value || ''), 'text/html')
+            let changed = false
+            dom.querySelectorAll('img[src]').forEach((image) => {
+              const next = mapping.get(image.getAttribute('src')!)
+              if (next) { image.setAttribute('src', next); changed = true }
+            })
+            if (changed) tr.setNodeMarkup(position, undefined, { ...node.attrs, value: dom.body.innerHTML })
+          }
+        })
+        if (source === undefined) view.dispatch(tr as typeof view.state.tr)
+        return ctx.get(serializerCtx)(tr.doc)
+      }
+    }
+  })
+  return result
 }

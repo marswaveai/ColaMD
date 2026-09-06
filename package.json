@@ -21,7 +21,9 @@
     "dist": "electron-vite build && electron-builder",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "dist:win": "electron-vite build && electron-builder --win",
-    "dist:linux": "electron-vite build && electron-builder --linux"
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "test:images": "node scripts/test-images.cjs",
+    "test:images:electron": "electron scripts/test-images-electron.cjs"
   },
   "dependencies": {
     "@milkdown/kit": "^7.19.2",
