@@ -64,15 +64,22 @@ newly selected attachment directory. Ordinary saves never delete image files.
 
 ## Existing images
 
-Click an image in the visual editor to open **Image Markdown / 图片源代码**.
-The editable `![alt](path "title")` source uses the document's saved relative-path
-settings, and a separate field displays the parsed image path. Apply updates the
-image reference, alt text and title; Cancel leaves it unchanged. Invalid input
-cannot replace the image. **Copy Markdown** copies the displayed syntax.
-**Replace from File… / 从文件替换…** imports one file using the current folder and
+Click an image in the visual editor to reveal its editable Markdown/HTML source
+**directly above that image, in the document flow**, while keeping the preview
+visible. Clicking the same image again keeps that field, its text selection,
+and the loaded preview unchanged. Clicking elsewhere collapses it. There is no
+image-source dialog. The source displays saved relative
+paths such as `![alt](path "title")`; the path is selected for easy editing.
+Press **Enter** or click elsewhere to commit a valid edit, **Shift+Enter** to
+insert a line break, or **Escape** to cancel. Invalid source stays visible with
+an inline error and cannot replace the image. **Copy** copies the syntax.
+**Replace image… / 替换图片…** imports one file using the current folder and
 naming preferences, replaces that image and retains the original file and scale.
-This view edits Markdown images and standalone HTML `img` nodes. Arbitrary HTML
+This works with Markdown images and standalone HTML `img` nodes. Arbitrary HTML
 blocks with surrounding content remain editable in document source mode.
+Switching documents or entering whole-document source mode removes the inline
+field; unfinished source edits are discarded. Editor controls never become part
+of the saved Markdown.
 
 Right-click an image to choose **25%, 50%, 75%, 100%, 150% or 200%**, or
 **Reset to Original Size / 恢复原始大小**. The native menu marks the current scale.
@@ -80,9 +87,19 @@ Scaling changes the document, not the underlying image bytes. As in Typora, a
 scaled image is saved as `<img src="…" style="zoom: 50%;">` because standard
 Markdown image syntax has no size attribute. Its relative path, alt text, title
 and scale survive saving and reopening. Reset removes the zoom style and restores
-Markdown image syntax when no other HTML attributes need to be kept. Themes may
-still constrain an image to the editor width. HTML zoom support depends on the
-Markdown viewer; the image reference remains usable in viewers that ignore zoom.
+Markdown image syntax when no other HTML attributes need to be kept.
+
+In ColaMD, percentages scale the normal fitted image: a 780px-wide preview becomes
+390px at 50% and 195px at 25%, including for large screenshots. Values above 100%
+can exceed the editor width and be scrolled horizontally. The HTML renderer
+scales the maximum-width constraint alongside `zoom` so it cannot cancel the
+visible size change. An explicit custom HTML `max-width` is respected. Other
+viewers may fit images differently or ignore HTML zoom.
+
+Interaction references: Typora's [official image demonstration](https://support.typora.io/media/about-image/drag-img.gif)
+shows source above the selected image; its [Resize Images documentation](https://support.typora.io/Resize-Image/)
+describes HTML image dimensions and zoom. Typora's application source is not
+open source; this is an independent implementation of the documented interaction.
 
 **Copy Document Images to Folder…** shows the image count before copying and
 updating references using the current folder/naming settings. It handles Markdown
@@ -94,7 +111,7 @@ by all windows. Opening a new settings dialog always loads the current settings.
 The preview shows the actual destination and the Markdown reference for a sample
 screenshot. Image files are limited to 50 MB each, with up to 100 per import.
 
-The menu and image dialogs follow ColaMD's existing Chinese/English system-language
+The menu, inline image controls and settings dialogs follow ColaMD's existing Chinese/English system-language
 selection. macOS packages retain Electron's top-level `.lproj` directories, even
 when built from a local `electronDist`, so a Chinese system does not unexpectedly
 fall back to English. No separate language or general settings page is added.
@@ -117,7 +134,11 @@ npm run test:images:electron
 
 The filesystem tests use temporary directories. The Electron tests also isolate
 the app home, user data, settings, and documents; by default they do not use the system
-clipboard. Their synthetic binary clipboard and drag events run through the real
+clipboard. The suite checks Enter/Escape, clicking away, source layout, document switching,
+six exact displayed width/height ratios using a 1600×900 image, and repeated
+Chromium mouse clicks on both Markdown and scaled HTML images. The latter check
+asserts no panel/image replacement or removal, scroll movement, or text-selection
+change, followed by collapse on an outside click. Its synthetic binary clipboard and drag events run through the real
 renderer, preload and filesystem import pipeline. The Electron test output gives
 the temporary location of screenshots for visual review.
 

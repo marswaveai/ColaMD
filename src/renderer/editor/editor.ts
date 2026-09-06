@@ -12,6 +12,7 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { replaceAll, $prose } from '@milkdown/kit/utils'
 import { remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema } from '@milkdown/plugin-math'
 import { htmlView } from './html-view'
+import { imageSourcePlugin, mountImageSource, clearImageSource } from './image-source-view'
 import { mermaidView } from './mermaid-view'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
@@ -451,6 +452,7 @@ export async function createEditor(
     .use(clipboard)
     .use(imageInsertionPlugin)
     .use(htmlView)
+    .use(imageSourcePlugin)
     .use(mermaidView)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
@@ -576,7 +578,7 @@ export function getMarkdown(): string {
 export function setMarkdown(content: string): void {
   if (!editorInstance) return
   const view = getEditorView()
-  if (view) clearImageInsertions(view)
+  if (view) { clearImageInsertions(view); clearImageSource(view) }
   editorInstance.action(replaceAll(content))
 }
 
@@ -632,6 +634,12 @@ export function captureImageSource(element: HTMLImageElement) {
     const scale = zoom ? parseFloat(zoom) * (zoom.endsWith('%') ? 1 : 100) : 100
     return {
       markdown: serialize(image),
+      focus: () => view.focus(),
+      element: (): HTMLImageElement | null => {
+        const dom = view.nodeDOM(position)
+        return dom instanceof HTMLImageElement ? dom : dom instanceof Element ? dom.querySelector('img') : null
+      },
+      mount: (dom: HTMLElement, onClose: () => void) => mountImageSource(view, position, image.nodeSize, dom, onClose),
       scale: Number.isFinite(scale) && scale > 0 ? scale : 100,
       path: (source: string): string | null => asImage(parse(source))?.getAttribute('src') ?? null,
       replacement(src: string, alt: string): string {

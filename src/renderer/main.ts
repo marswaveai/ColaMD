@@ -1,5 +1,6 @@
 import { setupImageController } from './editor/image-controller'
-import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal } from './editor/editor'
+import { clearImageSource } from './editor/image-source-view'
+import { createEditor, flashHeadingOnArrival, getEditorView, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal } from './editor/editor'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
@@ -577,6 +578,8 @@ async function refreshSiblings(): Promise<void> {
 }
 
 function enterSourceMode(content: string, ratio = 0): void {
+  const view = getEditorView()
+  if (view) clearImageSource(view)
   imageDocumentId += 1
   sourceModeActive = true
   editorEl().classList.add('hidden')

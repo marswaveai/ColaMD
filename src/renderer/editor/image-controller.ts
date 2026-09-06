@@ -74,6 +74,7 @@ export function setupImageController(host: {
   const editor = document.getElementById('editor')!
   const sourceEditor = document.getElementById('source-editor')!
   const onPaste = (event: ClipboardEvent): void => {
+    if (event.target instanceof Element && event.target.closest('.image-source-inline')) return
     const view = getEditorView()
     if (!host.source() && view?.state.selection.$from.parent.type.spec.code) return
     const clipboard = event.clipboardData
@@ -95,6 +96,7 @@ export function setupImageController(host: {
     void insert(async () => inputs, undefined, host.source() ? undefined : html)
   }
   const onDrop = (event: DragEvent): void => {
+    if (event.target instanceof Element && event.target.closest('.image-source-inline')) return
     const files = Array.from(event.dataTransfer?.files || []).filter(isImage)
     if (!files.length) return
     event.preventDefault(); event.stopPropagation()

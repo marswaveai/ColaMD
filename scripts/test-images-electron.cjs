@@ -98,25 +98,26 @@ ipcMain.on('renderer-ready', (event) => {
     await until(async () => (await fs.readFile(doc, 'utf8')).includes('<.assets/source (中文).png>'), 'escaped parentheses save correctly')
     const clickFileImage = () => page(() => [...document.querySelectorAll('.ProseMirror img')].find((i) => i.alt.includes('source')).click())
     await clickFileImage()
-    await until(() => page(() => document.querySelector('#image-source-path')?.value === '.assets/source (中文).png'), 'clicked image shows persisted relative path')
+    await until(() => page(() => document.querySelector('#image-source-markdown')?.value.includes('.assets/source (中文).png')), 'clicked image shows persisted relative path')
+    assert.ok(await page(() => !!document.querySelector('.ProseMirror .image-source-inline') && !document.querySelector('dialog')), 'image source must be in the editor, without a dialog')
     await page(() => {
       const source = document.querySelector('#image-source-markdown')
       source.value = '![edited caption](<.assets/source (中文).png> "Image title")'
       source.dispatchEvent(new Event('input'))
-      document.querySelector('dialog .math-modal-btn.save').click()
+      source.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
     })
-    await until(() => page(() => !document.querySelector('dialog') && [...document.querySelectorAll('.ProseMirror img')].some((i) => i.alt === 'edited caption' && i.title === 'Image title' && i.naturalWidth === 1)), 'image source applies alt, title and relative path')
+    await until(() => page(() => !document.querySelector('.image-source-inline') && [...document.querySelectorAll('.ProseMirror img')].some((i) => i.alt === 'edited caption' && i.title === 'Image title' && i.naturalWidth === 1)), 'image source applies alt, title and relative path')
     await page(() => [...document.querySelectorAll('.ProseMirror img')].find((i) => i.alt === 'edited caption').click())
-    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'image source reopen')
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'inline image source reopen')
     await page(() => {
       const source = document.querySelector('#image-source-markdown'); source.value = 'ordinary text'; source.dispatchEvent(new Event('input'))
     })
-    assert.ok(await page(() => document.querySelector('dialog .math-modal-btn.save').disabled))
-    await closeDialogs()
+    assert.ok(await page(() => document.querySelector('#image-source-markdown').getAttribute('aria-invalid') === 'true'))
+    await page(() => document.querySelector('#image-source-markdown').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     assert.ok(await page(() => [...document.querySelectorAll('.ProseMirror img')].some((i) => i.alt === 'edited caption')))
     await page(() => [...document.querySelectorAll('.ProseMirror img')].find((i) => i.alt === 'edited caption').click())
-    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'replace image dialog')
-    await page(() => document.querySelector('dialog .math-modal-footer button').click())
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'inline replace image')
+    await page(() => document.querySelector('.image-source-replace').click())
     await until(() => page(() => !document.querySelector('dialog') && [...document.querySelectorAll('.ProseMirror img')].some((i) => /source.*-1\.png/.test(decodeURIComponent(i.src)) && i.naturalWidth === 1)), 'replace image using configured import folder')
     assert.equal(await count(), 3)
     assert.deepEqual(await fs.readFile(sourceImage), png)
@@ -131,8 +132,8 @@ ipcMain.on('renderer-ready', (event) => {
     for (const value of [25, 50, 75, 100, 150, 200, 50]) await scaleFileImage(value)
     await clickFileImage()
     await until(() => page(() => document.querySelector('#image-source-markdown')?.value.includes('zoom:')), 'scaled image source retains HTML zoom')
-    assert.equal(await page(() => document.querySelector('#image-source-path').value), '.assets/source (中文)-1.png')
-    await page(() => document.querySelector('dialog .math-modal-footer button').click())
+    assert.ok(await page(() => document.querySelector('#image-source-markdown').value.includes('.assets/source (中文)-1.png')))
+    await page(() => document.querySelector('.image-source-replace').click())
     await until(() => page(() => !document.querySelector('dialog') && [...document.querySelectorAll('.ProseMirror img[src]')].some((i) => /source.*-2\.png/.test(decodeURIComponent(i.src)) && Number(getComputedStyle(i).zoom) === 0.5)), 'scaled image replacement preserves scale')
     command('toggle-source-mode')
     await until(() => page(() => document.querySelector('#source-editor').classList.contains('visible')), 'source mode')
@@ -162,11 +163,10 @@ ipcMain.on('renderer-ready', (event) => {
     await scaleFileImage(100)
     await until(async () => (await fs.readFile(moved, 'utf8')).includes('<.assets/source (中文)-2.png>'), 'reset image scale restores Markdown syntax')
     await page(() => document.querySelector('.ProseMirror img[src]').click())
-    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'source dialog before document switch')
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'inline source before document switch')
     await page((doc) => window.electronAPI.openSibling(doc), reopenOther)
-    await until(async () => await count() === 0, 'switch while image source dialog is open')
-    await page(() => document.querySelector('dialog .math-modal-btn.save').click())
-    await until(() => page(() => document.querySelector('.image-setting-status')?.textContent.includes('changed')), 'reject stale source edit')
+    await until(async () => await count() === 0, 'switch while inline image source is open')
+    assert.equal(await page(() => document.querySelectorAll('.image-source-inline').length), 0, 'document switch removes inline source')
     assert.equal(await fs.readFile(reopenOther, 'utf8'), '# Reopen test\n')
     await closeDialogs()
     await page((doc) => window.electronAPI.openSibling(doc), moved)
@@ -251,6 +251,124 @@ ipcMain.on('renderer-ready', (event) => {
       assert.equal(await count(), 0)
       assert.equal(await fs.readFile(other, 'utf8'), '# Switched document\n\nKeep this unchanged.\n')
     } finally { await new Promise((resolve) => server.close(resolve)) }
+    // A real-sized image catches zoom/max-width cancellation that a 1px fixture cannot.
+    const width = 1600, height = 900
+    const pixels = Buffer.alloc(width * height * 4)
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const p = (y * width + x) * 4
+      pixels[p] = x % 200 < 100 ? 180 : 100
+      pixels[p + 1] = y % 200 < 100 ? 160 : 100
+      pixels[p + 2] = 60; pixels[p + 3] = 255
+    }
+    await fs.writeFile(path.join(root, 'documents/large.png'), nativeImage.createFromBitmap(pixels, { width, height }).toPNG())
+    const layoutDoc = path.join(root, 'documents/layout.md')
+    await fs.writeFile(layoutDoc, '# Inline image and scale test\n\n![Large](large.png)\n\nContinue editing here.\n')
+    await page((doc) => window.electronAPI.openSibling(doc), layoutDoc)
+    await until(() => page(() => document.querySelector('.ProseMirror img')?.naturalWidth === 1600), 'large layout fixture')
+    const dimensions = () => page(() => {
+      const i = document.querySelector('.ProseMirror img'); const r = i.getBoundingClientRect()
+      return { width: r.width, height: r.height }
+    })
+    const full = await dimensions()
+    const scaleSizes = []
+    for (const value of [25, 50, 75, 100, 150, 200, 100]) {
+      scaleChoice = value
+      await page(() => document.querySelector('.ProseMirror img').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })))
+      await until(() => page((v) => Number(getComputedStyle(document.querySelector('.ProseMirror img')).zoom) === v / 100, value), 'large image scale ' + value)
+      const size = await dimensions()
+      assert.ok(Math.abs(size.width - full.width * value / 100) < 2, `Scale ${value}: expected ${full.width * value / 100}, got ${size.width}`)
+      assert.ok(Math.abs(size.height / size.width - height / width) < 0.01, 'scale preserves aspect ratio')
+      scaleSizes.push({ scale: value, ...size })
+    }
+    console.log('Large image displayed sizes:', JSON.stringify(scaleSizes))
+    await page(() => document.querySelector('.ProseMirror img').click())
+    await until(() => page(() => !document.querySelector('#image-source-markdown')?.disabled && !!document.querySelector('#image-source-markdown')), 'inline source for large image')
+    assert.ok(await page(() => {
+      const source = document.querySelector('.image-source-inline').getBoundingClientRect()
+      const image = document.querySelector('.ProseMirror img').getBoundingClientRect()
+      return source.bottom <= image.top + 2 && !document.querySelector('dialog')
+    }), 'source is in document flow above the image')
+    const repeatImageClicks = async () => {
+      await page(() => {
+        const input = document.querySelector('#image-source-markdown')
+        input.focus(); input.setSelectionRange(2, 6)
+        window.__inlineClickCheck = {
+          input, image: document.querySelector('.ProseMirror img'),
+          panel: document.querySelector('.image-source-inline'),
+          scroll: document.querySelector('#editor').scrollTop, removals: 0, clicks: 0, mouseDowns: []
+        }
+        const check = window.__inlineClickCheck
+        check.onClick = (event) => { if (event.target === check.image && event.isTrusted) check.clicks++ }
+        check.onDown = (event) => { if (event.target === check.image && event.isTrusted) check.mouseDowns.push(event) }
+        document.addEventListener('click', check.onClick, true)
+        document.addEventListener('mousedown', check.onDown, true)
+        check.observer = new MutationObserver((records) => {
+          for (const record of records) for (const removed of record.removedNodes) {
+            if (removed === check.panel || removed === check.image || removed.contains?.(check.panel) || removed.contains?.(check.image)) check.removals++
+          }
+        })
+        check.observer.observe(document.querySelector('.ProseMirror'), { childList: true, subtree: true })
+      })
+      // Chromium dispatches pointerdown, mousedown, focus changes, mouseup and
+      // click. Element.click() alone misses the blur/reopen flicker regression.
+      for (let i = 0; i < 3; i++) {
+        const point = await page(() => {
+          const rect = document.querySelector('.ProseMirror img').getBoundingClientRect()
+          return { x: Math.round(rect.left + 20), y: Math.round(Math.max(45, rect.top) + 10) }
+        })
+        win.webContents.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 })
+        win.webContents.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+        await sleep(100)
+      }
+      const result = await page(() => {
+        const check = window.__inlineClickCheck
+        check.observer.disconnect()
+        document.removeEventListener('click', check.onClick, true)
+        document.removeEventListener('mousedown', check.onDown, true)
+        return {
+          sameField: document.querySelector('#image-source-markdown') === check.input,
+          sameImage: document.querySelector('.ProseMirror img') === check.image,
+          samePanel: document.querySelector('.image-source-inline') === check.panel,
+          removals: check.removals, clicks: check.clicks, prevented: check.mouseDowns.filter((event) => event.defaultPrevented).length,
+          sameScroll: document.querySelector('#editor').scrollTop === check.scroll,
+          selection: [check.input.selectionStart, check.input.selectionEnd]
+        }
+      })
+      assert.deepEqual(result, { sameField: true, sameImage: true, samePanel: true, removals: 0, clicks: 3, prevented: 3, sameScroll: true, selection: [2, 6] })
+    }
+    await repeatImageClicks()
+    await page(() => {
+      const field = document.querySelector('#image-source-markdown')
+      field.value = '![Edited inline](large.png)'; field.dispatchEvent(new Event('input'))
+      document.querySelector('.ProseMirror').dispatchEvent(new PointerEvent('pointerdown', { button: 0, bubbles: true }))
+      document.querySelector('.ProseMirror').focus()
+    })
+    await until(() => page(() => !document.querySelector('.image-source-inline') && document.querySelector('.ProseMirror img')?.alt === 'Edited inline'), 'blur commits inline edit')
+    await until(async () => (await fs.readFile(layoutDoc, 'utf8')).includes('![Edited inline](large.png)'), 'inline source autosaves plain Markdown')
+    assert.ok(!(await fs.readFile(layoutDoc, 'utf8')).includes('image-source'))
+    await page(() => document.querySelector('.ProseMirror img').click())
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'source before toggle')
+    scaleChoice = 50
+    await page(() => {
+      const field = document.querySelector('#image-source-markdown')
+      field.value = '![Saved before scaling](large.png)'; field.dispatchEvent(new Event('input'))
+      document.querySelector('.ProseMirror img').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    })
+    await until(() => page(() => document.querySelector('.ProseMirror img')?.alt === 'Saved before scaling' && Number(getComputedStyle(document.querySelector('.ProseMirror img')).zoom) === 0.5), 'right click commits source before scaling')
+    await page(() => { window.__imageBeforeSource = document.querySelector('.ProseMirror img'); window.__imageBeforeSource.click() })
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'scaled source before toggle')
+    assert.ok(await page(() => window.__imageBeforeSource === document.querySelector('.ProseMirror img')), 'opening scaled source must retain the loaded image')
+    await repeatImageClicks()
+    await page(() => document.querySelector('.ProseMirror p:last-child').dispatchEvent(new PointerEvent('pointerdown', { button: 0, bubbles: true })))
+    await until(() => page(() => !document.querySelector('.image-source-inline')), 'outside click collapses unchanged source')
+    assert.ok(await page(() => window.__imageBeforeSource === document.querySelector('.ProseMirror img')), 'closing scaled source must retain the loaded image')
+    await page(() => document.querySelector('.ProseMirror img').click())
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'reopen scaled source before toggle')
+    command('toggle-source-mode')
+    await until(() => page(() => document.querySelector('#source-editor').classList.contains('visible')), 'toggle removes inline source')
+    assert.equal(await page(() => document.querySelectorAll('.image-source-inline').length), 0)
+    command('toggle-source-mode')
+    await until(() => page(() => !document.querySelector('#source-editor').classList.contains('visible')), 'return to visual')
     // Opt-in native clipboard check: read the existing system image without
     // replacing the user's clipboard. This uses Chromium's real paste command.
     if (process.env.COLAMD_NATIVE_CLIPBOARD === '1') {
@@ -282,7 +400,7 @@ ipcMain.on('renderer-ready', (event) => {
       await page(() => document.querySelector('.ProseMirror img[src]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })))
       await until(() => page(() => Number(getComputedStyle(document.querySelector('.ProseMirror img[src]')).zoom) === 0.5), 'native clipboard image scale')
       const halfWidth = await page(() => document.querySelector('.ProseMirror img[src]').getBoundingClientRect().width)
-      assert.ok(halfWidth > 0 && halfWidth < fullWidth, `50% must visibly shrink a large image (${fullWidth} -> ${halfWidth})`)
+      assert.ok(Math.abs(halfWidth - fullWidth / 2) < 2, `50% must visibly shrink a large image (${fullWidth} -> ${halfWidth})`)
       console.log(`Native image displayed width: ${fullWidth} -> ${halfWidth} at 50%.`)
       console.log('Native system clipboard image: pasted, rendered, timestamped file saved; pixels match original.')
     }
@@ -295,7 +413,7 @@ ipcMain.on('renderer-ready', (event) => {
       await until(() => extra?.webContents.executeJavaScript("document.querySelectorAll('.ProseMirror img[src]').length === 3 && [...document.querySelectorAll('.ProseMirror img[src]')].every(i => i.naturalWidth > 0)"), 'user document images render')
       assert.deepEqual(syncFS.readFileSync(process.env.COLAMD_VERIFY_DOCUMENT), original)
     }
-    console.log(JSON.stringify({ passed: true, checks: ['native Image menu', 'settings options and preview', 'settings persistence', 'binary clipboard import', 'multiple images', 'file picker', 'image Markdown inspection/edit/validation/cancel', 'replace image from file', 'six scale presets', 'scaled HTML source and replacement', 'scale persistence and reset', 'source-mode paste', 'autosave relative paths', 'Save As and reopen with parentheses', 'Base64 collection', 'code example preservation', 'mixed rich-text image paste', 'drop while typing', 'remote download', 'selected root relative paths', 'document switch during import'], artifacts: root }))
+    console.log(JSON.stringify({ passed: true, checks: ['native Image menu', 'settings options and preview', 'settings persistence', 'binary clipboard import', 'multiple images', 'file picker', 'inline image source layout/Enter/blur/validation/Escape/repeated native clicks without DOM replacement', 'replace image from file', 'six scale presets with exact large-image dimensions', 'scaled HTML source and replacement', 'scale persistence and reset', 'source-mode paste', 'autosave relative paths', 'Save As and reopen with parentheses', 'Base64 collection', 'code example preservation', 'mixed rich-text image paste', 'drop while typing', 'remote download', 'selected root relative paths', 'document switch during import'], artifacts: root }))
   })().catch(async (error) => { failure = error; console.error(error); console.log('Artifacts:', root); console.log(await page(() => ({dialogs: [...document.querySelectorAll('dialog')].map(d => d.textContent), content: document.querySelector('.ProseMirror')?.innerHTML}))); await fs.writeFile(path.join(root, 'failure.png'), (await win.webContents.capturePage()).toPNG()) }).finally(() => {
     // Leave the temp artifacts for review, but never run normal close-save UI.
     for (const window of BrowserWindow.getAllWindows()) window.destroy()
