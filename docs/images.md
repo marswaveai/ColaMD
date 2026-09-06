@@ -23,15 +23,23 @@ or cloud account is involved.
 
 ## Folder choices
 
-| Choice | Destination for `project/notes/example.md` |
+The selector shows every destination as a complete path using placeholders,
+and a folder tree below it shows the Markdown file and image in context. `./`
+means the document folder. `{document-name}` excludes the Markdown extension;
+`{image-name}.{ext}` is the final filename produced by the naming rules. These
+braces explain the examples; actual custom templates use the `${…}` variables
+listed below. The live preview separately labels the actual directory, filename
+and Markdown reference for the current document.
+
+| Selector example | Image destination for `project/notes/example.md` |
 | --- | --- |
-| Document.assets (default) | `project/notes/example.assets/` |
-| Beside document | `project/notes/` |
-| assets | `project/notes/assets/` |
-| .assets | `project/notes/.assets/` |
-| .assets/document-name | `project/notes/.assets/example/` |
-| Selected root | Chosen directory plus its configured subfolder; `.` means the root itself |
-| Custom folder | An absolute path or a path relative to the Markdown document |
+| `./{document-name}.assets/{image-name}.{ext}` (default) | `project/notes/example.assets/image.png` |
+| `./{image-name}.{ext}` | `project/notes/image.png` |
+| `./assets/{image-name}.{ext}` | `project/notes/assets/image.png` |
+| `./.assets/{image-name}.{ext}` | `project/notes/.assets/image.png` |
+| `./.assets/{document-name}/{image-name}.{ext}` | `project/notes/.assets/example/image.png` |
+| `{root-folder}/{subfolder}/{image-name}.{ext}` | Chosen root and configured subfolder; leave the subfolder empty or use `.` for the root itself |
+| `{custom-folder}/{image-name}.{ext}` | Configured absolute folder or folder relative to the document |
 
 Custom folders support `${filename}` (document name without extension), `${year}`
 and `${month}`. For example, `./${filename}.assets` and `../.assets/${year}/${month}`.

@@ -87,16 +87,38 @@ export async function showImageSettings(): Promise<void> {
     ['reference', t('保留原文件位置', 'Keep original file location')],
     ['embed', t('内嵌到 Markdown', 'Embed in Markdown')]
   ])
-  add('folder', t('图片保存位置', 'Image folder'), [
-    ['document-assets', t('文档名.assets / 每篇文档独立', 'Document.assets / one folder per document')],
-    ['document', t('与 Markdown 文件同级', 'Beside the Markdown document')],
-    ['assets', 'assets/'], ['hidden', '.assets/'],
-    ['hidden-document', t('.assets/文档名/', '.assets/document-name/')],
-    ['root', t('指定根目录', 'Selected root directory')],
-    ['custom', t('自定义目录或模板', 'Custom folder or template')]
-  ])
+  const documentName = t('{文档名}', '{document-name}')
+  const imageName = t('{图片名}.{扩展名}', '{image-name}.{ext}')
+  const documentFolder = t('文档所在目录/', 'Document folder/')
+  const rootFolder = t('{根目录}', '{root-folder}')
+  const subfolder = t('{子目录}', '{subfolder}')
+  const customFolder = t('{自定义目录}', '{custom-folder}')
+  const examples: Array<{ value: ImageSettings['folder']; path: string; folders: string[] }> = [
+    { value: 'document-assets', path: `./${documentName}.assets/${imageName}`, folders: [`${documentName}.assets`] },
+    { value: 'document', path: `./${imageName}`, folders: [] },
+    { value: 'assets', path: `./assets/${imageName}`, folders: ['assets'] },
+    { value: 'hidden', path: `./.assets/${imageName}`, folders: ['.assets'] },
+    { value: 'hidden-document', path: `./.assets/${documentName}/${imageName}`, folders: ['.assets', documentName] },
+    { value: 'root', path: `${rootFolder}/${subfolder}/${imageName}`, folders: [subfolder] },
+    { value: 'custom', path: `${customFolder}/${imageName}`, folders: [] }
+  ]
+  add('folder', t('图片保存位置', 'Image folder'), examples.map(({ value, path }) => [value, path]))
+  rows.get('folder')!.classList.add('image-folder-row')
+  const structure = document.createElement('pre')
+  structure.className = 'image-folder-structure'
+  structure.id = 'image-folder-structure'
+  structure.setAttribute('aria-label', t('目录结构示意', 'Folder structure example'))
+  const structureHint = document.createElement('p')
+  structureHint.className = 'image-setting-hint image-folder-hint'
+  structureHint.id = 'image-folder-hint'
+  structureHint.textContent = t(
+    './ 表示文档所在目录。{文档名} 不含扩展名；{图片名}.{扩展名} 表示最终图片文件，由下方命名规则决定。花括号仅作示意。',
+    './ means the document folder. {document-name} excludes its extension; {image-name}.{ext} is the final image filename, set by the naming rules below. Braces indicate placeholders in these examples.'
+  )
+  controls.get('folder')!.setAttribute('aria-describedby', 'image-folder-structure image-folder-hint')
+  form.append(structure, structureHint)
   add('rootDirectory', t('根目录', 'Root directory'))
-  add('rootFolder', t('根目录内的子目录', 'Subfolder inside root'))
+  add('rootFolder', t('根目录内的子目录（可留空）', 'Subfolder inside root (optional)'))
   add('customFolder', t('自定义目录', 'Custom folder'))
   for (const key of ['rootDirectory', 'customFolder'] as const) {
     const button = imageButton(t('选择…', 'Choose…'), () => {
@@ -160,6 +182,14 @@ export async function showImageSettings(): Promise<void> {
     rows.get('rootDirectory')!.hidden = draft.folder !== 'root'
     rows.get('rootFolder')!.hidden = draft.folder !== 'root'
     rows.get('customFolder')!.hidden = draft.folder !== 'custom'
+    const example = examples.find(({ value }) => value === draft.folder)!
+    const separate = draft.folder === 'root' || draft.folder === 'custom'
+    const folders = draft.folder === 'root' && (!draft.rootFolder.trim() || draft.rootFolder.trim() === '.') ? [] : example.folders
+    const lines = [documentFolder, `${separate ? '└' : '├'}── ${documentName}.md`]
+    if (separate) lines.push('', `${draft.folder === 'root' ? rootFolder : customFolder}/`)
+    folders.forEach((folder, index) => lines.push(`${'    '.repeat(index)}└── ${folder}/`))
+    lines.push(`${'    '.repeat(folders.length)}└── ${imageName}`)
+    structure.textContent = lines.join('\n')
     rows.get('nameTemplate')!.hidden = draft.fileNaming !== 'custom' && draft.clipboardNaming !== 'custom'
     const hints: string[] = []
     if (draft.folder === 'custom' || draft.folder === 'root') hints.push(t('目录变量：', 'Folder variables: ') + '${filename}, ${year}, ${month}')
@@ -173,7 +203,7 @@ export async function showImageSettings(): Promise<void> {
       status.textContent = result.error || ''
       apply.disabled = !!result.error
       preview.textContent = draft.action === 'embed' ? t('图片数据将内嵌在 .md 文件中。', 'Image bytes will be embedded in the .md file.')
-        : `${state.documentPath ? '' : t('保存文档后将按实际文档名生成目录。\n', 'Save the document to use its actual filename.\n')}${result.directory}\n${result.filename}\n${result.markdown}`
+        : `${state.documentPath ? '' : t('保存文档后将按实际文档名生成目录。\n', 'Save the document to use its actual filename.\n')}${t('实际图片目录：', 'Image directory: ')}${result.directory}\n${t('实际图片文件名：', 'Image filename: ')}${result.filename}\n${t('Markdown 引用：', 'Markdown reference: ')}\n${result.markdown}`
     }).catch((error) => { status.textContent = String(error); apply.disabled = true })
   }
   update()

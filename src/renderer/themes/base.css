@@ -1230,6 +1230,10 @@ dialog.image-modal::backdrop { background: color-mix(in srgb, var(--text-color) 
 .image-source-status:empty { display: none; }
 .image-source-selected { outline: 1px solid var(--border-color); }
 .image-setting-row { display: flex; align-items: center; gap: 10px; }
+.image-setting-row.image-folder-row { flex-direction: column; align-items: stretch; gap: 6px; }
+.image-folder-row .image-setting-control { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.image-folder-structure { margin: 0; padding: 12px; border-radius: 6px; background: var(--code-bg); color: var(--text-color); font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; }
+.image-folder-hint { margin: -4px 0 0; }
 .image-setting-row[hidden] { display: none; }
 .image-setting-row label { flex: 1; font-size: 13px; }
 .image-setting-control {
