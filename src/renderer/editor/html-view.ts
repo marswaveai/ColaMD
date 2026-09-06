@@ -27,11 +27,19 @@ function renderHTML(value: string): HTMLSpanElement {
   dom.append(...Array.from(parsed.body.childNodes))
 
   // Inline-HTML images show their alt text as a caption below the image,
-  // matching the markdown image node view.
+  // aligned with the image itself (its margin style carries the alignment).
   const image = dom.querySelector('img')
   if (image instanceof HTMLImageElement && image.alt) {
     const caption = document.createElement('span')
-    caption.className = 'cmd-image-caption'
+    const style = image.getAttribute('style') ?? ''
+    const marginLeftAuto = /margin-left\s*:\s*auto/i.test(style)
+    const marginRightAuto = /margin-right\s*:\s*auto/i.test(style)
+    const alignClass = marginLeftAuto && marginRightAuto
+      ? 'cmd-align-center'
+      : marginLeftAuto
+        ? 'cmd-align-right'
+        : 'cmd-align-left'
+    caption.className = `cmd-image-caption ${alignClass}`
     caption.textContent = image.alt
     dom.appendChild(caption)
   }
