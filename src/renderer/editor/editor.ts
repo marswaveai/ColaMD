@@ -1,4 +1,4 @@
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx, parserCtx } from '@milkdown/kit/core'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
 import remarkBreaks from 'remark-breaks'
@@ -13,6 +13,9 @@ import { htmlView } from './html-view'
 import { mermaidView } from './mermaid-view'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
+import { imageView } from './image/node-view'
+import { imageSelectionBridge, initImageToolbar } from './image/toolbar'
+import { imageInputBridge, initImageInput } from './image/paste'
 
 import 'katex/dist/katex.min.css'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
@@ -449,6 +452,9 @@ export async function createEditor(
     .use(clipboard)
     .use(htmlView)
     .use(mermaidView)
+    .use(imageView)
+    .use(imageSelectionBridge)
+    .use(imageInputBridge)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
     .use(searchHighlight)
@@ -460,6 +466,10 @@ export async function createEditor(
   // Enhance clipboard with inline styles for rich text paste (e.g. WeChat)
   root.addEventListener('copy', enhanceClipboard)
   root.addEventListener('cut', enhanceClipboard)
+
+  // Image experience: paste/drop pipeline plus the floating toolbar overlay.
+  initImageToolbar(root)
+  initImageInput()
 
   // Cmd/Ctrl+B toggles the strong mark for an existing selection. This keeps
   // basic formatting editable without adding a permanent toolbar.
@@ -573,6 +583,25 @@ export function getMarkdown(): string {
 export function setMarkdown(content: string): void {
   if (!editorInstance) return
   editorInstance.action(replaceAll(content))
+}
+
+// Document-level replacement (file open, new file, external reload) that the
+// undo stack cannot cross. Loading a file through the regular replaceAll
+// enters history, so enough ⌘Z presses would roll the document all the way
+// back to the welcome content — and the next autosave would overwrite the
+// user's file with it (found by paste stress-testing).
+export function setMarkdownSkippingHistory(content: string): void {
+  if (!editorInstance) return
+  editorInstance.action((ctx) => {
+    const view = ctx.get(editorViewCtx)
+    const parsed = ctx.get(parserCtx)(content)
+    if (!parsed) return
+    const tr = view.state.tr
+      .replaceWith(0, view.state.doc.content.size, parsed.content)
+      .setMeta('addToHistory', false)
+      .scrollIntoView()
+    view.dispatch(tr)
+  })
 }
 
 export function getEditorView(): EditorView | null {

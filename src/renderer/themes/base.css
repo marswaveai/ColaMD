@@ -723,6 +723,407 @@ body.show-file-panel #source-editor {
   border-radius: 4px;
 }
 
+/* --- Image experience: node states, toolbar, lightbox, migration --- */
+
+#editor .ProseMirror .cmd-image {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+
+#editor .ProseMirror .cmd-image img {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+/* Loading shimmer: reserves the loaded box without jumping the layout. */
+#editor .ProseMirror .cmd-image:not(.loaded) img:not([src='']) {
+  min-height: 96px;
+  min-width: 160px;
+  background:
+    linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--text-muted) 14%, transparent) 50%, transparent 70%) no-repeat,
+    color-mix(in srgb, var(--text-muted) 10%, transparent);
+  background-size: 200% 100%;
+  animation: cmd-image-loading 1.4s ease-in-out infinite;
+}
+
+@keyframes cmd-image-loading {
+  from { background-position: 130% 0; }
+  to { background-position: -30% 0; }
+}
+
+#editor .ProseMirror .cmd-image.ProseMirror-selectednode img {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+}
+
+/* Broken image: inline action box instead of a silent broken glyph. */
+#editor .ProseMirror .cmd-image.broken img {
+  display: none;
+}
+
+#editor .ProseMirror .cmd-image .cmd-image-error {
+  display: none;
+}
+
+#editor .ProseMirror .cmd-image.broken .cmd-image-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 180px;
+  min-height: 96px;
+  justify-content: center;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-color);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#editor .ProseMirror .cmd-image .cmd-image-error button {
+  padding: 3px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#editor .ProseMirror .cmd-image .cmd-image-error button:hover {
+  border-color: var(--link-color);
+  color: var(--link-color);
+}
+
+/* Floating image toolbar: same overlay pattern as .code-copy-btn. */
+#editor > .cmd-image-toolbar {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+}
+
+#editor > .cmd-image-toolbar[hidden] {
+  display: none;
+}
+
+#editor > .cmd-image-toolbar .cmd-image-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#editor > .cmd-image-toolbar button {
+  padding: 3px 7px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, var(--text-muted));
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#editor > .cmd-image-toolbar button:hover {
+  background: rgba(127, 127, 127, 0.14);
+  color: var(--text-color);
+}
+
+#editor > .cmd-image-toolbar button.active {
+  background: color-mix(in srgb, var(--link-color) 16%, transparent);
+  color: var(--link-color);
+}
+
+/* An inline-HTML image renders inside a shrink-to-fit frame that owns the
+   alignment margins (moved off the img at render time), so the img and its
+   caption move and center together. */
+#editor .ProseMirror .milkdown-html-inline:has(> .cmd-html-image-frame) {
+  display: block;
+}
+
+#editor .ProseMirror .cmd-html-image-frame {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+#editor .ProseMirror .cmd-html-image-frame img {
+  display: block;
+  max-width: 100%;
+}
+
+#editor > .cmd-image-toolbar .cmd-image-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--border-color);
+}
+
+#editor > .cmd-image-toolbar .cmd-image-caption-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+}
+
+#editor > .cmd-image-toolbar .cmd-image-caption-row[hidden] {
+  display: none;
+}
+
+#editor > .cmd-image-toolbar .cmd-image-caption-row input {
+  flex: 1;
+  min-width: 150px;
+  padding: 3px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+#editor > .cmd-image-toolbar .cmd-image-caption-row input:focus {
+  border-color: var(--link-color);
+}
+
+/* Corner drag handles (Feishu model): white dots on the four corners. */
+#editor > .cmd-image-resize-handle {
+  position: absolute;
+  z-index: 12;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--link-color);
+  background: var(--bg-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: nwse-resize;
+}
+
+#editor > .cmd-image-resize-handle.cmd-image-handle-ne,
+#editor > .cmd-image-resize-handle.cmd-image-handle-sw {
+  cursor: nesw-resize;
+}
+
+#editor > .cmd-image-resize-handle[hidden] {
+  display: none;
+}
+
+/* Hover affordance: a light frame before the toolbar even appears. */
+#editor .ProseMirror .cmd-image:not(.broken):hover img,
+#editor .ProseMirror .milkdown-html-inline:hover img:first-child {
+  outline: 1px solid color-mix(in srgb, var(--link-color) 45%, transparent);
+  outline-offset: 2px;
+}
+
+/* Caption renders below the image, always centered relative to it. */
+#editor .ProseMirror .cmd-image-caption {
+  display: block;
+  padding-top: 4px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Legacy base64 migration banner sits above the update banner. */
+#image-migrate-banner {
+  position: fixed;
+  bottom: 76px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 40px));
+  padding: 9px 10px 9px 14px;
+  border-radius: 8px;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+  color: var(--text-color);
+  font-size: 13px;
+  z-index: 100;
+}
+
+#image-migrate-banner[hidden] {
+  display: none;
+}
+
+#image-migrate-text {
+  flex: 1;
+  line-height: 1.5;
+}
+
+#image-migrate-banner button {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#image-migrate-banner #image-migrate-action {
+  color: var(--link-color);
+  border-color: var(--link-color);
+}
+
+#image-migrate-banner button:hover {
+  background: rgba(127, 127, 127, 0.14);
+}
+
+/* Transient pipeline feedback (paste/save/copy results). */
+#cmd-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(30, 30, 30, 0.92);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  z-index: 1001;
+}
+
+#cmd-toast.visible {
+  opacity: 1;
+}
+
+/* Fullscreen image viewer. */
+#cmd-lightbox {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.84);
+  z-index: 1000;
+}
+
+#cmd-lightbox.open {
+  display: flex;
+}
+
+#cmd-lightbox.panning {
+  cursor: grabbing;
+}
+
+#cmd-lightbox img {
+  /* Layout at natural size — the fit scale is applied purely via transform.
+     A CSS max-width here would stack with the transform and double-shrink
+     large images (the "opens at a quarter size" bug). */
+  max-width: none;
+  max-height: none;
+  transform-origin: center center;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+#cmd-lightbox img.ready {
+  opacity: 1;
+}
+
+#cmd-lightbox.panning img {
+  cursor: grabbing;
+}
+
+#cmd-lightbox .cmd-lightbox-bar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: calc(100vw - 48px);
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.72);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+}
+
+#cmd-lightbox .cmd-lightbox-counter {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+#cmd-lightbox .cmd-lightbox-caption {
+  flex: 0 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#cmd-lightbox .cmd-lightbox-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+#cmd-lightbox .cmd-lightbox-controls button {
+  padding: 3px 9px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#cmd-lightbox .cmd-lightbox-controls button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#cmd-lightbox .cmd-lightbox-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.72);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+#cmd-lightbox .cmd-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* Long tokens (legacy data URIs, long URLs) wrap instead of scrolling the
+   source editor sideways. */
+#source-editor {
+  overflow-wrap: anywhere;
+}
+
 #editor .ProseMirror ::selection {
   background: var(--selection-bg);
 }

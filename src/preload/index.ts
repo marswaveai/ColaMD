@@ -9,6 +9,9 @@ export interface SiblingFile {
 type FileOpenedData = { path: string | null; content: string }
 type ImageExportPreset = 'desktop' | 'mobile'
 type ImageExportSnapshot = { html: string; styles: string; bodyClass: string; background: string }
+type SavedImageAsset = { absPath: string; relPath: string; fileUrl: string }
+type SaveImagePayload = { bytes?: Uint8Array; srcPath?: string; suggestedName?: string }
+type EmbeddedImageExtraction = { content: string; count: number }
 
 const pendingFileOpened: FileOpenedData[] = []
 let fileOpenedHandler: ((data: FileOpenedData) => void) | null = null
@@ -72,6 +75,12 @@ export interface ElectronAPI {
   reportRendererReady: () => void
   onRequestDocumentState: (callback: (requestId: string) => void) => void
   respondDocumentState: (requestId: string, snapshot: { dirty: boolean; content: string }) => void
+  saveImage: (payload: SaveImagePayload) => Promise<SavedImageAsset | null>
+  pickImages: () => Promise<string[] | null>
+  revealPath: (path: string) => Promise<boolean>
+  copyImage: (path: string) => Promise<boolean>
+  extractEmbeddedImages: (content: string) => Promise<EmbeddedImageExtraction | null>
+  onMenuInsertImage: (callback: () => void) => void
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -183,5 +192,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   respondDocumentState: (requestId: string, snapshot: { dirty: boolean; content: string }) => {
     ipcRenderer.send('document-state-response', requestId, snapshot)
+  },
+  saveImage: (payload: SaveImagePayload) => ipcRenderer.invoke('save-image', payload),
+  pickImages: () => ipcRenderer.invoke('pick-image'),
+  revealPath: (path: string) => ipcRenderer.invoke('reveal-path', path),
+  copyImage: (path: string) => ipcRenderer.invoke('copy-image', path),
+  extractEmbeddedImages: (content: string) => ipcRenderer.invoke('extract-embedded-images', content),
+  onMenuInsertImage: (callback: () => void) => {
+    ipcRenderer.on('editor:image', () => callback())
   }
 } satisfies ElectronAPI)
