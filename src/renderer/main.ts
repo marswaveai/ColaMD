@@ -1,3 +1,4 @@
+import { setupImageController } from './editor/image-controller'
 import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal } from './editor/editor'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
@@ -24,6 +25,7 @@ const updateBannerActionEl = () => document.getElementById('update-banner-action
 
 // --- Same-directory file panel ---
 let currentFilePath: string | null = null
+let imageDocumentId = 0
 let dirty = false
 // Programmatic Markdown replacement dispatches a synchronous ProseMirror
 // transaction. Suppress only that transaction, never a time window of input.
@@ -66,6 +68,7 @@ function applyFilePanelWidth(width: number): void {
 applyFilePanelWidth(clampFilePanelWidth(Number.parseInt(localStorage.getItem('file-panel-width') ?? '', 10) || FILE_PANEL_DEFAULT_WIDTH))
 
 function setMarkdownProgrammatically(content: string): void {
+  imageDocumentId += 1
   applyingProgrammaticChange = true
   try {
     setMarkdown(content)
@@ -574,6 +577,7 @@ async function refreshSiblings(): Promise<void> {
 }
 
 function enterSourceMode(content: string, ratio = 0): void {
+  imageDocumentId += 1
   sourceModeActive = true
   editorEl().classList.add('hidden')
   const ta = sourceEl()
@@ -691,6 +695,13 @@ async function init(): Promise<void> {
     scheduleOutlineUpdate()
   })
   updateWordCount()
+  setupImageController({
+    documentId: () => imageDocumentId,
+    documentPath: () => currentFilePath,
+    ensureSaved: () => saveCurrent(),
+    source: () => sourceModeActive ? sourceEl() : null,
+    sourceChanged: () => { setDirty(); updateWordCount(); scheduleOutlineUpdate() }
+  })
 
   // Main asks for an authoritative snapshot before any close or quit.
   api.onRequestDocumentState((requestId) => {
@@ -785,6 +796,7 @@ async function init(): Promise<void> {
       return
     }
     if (sourceModeActive) {
+      imageDocumentId += 1
       sourceEl().value = content
     } else {
       setMarkdownProgrammatically(content)

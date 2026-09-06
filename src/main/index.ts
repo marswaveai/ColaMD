@@ -1,10 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } from 'electron'
 import { execFile } from 'child_process'
 import { autoUpdater } from 'electron-updater'
-import { join, basename, dirname, extname, isAbsolute, resolve, relative } from 'path'
-import { fileURLToPath, pathToFileURL } from 'url'
+import { join, basename, dirname, extname } from 'path'
 import { appendFile, readFile, writeFile, readdir, copyFile, mkdir, stat } from 'fs/promises'
 import { watch, FSWatcher, existsSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { registerImageIPC } from './image-ipc'
+import { resolveImagePaths, restoreImagePaths } from './image-paths'
 
 const startupStartedAt = performance.now()
 const startupTraceEnabled = process.env.COLAMD_STARTUP_TRACE === '1'
@@ -429,57 +430,6 @@ function watchFile(win: BrowserWindow, state: WindowState): void {
   establish()
 }
 
-// Rewrite local image paths to encoded file:// URLs. This handles both
-// standard Markdown images and the raw <img src="..."> HTML that Milkdown
-// accepts, including Windows drive letters, backslashes, spaces and Unicode.
-function localImageUrl(src: string, dir: string): string {
-  const value = src.trim().replace(/^<|>$/g, '')
-  if (/^(?:https?:|file:|data:|blob:)/i.test(value)) return src
-  return pathToFileURL(isAbsolute(value) ? value : resolve(dir, value)).href
-}
-
-function resolveImagePaths(content: string, filePath: string): string {
-  const dir = dirname(filePath)
-  const markdown = content.replace(/!\[([^\]]*)\]\((?!https?:\/\/|file:\/\/|data:|blob:)([^)]+)\)/g, (_match, alt, src) => {
-    return `![${alt}](${localImageUrl(src, dir)})`
-  })
-
-  return markdown.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (_match, prefix, quote, src) => {
-    return `${prefix}${quote}${localImageUrl(src, dir)}${quote}`
-  })
-}
-
-// Keep the editor's display URLs out of the Markdown source. Image paths are
-// rewritten to file:// URLs for rendering, then converted back to paths that
-// are portable relative to the file being saved.
-function sourceImageUrl(src: string, dir: string): string {
-  const value = src.trim()
-  if (!/^file:/i.test(value)) return src
-
-  try {
-    const target = fileURLToPath(value)
-    const portable = relative(dir, target).replaceAll('\\', '/')
-    return portable || './'
-  } catch {
-    return src
-  }
-}
-
-function markdownImagePath(value: string): string {
-  return /[\s()]/.test(value) ? `<${value}>` : value
-}
-
-function restoreImagePaths(content: string, filePath: string): string {
-  const dir = dirname(filePath)
-  const markdown = content.replace(/!\[([^\]]*)\]\((file:[^)]+)\)/gi, (_match, alt, src) => {
-    return `![${alt}](${markdownImagePath(sourceImageUrl(src, dir))})`
-  })
-
-  return markdown.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])(file:[^"']+)\2/gi, (_match, prefix, quote, src) => {
-    return `${prefix}${quote}${sourceImageUrl(src, dir)}${quote}`
-  })
-}
-
 function loadFileInWindow(win: BrowserWindow, filePath: string): void {
   const state = getState(win)
   const operation = async (): Promise<void> => {
@@ -552,7 +502,7 @@ function saveToPath(win: BrowserWindow, filePath: string, content: string, sourc
     try {
       state.internalSaveCount += 1
       state.isInternalSave = true
-      const dataToWrite = restoreImagePaths(content, filePath)
+      const dataToWrite = restoreImagePaths(content, filePath, imageService.settings())
       await writeFile(filePath, dataToWrite, 'utf-8')
       state.lastInternalSaveContent = dataToWrite
       if (win.isDestroyed() || state.filePath !== sourcePath) return false
@@ -575,6 +525,11 @@ function saveToPath(win: BrowserWindow, filePath: string, content: string, sourc
   state.writeQueue = next.then(() => undefined, () => undefined)
   return next
 }
+
+const imageService = registerImageIPC({
+  settingsPath: join(app.getPath('home'), '.colamd', 'images.json'),
+  documentPath: (win) => getState(win).filePath
+})
 
 // IPC Handlers
 
@@ -1152,6 +1107,7 @@ function buildMenu(): void {
   const preferredCheatsheetLanguage = getPreferredCheatsheetLanguage()
   const labels = preferredCheatsheetLanguage === 'zh'
     ? {
+        image: '图片', imageSettings: '图片设置…', insertImages: '插入本地图片…', insertImageURL: '插入图片链接…', collectImages: '复制文档图片到附件目录…', revealImages: '打开图片目录',
         file: '文件', edit: '编辑', view: '视图', theme: '主题', help: '帮助',
         newFile: '新建', open: '打开...', save: '保存', saveAs: '另存为...',
         recentOpen: '最近打开', restoreOnLaunch: '启动时打开上次文档', clearRecent: '清除最近记录',
@@ -1169,6 +1125,7 @@ function buildMenu(): void {
         hide: '隐藏 ColaMD', hideOthers: '隐藏其他应用', showAll: '显示全部', quit: '退出 ColaMD',
       }
     : {
+        image: 'Image', imageSettings: 'Image Settings…', insertImages: 'Insert Local Images…', insertImageURL: 'Insert Image URL…', collectImages: 'Copy Document Images to Folder…', revealImages: 'Show Image Folder',
         file: 'File', edit: 'Edit', view: 'View', theme: 'Theme', help: 'Help',
         newFile: 'New', open: 'Open...', save: 'Save', saveAs: 'Save As...',
         recentOpen: 'Open Recent', restoreOnLaunch: 'Reopen last document at launch', clearRecent: 'Clear Recent',
@@ -1337,6 +1294,18 @@ function buildMenu(): void {
           accelerator: 'CmdOrCtrl+Shift+E',
           click: () => sendToFocused('editor:math')
         }
+      ]
+    },
+    {
+      label: labels.image,
+      submenu: [
+        { label: labels.imageSettings, click: () => sendToFocused('image-open-settings') },
+        { type: 'separator' },
+        { label: labels.insertImages, accelerator: 'CmdOrCtrl+Shift+I', click: () => sendToFocused('image-insert-files') },
+        { label: labels.insertImageURL, click: () => sendToFocused('image-insert-url') },
+        { label: labels.collectImages, click: () => sendToFocused('image-collect') },
+        { type: 'separator' },
+        { label: labels.revealImages, click: () => sendToFocused('image-reveal') }
       ]
     },
     {

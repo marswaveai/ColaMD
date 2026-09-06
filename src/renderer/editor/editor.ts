@@ -1,4 +1,6 @@
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
+import { imageInsertionPlugin, clearImageInsertions } from './image-insertion'
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, serializerCtx, parserCtx, remarkPluginsCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core'
+import { Transform } from '@milkdown/kit/prose/transform'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
 import remarkBreaks from 'remark-breaks'
@@ -447,6 +449,7 @@ export async function createEditor(
     .use(history)
     .use(listener)
     .use(clipboard)
+    .use(imageInsertionPlugin)
     .use(htmlView)
     .use(mermaidView)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
@@ -572,6 +575,8 @@ export function getMarkdown(): string {
 
 export function setMarkdown(content: string): void {
   if (!editorInstance) return
+  const view = getEditorView()
+  if (view) clearImageInsertions(view)
   editorInstance.action(replaceAll(content))
 }
 
@@ -582,4 +587,47 @@ export function getEditorView(): EditorView | null {
     view = ctx.get(editorViewCtx)
   })
   return view
+}
+
+// Work with parsed image nodes so code examples that happen to contain image
+// syntax are never rewritten by the collection command.
+export function captureImageCollection(source?: string): { sources: string[]; apply: (mapping: Map<string, string>) => string | null } | null {
+  if (!editorInstance) return null
+  let result: ReturnType<typeof captureImageCollection> = null
+  editorInstance.action((ctx) => {
+    const view = ctx.get(editorViewCtx)
+    const doc = source === undefined ? view.state.doc : ctx.get(parserCtx)(source)
+    if (!doc) return
+    const sources = new Set<string>()
+    doc.descendants((node) => {
+      if (node.type.name === 'image') sources.add(String(node.attrs.src))
+      if (node.type.name === 'html') {
+        const dom = new DOMParser().parseFromString(String(node.attrs.value || ''), 'text/html')
+        dom.querySelectorAll('img[src]').forEach((image) => sources.add(image.getAttribute('src')!))
+      }
+    })
+    result = {
+      sources: [...sources],
+      apply(mapping) {
+        if (source === undefined && !view.state.doc.eq(doc)) return null
+        const tr = source === undefined ? view.state.tr : new Transform(doc)
+        doc.descendants((node, position) => {
+          if (node.type.name === 'image' && mapping.has(node.attrs.src)) {
+            tr.setNodeMarkup(position, undefined, { ...node.attrs, src: mapping.get(node.attrs.src) })
+          } else if (node.type.name === 'html') {
+            const dom = new DOMParser().parseFromString(String(node.attrs.value || ''), 'text/html')
+            let changed = false
+            dom.querySelectorAll('img[src]').forEach((image) => {
+              const next = mapping.get(image.getAttribute('src')!)
+              if (next) { image.setAttribute('src', next); changed = true }
+            })
+            if (changed) tr.setNodeMarkup(position, undefined, { ...node.attrs, value: dom.body.innerHTML })
+          }
+        })
+        if (source === undefined) view.dispatch(tr as typeof view.state.tr)
+        return ctx.get(serializerCtx)(tr.doc)
+      }
+    }
+  })
+  return result
 }
