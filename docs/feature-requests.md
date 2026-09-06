@@ -128,9 +128,7 @@ Bug report: opening the first .md is fast, but opening another file while one is
 
 **Need:** Insert local images into Markdown without compromising editor stability or document content.
 
-**Status:** Deferred. The initial menu, paste, and drag-and-drop implementation was removed before `v1.9.0` after it proved unreliable.
-
-**Status:** Planned for next week's development review.
+**Status:** Implemented on `feat/image-pipeline` (reopened after the v1.9.0 rollback). Paste, drag-and-drop, and 编辑 → 插入图片…（⌘⇧I） save images into an `assets/` folder beside the document with SHA-256 content-hash filenames (deduplicated) and insert relative-path references; clipboard images and rich-text `data:` URIs are intercepted so base64 never enters the source. Untitled documents are asked to save first (VS Code rule). Selected images get a floating toolbar — width presets and a drag handle persisted as inline `<img … width>` (Typora model), caption/alt editing, replace, copy, reveal-in-folder, delete — and double-click opens a fullscreen viewer (wheel zoom, pan, arrow-key navigation, Esc). Load failures render an inline action box instead of a broken glyph. Legacy documents containing inline base64 get a one-click "extract to local files" banner. Design reference: MarkText (imageAction hook, hash naming, MIT), VS Code markdown copyFiles (untitled rule, MIT), Zettlr (clipboard intent rule, ideas only), Milkdown components (feature reference, MIT).
 
 ### Publish ColaMD for iOS
 

@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, dialog, Menu, nativeImage, shell, session } from 'electron'
 import { execFile } from 'child_process'
 import { autoUpdater } from 'electron-updater'
 import { join, basename, dirname, extname, isAbsolute, resolve, relative } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { appendFile, readFile, writeFile, readdir, copyFile, mkdir, stat } from 'fs/promises'
 import { watch, FSWatcher, existsSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { extractEmbeddedImages, isImageExtension, saveImageAsset } from './images'
 
 const startupStartedAt = performance.now()
 const startupTraceEnabled = process.env.COLAMD_STARTUP_TRACE === '1'
@@ -716,6 +717,81 @@ ipcMain.handle('save-file-as', async (event, content: string, expectedPath?: str
   return ok ? result.filePath : null
 })
 
+// --- Image asset pipeline ---
+
+// Save a pasted/dropped/inserted image into the document's asset folder. The
+// document must already have a path — the renderer saves untitled documents
+// first (paste.ts) so the asset lands beside the file it is referenced from.
+ipcMain.handle('save-image', async (event, payload: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || !payload || typeof payload !== 'object') return null
+  const docPath = getState(win).filePath
+  if (!docPath) return null
+  const { bytes, srcPath, suggestedName } = payload as { bytes?: Uint8Array; srcPath?: string; suggestedName?: string }
+  if (!(bytes instanceof Uint8Array) && typeof srcPath !== 'string') return null
+  if (typeof srcPath === 'string' && !isImageExtension(srcPath)) return null
+  try {
+    return await saveImageAsset({
+      docPath,
+      bytes: bytes instanceof Uint8Array ? bytes : undefined,
+      srcPath: typeof srcPath === 'string' ? srcPath : undefined,
+      suggestedName: typeof suggestedName === 'string' ? suggestedName : undefined,
+    })
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('pick-image', async (event) => {
+  const win = getWinFromEvent(event)
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, {
+    filters: [
+      { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp'] },
+      { name: 'All Files', extensions: ['*'] }
+    ],
+    properties: ['openFile', 'multiSelections']
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths.filter((p) => isImageExtension(p))
+})
+
+ipcMain.handle('reveal-path', (_event, targetPath: unknown) => {
+  if (typeof targetPath !== 'string' || !targetPath) return false
+  shell.showItemInFolder(targetPath)
+  return true
+})
+
+ipcMain.handle('copy-image', (_event, imagePath: unknown) => {
+  if (typeof imagePath !== 'string' || !isImageExtension(imagePath)) return false
+  try {
+    let rawPath = imagePath
+    if (imagePath.startsWith('file:')) rawPath = fileURLToPath(imagePath)
+    const image = nativeImage.createFromPath(rawPath)
+    if (image.isEmpty()) return false
+    clipboard.writeImage(image)
+    return true
+  } catch {
+    return false
+  }
+})
+
+// Rewrite legacy inline base64 images to asset-folder files.
+ipcMain.handle('extract-embedded-images', async (event, content: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof content !== 'string') return null
+  const docPath = getState(win).filePath
+  if (!docPath) return null
+  try {
+    const result = await extractEmbeddedImages(content, docPath)
+    // The editor displays load-format content: relative refs must come back
+    // as file:// URLs (same rewrite as open-file), save converts them back.
+    return { content: resolveImagePaths(result.content, docPath), count: result.count }
+  } catch {
+    return null
+  }
+})
+
 ipcMain.handle('export-docx', async (event, content: unknown) => {
   const win = getWinFromEvent(event)
   if (!win || typeof content !== 'string') return false
@@ -1157,7 +1233,7 @@ function buildMenu(): void {
         recentOpen: '最近打开', restoreOnLaunch: '启动时打开上次文档', clearRecent: '清除最近记录',
         exportPDF: '导出 PDF...', exportHTML: '导出 HTML...', exportWord: '导出 Word...', exportImageDesktop: '导出图片（电脑阅读）...', exportImageMobile: '导出图片（手机阅读）...', find: '查找',
         setDefault: '设置为默认应用...',
-        insertFormula: '插入公式', filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
+        insertFormula: '插入公式', insertImage: '插入图片…', filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
         light: '浅色', dark: '深色', elegant: '雅致',
         sepia: '羊皮纸', notion: '简白', bear: '熊红', writer: '作家',
         solarizedDark: '夜航', nord: '极地', gruvbox: '暖木', dracula: '德古拉', midnight: '午夜',
@@ -1174,7 +1250,7 @@ function buildMenu(): void {
         recentOpen: 'Open Recent', restoreOnLaunch: 'Reopen last document at launch', clearRecent: 'Clear Recent',
         exportPDF: 'Export PDF...', exportHTML: 'Export HTML...', exportWord: 'Export Word...', exportImageDesktop: 'Export Image (Desktop)...', exportImageMobile: 'Export Image (Mobile)...', find: 'Find',
         setDefault: 'Set as Default...',
-        insertFormula: 'Insert Formula', filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
+        insertFormula: 'Insert Formula', insertImage: 'Insert Image…', filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
         light: 'Light', dark: 'Dark', elegant: 'Elegant',
         sepia: 'Sepia', notion: 'Notion', bear: 'Bear', writer: 'Writer',
         solarizedDark: 'Solarized Dark', nord: 'Nord', gruvbox: 'Gruvbox', dracula: 'Dracula', midnight: 'Midnight',
@@ -1336,6 +1412,11 @@ function buildMenu(): void {
           label: labels.insertFormula,
           accelerator: 'CmdOrCtrl+Shift+E',
           click: () => sendToFocused('editor:math')
+        },
+        {
+          label: labels.insertImage,
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: () => sendToFocused('editor:image')
         }
       ]
     },

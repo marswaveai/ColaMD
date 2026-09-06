@@ -13,6 +13,9 @@ import { htmlView } from './html-view'
 import { mermaidView } from './mermaid-view'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
+import { imageView } from './image/node-view'
+import { imageSelectionBridge, initImageToolbar } from './image/toolbar'
+import { imageInputBridge, initImageInput } from './image/paste'
 
 import 'katex/dist/katex.min.css'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
@@ -449,6 +452,9 @@ export async function createEditor(
     .use(clipboard)
     .use(htmlView)
     .use(mermaidView)
+    .use(imageView)
+    .use(imageSelectionBridge)
+    .use(imageInputBridge)
     .use([remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema].flat())
     .use(mathEditorPlugin)
     .use(searchHighlight)
@@ -460,6 +466,10 @@ export async function createEditor(
   // Enhance clipboard with inline styles for rich text paste (e.g. WeChat)
   root.addEventListener('copy', enhanceClipboard)
   root.addEventListener('cut', enhanceClipboard)
+
+  // Image experience: paste/drop pipeline plus the floating toolbar overlay.
+  initImageToolbar(root)
+  initImageInput()
 
   // Cmd/Ctrl+B toggles the strong mark for an existing selection. This keeps
   // basic formatting editable without adding a permanent toolbar.

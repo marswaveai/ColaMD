@@ -32,5 +32,9 @@ export const htmlView = $view(htmlSchema.node, (): NodeViewConstructor => {
   return (node) => ({
     dom: renderHTML(String(node.attrs.value ?? '')),
     stopEvent: () => true,
+    // The rendered DOM is fully ours (stopEvent blocks native editing inside),
+    // so attribute tweaks — e.g. the image toolbar resizing an <img> during a
+    // drag — must not be mistaken for unexpected external mutations.
+    ignoreMutation: () => true,
   })
 })
