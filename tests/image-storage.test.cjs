@@ -140,6 +140,29 @@ test('HTTP and Base64 image destinations are retained on save', async (t) => {
   assert.equal(resolveImagePaths(content, f.doc), content)
 })
 
+test('Milkdown-escaped parentheses remain filename characters after save and reopen', async (t) => {
+  const f = await fixture(t)
+  const target = path.join(path.dirname(f.doc), '.assets', '中文 image (1).png')
+  const url = pathToFileURL(target).href
+  const serialized = `![plot](${url.replace(/[()]/g, '\\$&')})`
+  const saved = restoreImagePaths(serialized, f.doc)
+  assert.equal(saved, '![plot](<.assets/中文 image (1).png>)')
+  assert.equal(resolveImagePaths(saved, f.doc), `![plot](<${url}>)`)
+  const escapedAlt = serialized.replace('![plot]', '![plot \\[1\\]]')
+  assert.equal(restoreImagePaths(escapedAlt, f.doc), '![plot \\[1\\]](<.assets/中文 image (1).png>)')
+  assert.equal(resolveImagePaths('![plot](.assets/photo\\(1\\).png)', f.doc),
+    `![plot](<${pathToFileURL(path.join(path.dirname(f.doc), '.assets/photo(1).png')).href}>)`)
+})
+
+test('scaled HTML images preserve zoom and ampersands through save and reopen', async (t) => {
+  const f = await fixture(t)
+  const url = pathToFileURL(path.join(path.dirname(f.doc), '.assets', 'a&b (1).png')).href.replaceAll('&', '&amp;')
+  const html = `<img src="${url}" alt="a &amp; b" style="zoom: 50%;">`
+  const saved = restoreImagePaths(html, f.doc)
+  assert.equal(saved, '<img src=".assets/a&amp;b (1).png" alt="a &amp; b" style="zoom: 50%;">')
+  assert.equal(resolveImagePaths(saved, f.doc), html)
+})
+
 test('settings persist atomically and invalid files recover to defaults', async (t) => {
   const f = await fixture(t)
   const location = path.join(f.root, 'settings/images.json')

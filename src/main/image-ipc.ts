@@ -1,7 +1,8 @@
-import { BrowserWindow, dialog, ipcMain, net, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, shell } from 'electron'
 import { basename, dirname } from 'node:path'
 import type { ImageInput, ImageSettings, ImageImportResult, ImageSettingsState } from '../image-types'
 import { defaultImageSettings, IMAGE_EXTENSIONS, MAX_IMAGE_BYTES, imageDirectory, loadImageSettings, persistImageSettings, previewImage, storeImage, existingImageInput } from './image-storage'
+import { resolveImagePaths, restoreImagePaths } from './image-paths'
 
 export function registerImageIPC(options: {
   settingsPath: string
@@ -36,6 +37,32 @@ export function registerImageIPC(options: {
     return next
   })
   ipcMain.handle('image-settings-preview', async (event, value: ImageSettings) => previewImage(value, options.documentPath(windowFor(event))))
+  ipcMain.handle('image-source-convert', async (event, markdown: unknown, expectedPath: unknown, direction: unknown) => {
+    await ready
+    const path = options.documentPath(windowFor(event))
+    if (path !== expectedPath) throw new Error('The active document changed. Open the image again.')
+    if (typeof markdown !== 'string' || markdown.length > MAX_IMAGE_BYTES * 2 || !['display', 'markdown'].includes(String(direction))) {
+      throw new Error('Invalid image source.')
+    }
+    if (!path) return markdown
+    return direction === 'display' ? resolveImagePaths(markdown, path) : restoreImagePaths(markdown, path, settings)
+  })
+  ipcMain.handle('image-scale-menu', (event, current: unknown) => {
+    const win = windowFor(event)
+    const chinese = app.getLocale().toLowerCase().startsWith('zh')
+    return new Promise<number | null>((resolve) => {
+      const menu = Menu.buildFromTemplate([
+        { label: chinese ? '图片缩放比例' : 'Image Scale', enabled: false },
+        ...[25, 50, 75, 100, 150, 200].map((scale) => ({
+          label: `${scale}%`, type: 'checkbox' as const, checked: current === scale,
+          click: () => resolve(scale)
+        })),
+        { type: 'separator' },
+        { label: chinese ? '恢复原始大小' : 'Reset to Original Size', click: () => resolve(100) }
+      ])
+      menu.popup({ window: win, callback: () => resolve(null) })
+    })
+  })
   ipcMain.handle('image-choose-directory', async (event) => {
     const win = windowFor(event)
     const doc = options.documentPath(win)

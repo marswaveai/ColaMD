@@ -7,14 +7,23 @@ import { defaultImageSettings, imageSource, markdownImageSource } from './image-
 // matcher truncated local filenames containing parentheses on the next save.
 function rewriteImageSources(content: string, map: (src: string) => string): string {
   const markdown = content.replace(
-    /(!\[[^\]\r\n]*\]\()(<[^>\r\n]*>|(?:\\.|[^\s()\\]|\((?:\\.|[^()\\])*\))+)([ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\r\n)]*\)))?(\))/g,
+    /(!\[(?:\\.|[^\]\\\r\n])*\]\()(<[^>\r\n]*>|(?:\\.|[^\s()\\]|\((?:\\.|[^()\\])*\))+)([ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\r\n)]*\)))?(\))/g,
     (_all, prefix, destination: string, title, suffix) => {
-      const src = destination.startsWith('<') ? destination.slice(1, -1) : destination
+      const raw = destination.startsWith('<') ? destination.slice(1, -1) : destination
+      // Milkdown escapes punctuation such as \( in serialized destinations.
+      // Decode Markdown escapes before URL/path conversion; a backslash here
+      // is not a filesystem separator (otherwise photo\(1\) becomes photo/(1/)).
+      const src = raw.replace(/\\([!-/:-@\[-`{-~])/g, '$1')
       return prefix + markdownImageSource(map(src)) + (title || '') + suffix
     }
   )
   return markdown.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi,
-    (_all, prefix, quote, src) => `${prefix}${quote}${map(src).replaceAll(quote, quote === '"' ? '%22' : '%27')}${quote}`)
+    (_all, prefix, quote, src: string) => {
+      // DOM serialization escapes attribute values; map filesystem/URL values,
+      // then escape ampersands again when writing the HTML attribute.
+      const decoded = src.replaceAll('&quot;', '"').replace(/&#39;|&apos;/g, "'").replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&')
+      return `${prefix}${quote}${map(decoded).replaceAll('&', '&amp;').replaceAll(quote, quote === '"' ? '%22' : '%27')}${quote}`
+    })
 }
 
 // Literal Markdown examples must stay literal, including during Save As.

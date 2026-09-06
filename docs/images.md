@@ -3,7 +3,7 @@
 Use the **Image** menu (**图片** in Chinese). **Image Settings…** is the only
 settings entry point; there is no general preferences page or permanent toolbar.
 
-The menu also offers **Insert Local Images…** (`Cmd/Ctrl+Shift+I`),
+The menu also offers **Import Images… / 导入图片…** (`Cmd/Ctrl+Shift+I`),
 **Insert Image URL…**, **Copy Document Images to Folder…**, and **Show Image Folder**.
 Images can also be pasted from the clipboard or dropped into the visual/source
 editor. Clipboard screenshots do not need an existing filesystem path. Mixed
@@ -64,6 +64,26 @@ newly selected attachment directory. Ordinary saves never delete image files.
 
 ## Existing images
 
+Click an image in the visual editor to open **Image Markdown / 图片源代码**.
+The editable `![alt](path "title")` source uses the document's saved relative-path
+settings, and a separate field displays the parsed image path. Apply updates the
+image reference, alt text and title; Cancel leaves it unchanged. Invalid input
+cannot replace the image. **Copy Markdown** copies the displayed syntax.
+**Replace from File… / 从文件替换…** imports one file using the current folder and
+naming preferences, replaces that image and retains the original file and scale.
+This view edits Markdown images and standalone HTML `img` nodes. Arbitrary HTML
+blocks with surrounding content remain editable in document source mode.
+
+Right-click an image to choose **25%, 50%, 75%, 100%, 150% or 200%**, or
+**Reset to Original Size / 恢复原始大小**. The native menu marks the current scale.
+Scaling changes the document, not the underlying image bytes. As in Typora, a
+scaled image is saved as `<img src="…" style="zoom: 50%;">` because standard
+Markdown image syntax has no size attribute. Its relative path, alt text, title
+and scale survive saving and reopening. Reset removes the zoom style and restores
+Markdown image syntax when no other HTML attributes need to be kept. Themes may
+still constrain an image to the editor width. HTML zoom support depends on the
+Markdown viewer; the image reference remains usable in viewers that ignore zoom.
+
 **Copy Document Images to Folder…** shows the image count before copying and
 updating references using the current folder/naming settings. It handles Markdown
 image nodes, HTML `img` nodes and Base64 images. Code examples are left intact.
@@ -73,6 +93,11 @@ Settings apply to future imports, persist in `~/.colamd/images.json`, and are re
 by all windows. Opening a new settings dialog always loads the current settings.
 The preview shows the actual destination and the Markdown reference for a sample
 screenshot. Image files are limited to 50 MB each, with up to 100 per import.
+
+The menu and image dialogs follow ColaMD's existing Chinese/English system-language
+selection. macOS packages retain Electron's top-level `.lproj` directories, even
+when built from a local `electronDist`, so a Chinese system does not unexpectedly
+fall back to English. No separate language or general settings page is added.
 
 This implementation focuses on local import/storage. It does not interpret
 Typora YAML preferences, automatically move folders when a document is renamed,
@@ -91,7 +116,29 @@ npm run test:images:electron
 ```
 
 The filesystem tests use temporary directories. The Electron tests also isolate
-the app home, user data, settings, and documents; they do not use the system
+the app home, user data, settings, and documents; by default they do not use the system
 clipboard. Their synthetic binary clipboard and drag events run through the real
 renderer, preload and filesystem import pipeline. The Electron test output gives
 the temporary location of screenshots for visual review.
+
+For an opt-in check of the actual system clipboard, copy an image in Preview or
+a screenshot tool and run `COLAMD_NATIVE_CLIPBOARD=1 npm run test:images:electron`.
+This reads the existing clipboard without modifying it, invokes Chromium's native
+paste command, and checks image rendering, timestamped storage, relative Markdown
+and pixel equality. A text-only clipboard fails this check rather than passing
+as an image test.
+
+After macOS packaging, verify the language markers in the final application:
+
+```sh
+node scripts/check-mac-locales.cjs release/mac-arm64/ColaMD.app
+```
+
+For native macOS validation, launch the installed `.app` without a `--lang`
+override, check the Image menu and settings language, and open a disposable saved
+Markdown document. Capture an area with Control-Shift-Command-4 and paste using
+Command-V. Confirm that a timestamped PNG appears in the selected folder, its
+relative reference is saved, and the image renders after reopening. Also test
+the real file picker with a space/Unicode filename, change the folder to `.assets`,
+and verify the next import uses the new folder. These checks cover the native
+clipboard and dialogs that the automated suite simulates.

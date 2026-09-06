@@ -1,6 +1,6 @@
 // Run after npm run build: electron scripts/test-images-electron.cjs
 // All app data, documents and settings are isolated in a fresh temp directory.
-const { app, BrowserWindow, ipcMain, Menu, nativeImage, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, nativeImage, dialog, clipboard } = require('electron')
 const fs = require('node:fs/promises')
 const syncFS = require('node:fs')
 const path = require('node:path')
@@ -21,6 +21,16 @@ const sourceImage = path.join(root, 'source (中文).png')
 syncFS.writeFileSync(sourceImage, png)
 dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [sourceImage] })
 dialog.showSaveDialog = async () => ({ canceled: false, filePath: path.join(root, 'documents', '另存为.md') })
+let scaleChoice = 50
+const originalPopup = Menu.prototype.popup
+Menu.prototype.popup = function (options) {
+  const choices = this.items.filter((item) => /^\d+%$/.test(item.label))
+  if (choices.length === 6) {
+    assert.deepEqual(choices.map((item) => item.label), ['25%', '50%', '75%', '100%', '150%', '200%'])
+    choices.find((item) => item.label === `${scaleChoice}%`).click()
+    options.callback?.()
+  } else originalPopup.call(this, options)
+}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function until(check, message) {
   for (let i = 0; i < 150; i++) { if (await check()) return; await sleep(100) }
@@ -85,6 +95,45 @@ ipcMain.on('renderer-ready', (event) => {
     command('image-insert-files')
     await until(async () => await count() === 3, 'file picker import')
     await until(() => page(() => [...document.querySelectorAll('.ProseMirror img[src]')].every((i) => i.naturalWidth === 1)), 'all imported images render')
+    await until(async () => (await fs.readFile(doc, 'utf8')).includes('<.assets/source (中文).png>'), 'escaped parentheses save correctly')
+    const clickFileImage = () => page(() => [...document.querySelectorAll('.ProseMirror img')].find((i) => i.alt.includes('source')).click())
+    await clickFileImage()
+    await until(() => page(() => document.querySelector('#image-source-path')?.value === '.assets/source (中文).png'), 'clicked image shows persisted relative path')
+    await page(() => {
+      const source = document.querySelector('#image-source-markdown')
+      source.value = '![edited caption](<.assets/source (中文).png> "Image title")'
+      source.dispatchEvent(new Event('input'))
+      document.querySelector('dialog .math-modal-btn.save').click()
+    })
+    await until(() => page(() => !document.querySelector('dialog') && [...document.querySelectorAll('.ProseMirror img')].some((i) => i.alt === 'edited caption' && i.title === 'Image title' && i.naturalWidth === 1)), 'image source applies alt, title and relative path')
+    await page(() => [...document.querySelectorAll('.ProseMirror img')].find((i) => i.alt === 'edited caption').click())
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'image source reopen')
+    await page(() => {
+      const source = document.querySelector('#image-source-markdown'); source.value = 'ordinary text'; source.dispatchEvent(new Event('input'))
+    })
+    assert.ok(await page(() => document.querySelector('dialog .math-modal-btn.save').disabled))
+    await closeDialogs()
+    assert.ok(await page(() => [...document.querySelectorAll('.ProseMirror img')].some((i) => i.alt === 'edited caption')))
+    await page(() => [...document.querySelectorAll('.ProseMirror img')].find((i) => i.alt === 'edited caption').click())
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'replace image dialog')
+    await page(() => document.querySelector('dialog .math-modal-footer button').click())
+    await until(() => page(() => !document.querySelector('dialog') && [...document.querySelectorAll('.ProseMirror img')].some((i) => /source.*-1\.png/.test(decodeURIComponent(i.src)) && i.naturalWidth === 1)), 'replace image using configured import folder')
+    assert.equal(await count(), 3)
+    assert.deepEqual(await fs.readFile(sourceImage), png)
+    const scaleFileImage = async (value) => {
+      scaleChoice = value
+      await page(() => [...document.querySelectorAll('.ProseMirror img[src]')].find((i) => i.alt.includes('source')).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })))
+      await until(() => page((value) => {
+        const image = [...document.querySelectorAll('.ProseMirror img[src]')].find((i) => i.alt.includes('source'))
+        return image && Number(getComputedStyle(image).zoom) === value / 100
+      }, value), 'image scale ' + value)
+    }
+    for (const value of [25, 50, 75, 100, 150, 200, 50]) await scaleFileImage(value)
+    await clickFileImage()
+    await until(() => page(() => document.querySelector('#image-source-markdown')?.value.includes('zoom:')), 'scaled image source retains HTML zoom')
+    assert.equal(await page(() => document.querySelector('#image-source-path').value), '.assets/source (中文)-1.png')
+    await page(() => document.querySelector('dialog .math-modal-footer button').click())
+    await until(() => page(() => !document.querySelector('dialog') && [...document.querySelectorAll('.ProseMirror img[src]')].some((i) => /source.*-2\.png/.test(decodeURIComponent(i.src)) && Number(getComputedStyle(i).zoom) === 0.5)), 'scaled image replacement preserves scale')
     command('toggle-source-mode')
     await until(() => page(() => document.querySelector('#source-editor').classList.contains('visible')), 'source mode')
     await page(async (base64) => {
@@ -93,7 +142,7 @@ ipcMain.on('renderer-ready', (event) => {
       const transfer = new DataTransfer(); transfer.items.add(new File([bytes], 'source-mode.png', { type: 'image/png' }))
       editor.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }))
     }, png.toString('base64'))
-    await until(() => page(() => (document.querySelector('#source-editor').value.match(/!\[/g) || []).length === 4), 'source image paste')
+    await until(() => page(() => (document.querySelector('#source-editor').value.match(/!\[|<img\b/g) || []).length === 4), 'source image paste')
     command('toggle-source-mode')
     await until(async () => await count() === 4, 'source to visual')
     command('menu-save-as')
@@ -101,7 +150,27 @@ ipcMain.on('renderer-ready', (event) => {
     await until(async () => fs.readFile(moved, 'utf8').then((text) => text.includes('.assets/')).catch(() => false), 'save as')
     saved = await fs.readFile(moved, 'utf8')
     assert.ok(!saved.includes('file://'))
-    assert.match(saved, /source%20|source \(中文\)|source%20%28|source/)
+    assert.ok(saved.includes('src=".assets/source (中文)-2.png"'))
+    assert.ok(saved.includes('zoom:'))
+    const reopenOther = path.join(root, 'documents/reopen-other.md')
+    await fs.writeFile(reopenOther, '# Reopen test\n')
+    await page((doc) => window.electronAPI.openSibling(doc), reopenOther)
+    await until(async () => await count() === 0, 'leave document before reopen')
+    await page((doc) => window.electronAPI.openSibling(doc), moved)
+    await until(() => page(() => document.querySelectorAll('.ProseMirror img[src]').length === 4 && [...document.querySelectorAll('.ProseMirror img[src]')].every((i) => i.naturalWidth === 1)), 'all images render after save and reopen')
+    assert.ok(await page(() => [...document.querySelectorAll('.ProseMirror img[src]')].some((i) => i.alt.includes('source') && Number(getComputedStyle(i).zoom) === 0.5)))
+    await scaleFileImage(100)
+    await until(async () => (await fs.readFile(moved, 'utf8')).includes('<.assets/source (中文)-2.png>'), 'reset image scale restores Markdown syntax')
+    await page(() => document.querySelector('.ProseMirror img[src]').click())
+    await until(() => page(() => !!document.querySelector('#image-source-markdown') && !document.querySelector('#image-source-markdown').disabled), 'source dialog before document switch')
+    await page((doc) => window.electronAPI.openSibling(doc), reopenOther)
+    await until(async () => await count() === 0, 'switch while image source dialog is open')
+    await page(() => document.querySelector('dialog .math-modal-btn.save').click())
+    await until(() => page(() => document.querySelector('.image-setting-status')?.textContent.includes('changed')), 'reject stale source edit')
+    assert.equal(await fs.readFile(reopenOther, 'utf8'), '# Reopen test\n')
+    await closeDialogs()
+    await page((doc) => window.electronAPI.openSibling(doc), moved)
+    await until(async () => await count() === 4, 'restore edited image document')
     await page(() => document.querySelector('.ProseMirror').focus())
     await fs.writeFile(path.join(root, 'editor.png'), (await win.webContents.capturePage()).toPNG())
     // Verify data-URL migration, including preservation of an image example
@@ -182,6 +251,34 @@ ipcMain.on('renderer-ready', (event) => {
       assert.equal(await count(), 0)
       assert.equal(await fs.readFile(other, 'utf8'), '# Switched document\n\nKeep this unchanged.\n')
     } finally { await new Promise((resolve) => server.close(resolve)) }
+    // Opt-in native clipboard check: read the existing system image without
+    // replacing the user's clipboard. This uses Chromium's real paste command.
+    if (process.env.COLAMD_NATIVE_CLIPBOARD === '1') {
+      const original = clipboard.readImage()
+      assert.ok(!original.isEmpty(), 'Copy an image to the system clipboard before running this opt-in check')
+      const nativeDoc = path.join(root, 'documents/native-clipboard.md')
+      await fs.writeFile(nativeDoc, '# Native clipboard\n\nPaste here.\n')
+      await page((doc) => window.electronAPI.openSibling(doc), nativeDoc)
+      await until(() => page(() => document.querySelector('.ProseMirror')?.textContent.includes('Paste here.')), 'native clipboard document')
+      await page(async () => {
+        const { defaults } = await window.electronAPI.getImageSettings()
+        await window.electronAPI.saveImageSettings(defaults)
+        const editor = document.querySelector('.ProseMirror'); editor.focus()
+        const range = document.createRange(); range.selectNodeContents(editor.querySelector('p')); range.collapse(false)
+        const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range)
+      })
+      win.webContents.paste()
+      await until(async () => await count() === 1, 'real system image clipboard paste')
+      await until(() => page(() => document.querySelector('.ProseMirror img[src]')?.naturalWidth > 0), 'native clipboard image render')
+      await until(async () => (await fs.readFile(nativeDoc, 'utf8')).includes('native-clipboard.assets/image-'), 'native clipboard relative reference')
+      const folder = path.join(root, 'documents/native-clipboard.assets')
+      const files = await fs.readdir(folder)
+      assert.equal(files.length, 1)
+      assert.match(files[0], /^image-\d{8}-\d{6}-\d{3}\.png$/)
+      assert.deepEqual(nativeImage.createFromPath(path.join(folder, files[0])).toBitmap(), original.toBitmap())
+      assert.ok(!(await fs.readFile(nativeDoc, 'utf8')).includes('data:image/'))
+      console.log('Native system clipboard image: pasted, rendered, timestamped file saved; pixels match original.')
+    }
     // Load a user-specified document read-only for optional local verification.
     if (process.env.COLAMD_VERIFY_DOCUMENT) {
       const original = syncFS.readFileSync(process.env.COLAMD_VERIFY_DOCUMENT)
@@ -191,7 +288,7 @@ ipcMain.on('renderer-ready', (event) => {
       await until(() => extra?.webContents.executeJavaScript("document.querySelectorAll('.ProseMirror img[src]').length === 3 && [...document.querySelectorAll('.ProseMirror img[src]')].every(i => i.naturalWidth > 0)"), 'user document images render')
       assert.deepEqual(syncFS.readFileSync(process.env.COLAMD_VERIFY_DOCUMENT), original)
     }
-    console.log(JSON.stringify({ passed: true, checks: ['native Image menu', 'settings options and preview', 'settings persistence', 'binary clipboard import', 'multiple images', 'file picker', 'source-mode paste', 'autosave relative paths', 'Save As', 'Base64 collection', 'code example preservation', 'mixed rich-text image paste', 'drop while typing', 'remote download', 'selected root relative paths', 'document switch during import'], artifacts: root }))
+    console.log(JSON.stringify({ passed: true, checks: ['native Image menu', 'settings options and preview', 'settings persistence', 'binary clipboard import', 'multiple images', 'file picker', 'image Markdown inspection/edit/validation/cancel', 'replace image from file', 'six scale presets', 'scaled HTML source and replacement', 'scale persistence and reset', 'source-mode paste', 'autosave relative paths', 'Save As and reopen with parentheses', 'Base64 collection', 'code example preservation', 'mixed rich-text image paste', 'drop while typing', 'remote download', 'selected root relative paths', 'document switch during import'], artifacts: root }))
   })().catch(async (error) => { failure = error; console.error(error); console.log('Artifacts:', root); console.log(await page(() => ({dialogs: [...document.querySelectorAll('dialog')].map(d => d.textContent), content: document.querySelector('.ProseMirror')?.innerHTML}))); await fs.writeFile(path.join(root, 'failure.png'), (await win.webContents.capturePage()).toPNG()) }).finally(() => {
     // Leave the temp artifacts for review, but never run normal close-save UI.
     for (const window of BrowserWindow.getAllWindows()) window.destroy()

@@ -31,6 +31,8 @@ export interface ElectronAPI {
   chooseImageDirectory: () => Promise<string | null>
   selectImageFiles: () => Promise<ImageInput[]>
   importImages: (images: ImageInput[], expectedPath: string, forceCopy?: boolean) => Promise<ImageImportResult>
+  convertImageSource: (markdown: string, expectedPath: string | null, direction: 'display' | 'markdown') => Promise<string>
+  showImageScaleMenu: (current: number) => Promise<number | null>
   revealImageDirectory: () => Promise<string>
   onImageCommand: (callback: (command: 'settings' | 'files' | 'url' | 'collect' | 'reveal') => void) => void
   openFile: () => Promise<{ path: string; content: string } | null>
@@ -90,6 +92,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chooseImageDirectory: () => ipcRenderer.invoke('image-choose-directory'),
   selectImageFiles: () => ipcRenderer.invoke('image-select-files'),
   importImages: (images: ImageInput[], expectedPath: string, forceCopy = false) => ipcRenderer.invoke('image-import', images, expectedPath, forceCopy),
+  convertImageSource: (markdown: string, expectedPath: string | null, direction: 'display' | 'markdown') => ipcRenderer.invoke('image-source-convert', markdown, expectedPath, direction),
+  showImageScaleMenu: (current: number) => ipcRenderer.invoke('image-scale-menu', current),
   revealImageDirectory: () => ipcRenderer.invoke('image-reveal-directory'),
   onImageCommand: (callback: (command: 'settings' | 'files' | 'url' | 'collect' | 'reveal') => void) => {
     const commands = { 'image-open-settings': 'settings', 'image-insert-files': 'files', 'image-insert-url': 'url', 'image-collect': 'collect', 'image-reveal': 'reveal' } as const

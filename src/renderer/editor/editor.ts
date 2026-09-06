@@ -589,6 +589,76 @@ export function getEditorView(): EditorView | null {
   return view
 }
 
+export function captureImageSource(element: HTMLImageElement) {
+  if (!editorInstance) return null
+  return editorInstance.action((ctx) => {
+    const view = ctx.get(editorViewCtx)
+    const position = view.posAtDOM(element, 0)
+    const original = view.state.doc
+    const image = original.nodeAt(position)
+    // Scaled images use standard HTML, as in Typora, because Markdown's image
+    // syntax has no size attribute. Only a standalone img is edited here;
+    // arbitrary HTML blocks retain all their surrounding content.
+    const asImage = (node: typeof image): HTMLImageElement | null => {
+      if (!node || !['image', 'html'].includes(node.type.name)) return null
+      const template = document.createElement('template')
+      template.innerHTML = node.type.name === 'html' ? String(node.attrs.value) : '<img>'
+      const children = [...template.content.childNodes].filter((child) => child.nodeType !== Node.TEXT_NODE || child.textContent?.trim())
+      const img = children[0]
+      if (children.length !== 1 || !(img instanceof HTMLImageElement)) return null
+      if (node.type.name === 'image') {
+        for (const key of ['src', 'alt', 'title']) if (node.attrs[key]) img.setAttribute(key, String(node.attrs[key]))
+      }
+      return img
+    }
+    const originalImage = asImage(image)
+    if (!image || !originalImage) return null
+    const serialize = (node: typeof image): string => ctx.get(serializerCtx)(
+      view.state.schema.topNodeType.create(null, view.state.schema.nodes.paragraph.create(null, node))
+    ).trim()
+    const parse = (source: string) => {
+      const doc = ctx.get(parserCtx)(source)
+      const first = doc?.firstChild
+      const node = first?.type.name === 'html' ? first : first?.type.name === 'paragraph' && first.childCount === 1 ? first.firstChild : null
+      return doc?.childCount === 1 && asImage(node) ? node : null
+    }
+    const replace = (node: typeof image): boolean => {
+      if (view.isDestroyed || !view.state.doc.eq(original)) return false
+      view.dispatch(view.state.tr.replaceWith(position, position + image.nodeSize, node))
+      view.focus()
+      return true
+    }
+    const zoom = originalImage.style.zoom
+    const scale = zoom ? parseFloat(zoom) * (zoom.endsWith('%') ? 1 : 100) : 100
+    return {
+      markdown: serialize(image),
+      scale: Number.isFinite(scale) && scale > 0 ? scale : 100,
+      path: (source: string): string | null => asImage(parse(source))?.getAttribute('src') ?? null,
+      replacement(src: string, alt: string): string {
+        if (image.type.name === 'image') return serialize(image.type.create({ ...image.attrs, src, alt }))
+        const next = originalImage.cloneNode(true) as HTMLImageElement
+        next.setAttribute('src', src); next.setAttribute('alt', alt)
+        return serialize(image.type.create({ value: next.outerHTML }))
+      },
+      setScale(value: number): boolean {
+        if (![25, 50, 75, 100, 150, 200].includes(value)) return false
+        const next = originalImage.cloneNode(true) as HTMLImageElement
+        if (value === 100) next.style.removeProperty('zoom')
+        else next.style.zoom = `${value}%`
+        if (!next.getAttribute('style')?.trim()) next.removeAttribute('style')
+        const plain = [...next.attributes].every((attribute) => ['src', 'alt', 'title'].includes(attribute.name))
+        const node = plain ? view.state.schema.nodes.image.create({ src: next.getAttribute('src') || '', alt: next.alt, title: next.title })
+          : view.state.schema.nodes.html.create({ value: next.outerHTML })
+        return replace(node)
+      },
+      apply(source: string): boolean {
+        const node = parse(source)
+        return !!node && replace(node)
+      }
+    }
+  })
+}
+
 // Work with parsed image nodes so code examples that happen to contain image
 // syntax are never rewritten by the collection command.
 export function captureImageCollection(source?: string): { sources: string[]; apply: (mapping: Map<string, string>) => string | null } | null {

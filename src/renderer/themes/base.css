@@ -1199,6 +1199,8 @@ dialog.image-modal::backdrop { background: color-mix(in srgb, var(--text-color) 
 .image-modal h3 { margin: 0 0 16px; }
 .image-modal .math-modal-footer { gap: 8px; flex-wrap: wrap; }
 .image-settings-grid { display: grid; gap: 12px; }
+.image-setting-control.image-source-markdown { display: block; width: 100%; box-sizing: border-box; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 8px 0 16px; }
+#image-source-path { display: block; width: 100%; box-sizing: border-box; margin-top: 8px; }
 .image-setting-row { display: flex; align-items: center; gap: 10px; }
 .image-setting-row[hidden] { display: none; }
 .image-setting-row label { flex: 1; font-size: 13px; }

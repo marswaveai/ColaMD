@@ -2,6 +2,7 @@ import type { ImageInput, ImportedImage } from '../../image-types'
 import { getEditorView, captureImageCollection } from './editor'
 import { captureImageInsertion } from './image-insertion'
 import { imageDialog, imageButton, showImageMessage, showImageSettings } from './image-settings'
+import { setupImageSource } from './image-source'
 
 const t = (cn: string, en: string): string => navigator.language.toLowerCase().startsWith('zh') ? cn : en
 const errorText = (error: unknown): string => error instanceof Error ? error.message : String(error)
@@ -13,6 +14,7 @@ export function setupImageController(host: {
   source: () => HTMLTextAreaElement | null
   sourceChanged: () => void
 }): void {
+  setupImageSource(host)
   const api = window.electronAPI
   const capture = (position?: number): { insert: (images: ImportedImage[], html?: string) => boolean; cancel: () => void } | null => {
     const source = host.source()

@@ -1107,7 +1107,7 @@ function buildMenu(): void {
   const preferredCheatsheetLanguage = getPreferredCheatsheetLanguage()
   const labels = preferredCheatsheetLanguage === 'zh'
     ? {
-        image: '图片', imageSettings: '图片设置…', insertImages: '插入本地图片…', insertImageURL: '插入图片链接…', collectImages: '复制文档图片到附件目录…', revealImages: '打开图片目录',
+        image: '图片', imageSettings: '图片设置…', insertImages: '导入图片…', insertImageURL: '插入图片链接…', collectImages: '复制文档图片到附件目录…', revealImages: '打开图片目录',
         file: '文件', edit: '编辑', view: '视图', theme: '主题', help: '帮助',
         newFile: '新建', open: '打开...', save: '保存', saveAs: '另存为...',
         recentOpen: '最近打开', restoreOnLaunch: '启动时打开上次文档', clearRecent: '清除最近记录',
@@ -1125,7 +1125,7 @@ function buildMenu(): void {
         hide: '隐藏 ColaMD', hideOthers: '隐藏其他应用', showAll: '显示全部', quit: '退出 ColaMD',
       }
     : {
-        image: 'Image', imageSettings: 'Image Settings…', insertImages: 'Insert Local Images…', insertImageURL: 'Insert Image URL…', collectImages: 'Copy Document Images to Folder…', revealImages: 'Show Image Folder',
+        image: 'Image', imageSettings: 'Image Settings…', insertImages: 'Import Images…', insertImageURL: 'Insert Image URL…', collectImages: 'Copy Document Images to Folder…', revealImages: 'Show Image Folder',
         file: 'File', edit: 'Edit', view: 'View', theme: 'Theme', help: 'Help',
         newFile: 'New', open: 'Open...', save: 'Save', saveAs: 'Save As...',
         recentOpen: 'Open Recent', restoreOnLaunch: 'Reopen last document at launch', clearRecent: 'Clear Recent',
