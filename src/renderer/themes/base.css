@@ -877,22 +877,43 @@ body.show-file-panel #source-editor {
   border-color: var(--link-color);
 }
 
-/* Drag handle for resizing the active image. */
+/* Corner drag handles (Feishu model): white dots on the four corners. */
 #editor > .cmd-image-resize-handle {
   position: absolute;
   z-index: 12;
   width: 12px;
   height: 12px;
+  border-radius: 50%;
   border: 2px solid var(--link-color);
-  border-radius: 3px;
   background: var(--bg-color);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   cursor: nwse-resize;
-  transform: translate(2px, 2px);
+}
+
+#editor > .cmd-image-resize-handle.cmd-image-handle-ne,
+#editor > .cmd-image-resize-handle.cmd-image-handle-sw {
+  cursor: nesw-resize;
 }
 
 #editor > .cmd-image-resize-handle[hidden] {
   display: none;
+}
+
+/* Hover affordance: a light frame before the toolbar even appears. */
+#editor .ProseMirror .cmd-image:not(.broken):hover img,
+#editor .ProseMirror .milkdown-html-inline:hover img:first-child {
+  outline: 1px solid color-mix(in srgb, var(--link-color) 45%, transparent);
+  outline-offset: 2px;
+}
+
+/* Caption renders below the image (Feishu model), driven by alt text. */
+#editor .ProseMirror .cmd-image-caption {
+  display: block;
+  padding-top: 4px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 /* Legacy base64 migration banner sits above the update banner. */
@@ -973,6 +994,7 @@ body.show-file-panel #source-editor {
   display: none;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   background: rgba(0, 0, 0, 0.84);
   z-index: 1000;
 }
@@ -986,8 +1008,11 @@ body.show-file-panel #source-editor {
 }
 
 #cmd-lightbox img {
-  max-width: calc(100vw - 64px);
-  max-height: calc(100vh - 120px);
+  /* Layout at natural size — the fit scale is applied purely via transform.
+     A CSS max-width here would stack with the transform and double-shrink
+     large images (the "opens at a quarter size" bug). */
+  max-width: none;
+  max-height: none;
   transform-origin: center center;
   cursor: grab;
   opacity: 0;

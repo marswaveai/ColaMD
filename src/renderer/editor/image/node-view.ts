@@ -7,9 +7,10 @@ import { openLightbox } from './lightbox'
 import { saveImageToAssets } from './core'
 
 // Node view for markdown `![](src)` images. The wrapper is our own DOM, so
-// loading/error state can be rendered without tripping ProseMirror's
-// unexpected-mutation redraw (see the code-copy button note in editor.ts).
-// Selection, drag and keyboard deletion stay with ProseMirror.
+// loading/error state and the caption line can be rendered without tripping
+// ProseMirror's unexpected-mutation redraw (see the code-copy button note in
+// editor.ts). Selection, drag and keyboard deletion stay with ProseMirror.
+// The caption (alt text) renders below the image, Feishu-style.
 export const imageView = $view(imageSchema.node, (): NodeViewConstructor => {
   return (node, view: EditorView, getPos) => {
     const dom = document.createElement('span')
@@ -21,6 +22,11 @@ export const imageView = $view(imageSchema.node, (): NodeViewConstructor => {
     img.title = node.attrs.title || node.attrs.alt || ''
     img.draggable = false
     dom.appendChild(img)
+
+    const caption = document.createElement('span')
+    caption.className = 'cmd-image-caption'
+    caption.textContent = node.attrs.alt ?? ''
+    dom.appendChild(caption)
 
     const errorBox = document.createElement('span')
     errorBox.className = 'cmd-image-error'
@@ -86,6 +92,7 @@ export const imageView = $view(imageSchema.node, (): NodeViewConstructor => {
           const title = updated.attrs.title || updated.attrs.alt || ''
           if (img.title !== title) img.title = title
         }
+        if (caption) caption.textContent = updated.attrs.alt ?? ''
         if (img?.complete && img.naturalWidth > 0) markLoaded()
         return true
       },

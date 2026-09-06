@@ -1,6 +1,7 @@
-import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal } from './editor/editor'
+import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, setMarkdownSkippingHistory, showMathModal } from './editor/editor'
 import { configureImageExperience, countEmbeddedDataImages } from './editor/image/core'
-import { insertImagesFromPicker } from './editor/image/paste'
+import { insertImagesFromPicker, whenImageWritesSettled } from './editor/image/paste'
+import { hideImageToolbar } from './editor/image/toolbar'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
@@ -180,6 +181,9 @@ async function runAutosave(): Promise<void> {
 }
 
 async function saveCurrent(saveAs = false): Promise<boolean> {
+  // Never persist a document whose pasted images are still mid-write: the
+  // placeholder blob: src would land on disk as a dead reference.
+  await whenImageWritesSettled()
   const revision = documentRevision
   const content = getContent()
   const expectedPath = currentFilePath
@@ -594,8 +598,21 @@ function exitSourceMode(): void {
 
 function setContent(content: string): void {
   exitSourceMode()
-  setMarkdownProgrammatically(content)
+  // Document loads must not enter the undo stack — ⌘Z must never roll back
+  // past the loaded document itself.
+  setMarkdownProgrammatic(content)
   updateWordCount()
+}
+
+// Like setMarkdownProgrammatically, but the replacement stays out of undo
+// history (file open / new file / external reload).
+function setMarkdownProgrammatic(content: string): void {
+  applyingProgrammaticChange = true
+  try {
+    setMarkdownSkippingHistory(content)
+  } finally {
+    applyingProgrammaticChange = false
+  }
 }
 
 // --- Image migration banner (legacy inline base64) ---
@@ -791,9 +808,12 @@ async function init(): Promise<void> {
   })
   updateWordCount()
 
-  // Main asks for an authoritative snapshot before any close or quit.
+  // Main asks for an authoritative snapshot before any close or quit; wait
+  // out in-flight image writes so the snapshot never carries a blob: src.
   api.onRequestDocumentState((requestId) => {
-    window.electronAPI.respondDocumentState(requestId, { dirty, content: getContent() })
+    void whenImageWritesSettled().then(() => {
+      window.electronAPI.respondDocumentState(requestId, { dirty, content: getContent() })
+    })
   })
   api.reportRendererReady()
 
@@ -844,10 +864,10 @@ async function init(): Promise<void> {
 
   api.onMenuSave(() => { void saveCurrent() })
   api.onMenuSaveAs(() => { void saveCurrent(true) })
-  api.onMenuExportPDF(() => api.exportPDF())
-  api.onMenuExportHTML(() => { void exportCurrentHTML() })
-  api.onMenuExportDOCX(() => { void api.exportDOCX(getContent()) })
-  api.onMenuExportImage((preset) => { void exportCurrentImage(preset) })
+  api.onMenuExportPDF(() => { hideImageToolbar(); api.exportPDF() })
+  api.onMenuExportHTML(() => { hideImageToolbar(); void exportCurrentHTML() })
+  api.onMenuExportDOCX(() => { hideImageToolbar(); void api.exportDOCX(getContent()) })
+  api.onMenuExportImage((preset) => { hideImageToolbar(); void exportCurrentImage(preset) })
 
   api.onNewFile(() => { exitSourceMode(); applyContent(''); updateImageMigrationBanner('') })
   api.onFileOpened((data) => {
@@ -888,7 +908,7 @@ async function init(): Promise<void> {
     if (sourceModeActive) {
       sourceEl().value = content
     } else {
-      setMarkdownProgrammatically(content)
+      setMarkdownProgrammatic(content)
     }
     updateSourceToggle()
     updateWordCount()

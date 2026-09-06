@@ -77,6 +77,23 @@ function escapeMarkdownDestination(path: string): string {
   return /[\s()]/.test(path) ? `<${path}>` : path
 }
 
+// Placeholder images enter the document with a blob: src and get their final
+// file:// src once the asset is written. A save that lands inside that window
+// would persist a dead blob: URL, so every write is tracked here and the host
+// app drains it before saving (see saveCurrent in main.ts).
+const pendingImageWrites = new Set<Promise<unknown>>()
+
+function trackImageWrite(task: Promise<unknown>): void {
+  const wrapped = task.finally(() => pendingImageWrites.delete(wrapped))
+  pendingImageWrites.add(wrapped)
+}
+
+/** Resolves once no image asset write is in flight (including cascades). */
+export function whenImageWritesSettled(): Promise<void> {
+  if (pendingImageWrites.size === 0) return Promise.resolve()
+  return Promise.all([...pendingImageWrites]).then(() => whenImageWritesSettled())
+}
+
 interface PlaceholderHit {
   pos: number
   nodeSize: number
@@ -123,19 +140,22 @@ async function insertImageFiles(files: File[], insertPos?: number): Promise<void
     const blobUrl = URL.createObjectURL(file)
     insertPlaceholder(view, blobUrl, insertPos != null ? insertPos + cursorOffset : undefined)
     cursorOffset += 1
-    try {
-      const asset = await saveImageToAssets({ file })
-      if (!asset) throw new Error('save failed')
-      const hit = findImageBySrc(view, blobUrl)
-      if (!hit) throw new Error('placeholder lost')
-      view.dispatch(view.state.tr.setNodeMarkup(hit.pos, undefined, { src: asset.fileUrl, alt: '', title: '' }))
-    } catch {
-      const hit = findImageBySrc(view, blobUrl)
-      if (hit) view.dispatch(view.state.tr.delete(hit.pos, hit.pos + hit.nodeSize))
-      hooks.notify('图片保存失败，请重试')
-    } finally {
-      URL.revokeObjectURL(blobUrl)
-    }
+    const task = (async (): Promise<void> => {
+      try {
+        const asset = await saveImageToAssets({ file })
+        if (!asset) throw new Error('save failed')
+        const hit = findImageBySrc(view, blobUrl)
+        if (!hit) throw new Error('placeholder lost')
+        view.dispatch(view.state.tr.setNodeMarkup(hit.pos, undefined, { src: asset.fileUrl, alt: '', title: '' }))
+      } catch {
+        const hit = findImageBySrc(view, blobUrl)
+        if (hit) view.dispatch(view.state.tr.delete(hit.pos, hit.pos + hit.nodeSize))
+        hooks.notify('图片保存失败，请重试')
+      } finally {
+        URL.revokeObjectURL(blobUrl)
+      }
+    })()
+    trackImageWrite(task)
   }
 }
 
