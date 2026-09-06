@@ -847,13 +847,21 @@ body.show-file-panel #source-editor {
   color: var(--link-color);
 }
 
-/* An inline-HTML image is a block-level unit: the img aligns itself via its
-   margin style, and the caption follows. */
-#editor .ProseMirror .milkdown-html-inline:has(> img) {
+/* An inline-HTML image renders inside a shrink-to-fit frame that owns the
+   alignment margins (moved off the img at render time), so the img and its
+   caption move and center together. */
+#editor .ProseMirror .milkdown-html-inline:has(> .cmd-html-image-frame) {
   display: block;
 }
 
-#editor .ProseMirror .milkdown-html-inline:has(> img) img {
+#editor .ProseMirror .cmd-html-image-frame {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+#editor .ProseMirror .cmd-html-image-frame img {
+  display: block;
   max-width: 100%;
 }
 
@@ -921,7 +929,7 @@ body.show-file-panel #source-editor {
   outline-offset: 2px;
 }
 
-/* Caption renders below the image (Feishu model), driven by alt text. */
+/* Caption renders below the image, always centered relative to it. */
 #editor .ProseMirror .cmd-image-caption {
   display: block;
   padding-top: 4px;
@@ -929,15 +937,6 @@ body.show-file-panel #source-editor {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.6;
-}
-
-/* Inline-HTML image captions follow the image's alignment. */
-#editor .ProseMirror .cmd-image-caption.cmd-align-left {
-  text-align: left;
-}
-
-#editor .ProseMirror .cmd-image-caption.cmd-align-right {
-  text-align: right;
 }
 
 /* Legacy base64 migration banner sits above the update banner. */
