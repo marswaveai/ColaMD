@@ -26,22 +26,27 @@ function renderHTML(value: string): HTMLSpanElement {
   })
   dom.append(...Array.from(parsed.body.childNodes))
 
-  // Inline-HTML images show their alt text as a caption below the image,
-  // aligned with the image itself (its margin style carries the alignment).
-  // CSSOM expands margin shorthands, so `margin:0 0 0 auto` reads correctly.
+  // Inline-HTML images get the same presentation as markdown image nodes:
+  // img + caption live inside a shrink-to-fit frame that carries the image's
+  // alignment margins, so the caption is always centered relative to the
+  // image itself — not to the full text column. The persisted style on the
+  // img stays untouched (Typora-compatible); the frame is render-only.
   const image = dom.querySelector('img')
-  if (image instanceof HTMLImageElement && image.alt) {
-    const caption = document.createElement('span')
-    const marginLeftAuto = image.style.marginLeft === 'auto'
-    const marginRightAuto = image.style.marginRight === 'auto'
-    const alignClass = marginLeftAuto && marginRightAuto
-      ? 'cmd-align-center'
-      : marginLeftAuto
-        ? 'cmd-align-right'
-        : 'cmd-align-left'
-    caption.className = `cmd-image-caption ${alignClass}`
-    caption.textContent = image.alt
-    dom.appendChild(caption)
+  if (image instanceof HTMLImageElement) {
+    const frame = document.createElement('span')
+    frame.className = 'cmd-html-image-frame'
+    frame.style.marginLeft = image.style.marginLeft
+    frame.style.marginRight = image.style.marginRight
+    image.style.marginLeft = ''
+    image.style.marginRight = ''
+    image.parentNode?.insertBefore(frame, image)
+    frame.appendChild(image)
+    if (image.alt) {
+      const caption = document.createElement('span')
+      caption.className = 'cmd-image-caption'
+      caption.textContent = image.alt
+      frame.appendChild(caption)
+    }
   }
   return dom
 }
