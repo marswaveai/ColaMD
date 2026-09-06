@@ -84,9 +84,10 @@ function parseImgValue(value: string): ParsedImgValue | null {
   const parsed = new DOMParser().parseFromString(`<body>${value}</body>`, 'text/html')
   const img = parsed.body.querySelector('img')
   if (!img) return null
-  const style = img.getAttribute('style') ?? ''
-  const marginLeftAuto = /margin-left\s*:\s*auto/i.test(style)
-  const marginRightAuto = /margin-right\s*:\s*auto/i.test(style)
+  // CSSOM expands the margin shorthand for us — string regexes would miss
+  // `margin:0 0 0 auto`, which is exactly what we write for right alignment.
+  const marginLeftAuto = img.style.marginLeft === 'auto'
+  const marginRightAuto = img.style.marginRight === 'auto'
   const align: ImageAlign = marginLeftAuto && marginRightAuto ? 'center' : marginLeftAuto ? 'right' : 'left'
   const widthAttr = Number.parseInt(img.getAttribute('width') ?? '', 10)
   return {

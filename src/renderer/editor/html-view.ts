@@ -28,12 +28,12 @@ function renderHTML(value: string): HTMLSpanElement {
 
   // Inline-HTML images show their alt text as a caption below the image,
   // aligned with the image itself (its margin style carries the alignment).
+  // CSSOM expands margin shorthands, so `margin:0 0 0 auto` reads correctly.
   const image = dom.querySelector('img')
   if (image instanceof HTMLImageElement && image.alt) {
     const caption = document.createElement('span')
-    const style = image.getAttribute('style') ?? ''
-    const marginLeftAuto = /margin-left\s*:\s*auto/i.test(style)
-    const marginRightAuto = /margin-right\s*:\s*auto/i.test(style)
+    const marginLeftAuto = image.style.marginLeft === 'auto'
+    const marginRightAuto = image.style.marginRight === 'auto'
     const alignClass = marginLeftAuto && marginRightAuto
       ? 'cmd-align-center'
       : marginLeftAuto
