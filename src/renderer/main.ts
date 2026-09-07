@@ -281,31 +281,6 @@ function toggleSourceMode(): void {
   scheduleOutlineUpdate()
 }
 
-function updateFilePanelWidth(width: number): void {
-  const next = Math.min(420, Math.max(180, Math.round(width)))
-  document.documentElement.style.setProperty('--file-panel-width', `${next}px`)
-  localStorage.setItem('file-panel-width', String(next))
-}
-
-function setupFilePanelResizer(): void {
-  const handle = document.getElementById('file-panel-resizer')
-  if (!handle) return
-  let startX = 0
-  let startWidth = 0
-  handle.addEventListener('pointerdown', (event) => {
-    startX = event.clientX
-    startWidth = filePanelEl().getBoundingClientRect().width
-    handle.setPointerCapture(event.pointerId)
-  })
-  handle.addEventListener('pointermove', (event) => {
-    if (!handle.hasPointerCapture(event.pointerId)) return
-    updateFilePanelWidth(startWidth + event.clientX - startX)
-  })
-  handle.addEventListener('pointerup', (event) => {
-    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId)
-  })
-}
-
 function updatePanelVisibility(): void {
   const show = !manualHidden
   filePanelEl().hidden = !show
