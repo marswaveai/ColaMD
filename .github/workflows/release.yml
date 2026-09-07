@@ -72,6 +72,7 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.yml
+            release/*.blockmap
           if-no-files-found: ignore
 
   # Tag pushes publish a release; manual dispatches are build-only so the
