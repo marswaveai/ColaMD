@@ -3,6 +3,7 @@ import { $view } from '@milkdown/kit/utils'
 import type { NodeViewConstructor } from '@milkdown/kit/prose/view'
 import { TextSelection } from '@milkdown/kit/prose/state'
 import { renderMermaid } from './mermaid-bridge'
+import { isChinese } from '../ui-language'
 
 const RENDER_DEBOUNCE_MS = 400
 
@@ -55,7 +56,7 @@ const mermaidViewConstructor: NodeViewConstructor = (node, view, getPos) => {
         if (token !== renderToken || editing) return
         diagram.hidden = true
         pre.hidden = false
-        error.textContent = `Mermaid 渲染失败：${reason.message}`
+        error.textContent = isChinese() ? `Mermaid 渲染失败：${reason.message}` : `Mermaid rendering failed: ${reason.message}`
         error.hidden = false
       })
   }

@@ -1,6 +1,7 @@
-import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal } from './editor/editor'
+import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal, setMathModalLanguage, releaseMermaidRenderer } from './editor/editor'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
+import { setUiLanguage, isChinese, type UiLanguage } from './ui-language'
 import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
 import './themes/base.css'
 import './themes/premium.css'
@@ -98,7 +99,7 @@ function showSaveStatus(state: 'dirty' | 'saved'): void {
   }
   if (state === 'dirty') {
     // Announce unsaved edits only; a successful save fades out silently.
-    el.textContent = '已编辑'
+    el.textContent = isChinese() ? '已编辑' : 'Edited'
     el.classList.add('pending')
   } else {
     el.classList.remove('pending')
@@ -221,7 +222,9 @@ function updateWordCount(content?: string): void {
   const text = content ?? getContent()
   const tip = wordCountEl().querySelector('.word-count-tip')
   if (!tip) return
-  tip.textContent = `${countCharacters(text)} 字 · ${countTokens(text)} 词 · ${countParagraphs(text)} 段`
+  tip.textContent = isChinese()
+    ? `${countCharacters(text)} 字 · ${countTokens(text)} 词 · ${countParagraphs(text)} 段`
+    : `${countCharacters(text)} chars · ${countTokens(text)} words · ${countParagraphs(text)} paragraphs`
 }
 
 // --- Markdown source / WYSIWYG toggle ---
@@ -229,13 +232,28 @@ function updateSourceToggle(): void {
   const btn = sourceToggleBtnEl()
   btn.classList.toggle('active', sourceModeActive)
   const label = sourceModeActive
-    ? '切换回所见即所得'
-    : '切换 Markdown 源码'
+    ? (isChinese() ? '切换回所见即所得' : 'Switch to WYSIWYG')
+    : (isChinese() ? '切换 Markdown 源码' : 'Switch to Markdown source')
   btn.setAttribute('aria-label', label)
   const tip = btn.querySelector('.toolbar-tip')
   if (tip) tip.textContent = label
 }
 
+function updateUiLanguage(): void {
+  const zh = isChinese()
+  document.documentElement.lang = zh ? 'zh-CN' : 'en'
+  document.title = 'ColaMD'
+  fileTitleEl().dataset.untitled = zh ? '未命名' : 'Untitled'
+  if (!currentFilePath) fileTitleEl().textContent = fileTitleEl().dataset.untitled ?? 'Untitled'
+  fileTabEl().textContent = zh ? '文件' : 'Files'
+  outlineTabEl().textContent = zh ? '大纲' : 'Outline'
+  fileToggleBtnEl().setAttribute('aria-label', zh ? '显示 / 隐藏文件列表' : 'Show / hide file list')
+  sourceToggleBtnEl().setAttribute('aria-label', zh ? '切换 Markdown 源码 / 所见即所得' : 'Toggle Markdown source / WYSIWYG')
+  const wordTip = wordCountEl().querySelector('.word-count-tip')
+  if (wordTip) wordTip.textContent = zh ? '0 字 · 0 词 · 0 段' : '0 chars · 0 words · 0 paragraphs'
+  updateSourceToggle()
+  updateWordCount()
+}
 function scrollRatio(el: HTMLElement): number {
   const range = el.scrollHeight - el.clientHeight
   return range > 0 ? el.scrollTop / range : 0
@@ -576,7 +594,7 @@ function initPanelResize(): void {
 }
 
 function updateFileTitle(): void {
-  const name = currentFilePath ? (currentFilePath.split(/[\\/]/).pop() || currentFilePath) : '未命名'
+  const name = currentFilePath ? (currentFilePath.split(/[\\/]/).pop() || currentFilePath) : (fileTitleEl().dataset.untitled || 'Untitled')
   fileTitleEl().textContent = name
 }
 
@@ -609,7 +627,9 @@ function renderFileList(files: import('../preload/index').SiblingFile[]): void {
       label.style.removeProperty('--file-entry-scroll')
       label.style.removeProperty('--file-entry-scroll-duration')
     })
-    btn.title = f.kind === 'directory' ? `打开 ${f.name}` : f.kind === 'parent' ? '返回上级目录' : f.name
+    btn.title = f.kind === 'directory'
+      ? (isChinese() ? `打开 ${f.name}` : `Open ${f.name}`)
+      : f.kind === 'parent' ? (isChinese() ? '返回上级目录' : 'Go to parent directory') : f.name
     btn.dataset.path = f.path
     btn.dataset.kind = f.kind
     btn.classList.toggle('directory', f.kind === 'directory')
@@ -731,6 +751,8 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
 
 async function init(): Promise<void> {
   const api = window.electronAPI
+  const language = await api.getLanguage()
+  setUiLanguage(language)
   const savedTheme = loadSavedTheme()
   if (savedTheme.startsWith('custom:')) {
     // Load before applying: a newly opened window must not briefly paint the
@@ -743,8 +765,11 @@ async function init(): Promise<void> {
   applyEditorFont(loadSavedEditorFont())
 
   const searchPanel = new SearchPanel()
+  searchPanel.setLanguage(language)
+  setMathModalLanguage(language)
   api.onSearch(() => searchPanel.show())
   api.onMathModal(() => showMathModal())
+  updateUiLanguage()
 
   await createEditor('editor', (markdown) => {
     updateWordCount(markdown)
@@ -812,8 +837,9 @@ async function init(): Promise<void> {
   api.onMenuExportDOCX(() => { void api.exportDOCX(getContent()) })
   api.onMenuExportImage((preset) => { void exportCurrentImage(preset) })
 
-  api.onNewFile(() => { exitSourceMode(); applyContent('') })
+  api.onNewFile(() => { releaseMermaidRenderer(); exitSourceMode(); applyContent('') })
   api.onFileOpened((data) => {
+    releaseMermaidRenderer()
     currentFilePath = data.path
     resetDirty()
     setContent(data.content)
@@ -845,8 +871,8 @@ async function init(): Promise<void> {
           clearTimeout(saveStatusTimer)
           saveStatusTimer = null
         }
-        el.textContent = '文件已被外部修改'
-        el.classList.remove('saved')
+      el.textContent = isChinese() ? '文件已被外部修改' : 'File changed externally'
+      el.classList.remove('saved')
         el.classList.add('pending')
       }
       window.electronAPI.reportExternalConflict?.()
@@ -864,6 +890,12 @@ async function init(): Promise<void> {
   })
 
   api.onSetTheme((theme) => applyTheme(theme))
+  api.onLanguageChanged((language: UiLanguage) => {
+    setUiLanguage(language)
+    searchPanel.setLanguage(language)
+    setMathModalLanguage(language)
+    updateUiLanguage()
+  })
   api.onExternalConflictResult((result) => {
     if (result.action === 'load' && typeof result.content === 'string') {
       applyContent(result.content)
@@ -893,9 +925,9 @@ async function init(): Promise<void> {
   let updateDownloaded = false
   function showUpdateBanner(version: string): void {
     updateBannerTextEl().textContent = updateDownloaded
-      ? `新版本 v${version} 已就绪`
-      : `发现新版本 v${version}`
-    updateBannerActionEl().textContent = updateDownloaded ? '重启安装' : '更新'
+      ? (isChinese() ? `新版本 v${version} 已就绪` : `Update v${version} is ready`)
+      : (isChinese() ? `发现新版本 v${version}` : `Update v${version} available`)
+    updateBannerActionEl().textContent = updateDownloaded ? (isChinese() ? '重启安装' : 'Restart') : (isChinese() ? '更新' : 'Update')
     updateBannerActionEl().disabled = false
     updateBannerEl().hidden = false
   }
@@ -908,14 +940,30 @@ async function init(): Promise<void> {
     updateDownloaded = true
     showUpdateBanner(version)
   })
+  api.onUpdateProgress((percent) => {
+    if (updateDownloaded) return
+    updateBannerActionEl().textContent = isChinese() ? `下载中 ${percent}%` : `Downloading ${percent}%`
+  })
+  api.onUpdateError(() => {
+    if (updateDownloaded) return
+    updateBannerActionEl().textContent = isChinese() ? '下载失败，点击重试' : 'Failed, retry'
+    updateBannerActionEl().disabled = false
+  })
 
   updateBannerActionEl().addEventListener('click', async () => {
     if (updateDownloaded) {
       await api.installUpdate()
     } else {
-      updateBannerActionEl().textContent = '下载中…'
+      updateBannerActionEl().textContent = isChinese() ? '下载中…' : 'Downloading…'
       updateBannerActionEl().disabled = true
-      await api.downloadUpdate()
+      try {
+        await api.downloadUpdate()
+      } catch {
+        // The 'update-error' event may already have reset the label; this
+        // catch covers the path where the IPC call itself rejects.
+        updateBannerActionEl().textContent = isChinese() ? '下载失败，点击重试' : 'Failed, retry'
+        updateBannerActionEl().disabled = false
+      }
     }
   })
   document.getElementById('update-banner-dismiss')!.addEventListener('click', () => {
@@ -927,10 +975,10 @@ async function init(): Promise<void> {
     if (!agentDot) return
     agentDot.className = state === 'idle' ? '' : state
     const label = state === 'active'
-      ? 'Agent 正在修改文档'
+      ? (isChinese() ? 'Agent 正在修改文档' : 'Agent is editing')
       : state === 'cooldown'
-        ? 'Agent 刚刚完成修改'
-        : 'Agent 状态'
+        ? (isChinese() ? 'Agent 刚刚完成修改' : 'Agent finished editing')
+        : (isChinese() ? 'Agent 状态' : 'Agent status')
     agentDot.setAttribute('aria-label', label)
     const tip = agentDot.querySelector('.toolbar-tip')
     if (tip) tip.textContent = label

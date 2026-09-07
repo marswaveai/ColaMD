@@ -1,9 +1,14 @@
 import { getEditorView } from './editor'
+import { isChinese, type UiLanguage } from '../ui-language'
 
 export class MathModal {
   private container: HTMLDivElement
   private input: HTMLTextAreaElement
   private isBlockCheckbox: HTMLInputElement
+  private header: HTMLHeadingElement
+  private blockLabel: HTMLLabelElement
+  private cancelButton: HTMLButtonElement
+  private saveButton: HTMLButtonElement
   private currentTarget: { pos: number; isBlock: boolean } | null = null
 
   constructor() {
@@ -15,6 +20,7 @@ export class MathModal {
     modal.className = 'math-modal'
 
     const header = document.createElement('h3')
+    this.header = header
     header.textContent = 'Edit LaTeX Formula'
 
     this.input = document.createElement('textarea')
@@ -30,6 +36,7 @@ export class MathModal {
     this.isBlockCheckbox.id = 'math-is-block'
 
     const label = document.createElement('label')
+    this.blockLabel = label
     label.htmlFor = 'math-is-block'
     label.textContent = ' Display as block formula (centered)'
 
@@ -39,11 +46,13 @@ export class MathModal {
     footer.className = 'math-modal-footer'
 
     const cancelBtn = document.createElement('button')
+    this.cancelButton = cancelBtn
     cancelBtn.textContent = 'Cancel'
     cancelBtn.className = 'math-modal-btn cancel'
     cancelBtn.addEventListener('click', () => this.hide())
 
     const saveBtn = document.createElement('button')
+    this.saveButton = saveBtn
     saveBtn.textContent = 'Insert / Update'
     saveBtn.className = 'math-modal-btn save'
     saveBtn.addEventListener('click', () => this.save())
@@ -69,6 +78,16 @@ export class MathModal {
     })
 
     document.body.appendChild(this.container)
+    this.setLanguage(isChinese() ? 'zh' : 'en')
+  }
+
+  setLanguage(language: UiLanguage): void {
+    const zh = language === 'zh'
+    this.header.textContent = zh ? '编辑公式' : 'Edit LaTeX Formula'
+    this.input.placeholder = zh ? '输入 LaTeX 代码，例如 E=mc^2' : 'Enter LaTeX code, e.g. E=mc^2'
+    this.blockLabel.textContent = zh ? ' 作为块公式显示（居中）' : ' Display as block formula (centered)'
+    this.cancelButton.textContent = zh ? '取消' : 'Cancel'
+    this.saveButton.textContent = zh ? '插入 / 更新' : 'Insert / Update'
   }
 
   show(initialValue = '', isBlock = false, targetPos: number | null = null): void {
