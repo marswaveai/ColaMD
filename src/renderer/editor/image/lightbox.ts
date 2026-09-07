@@ -1,3 +1,5 @@
+import { isChinese, onUiLanguageChanged } from '../../ui-language'
+
 // Fullscreen image viewer (lightbox): wheel zoom around the cursor, drag to
 // pan, arrow keys walk through every image in the document, Esc/背景点击关闭.
 
@@ -109,10 +111,15 @@ function collectDocumentImages(): LightboxItem[] {
 function ensureOverlay(): HTMLDivElement {
   if (overlay) return overlay
 
+  const languageUpdates: Array<() => void> = []
+  const bindLanguage = (update: () => void): void => {
+    update()
+    languageUpdates.push(update)
+  }
   overlay = document.createElement('div')
   overlay.id = 'cmd-lightbox'
   overlay.setAttribute('role', 'dialog')
-  overlay.setAttribute('aria-label', '图片预览')
+  bindLanguage(() => { overlay!.setAttribute('aria-label', isChinese() ? '图片预览' : 'Image preview') })
   // Programmatically focusable so the first Esc/cursor key lands here even
   // before any click.
   overlay.tabIndex = -1
@@ -136,11 +143,15 @@ function ensureOverlay(): HTMLDivElement {
   const controls = document.createElement('div')
   controls.className = 'cmd-lightbox-controls'
 
-  const makeButton = (label: string, title: string, onClick: (event: MouseEvent) => void): HTMLButtonElement => {
+  const makeButton = (label: string | (() => string), title: () => string, onClick: (event: MouseEvent) => void): HTMLButtonElement => {
     const button = document.createElement('button')
     button.type = 'button'
-    button.textContent = label
-    button.title = title
+    button.textContent = typeof label === 'string' ? label : label()
+    bindLanguage(() => {
+      if (typeof label === 'function') button.textContent = label()
+      button.title = title()
+      button.setAttribute('aria-label', title())
+    })
     button.addEventListener('click', (event) => {
       event.stopPropagation()
       onClick(event)
@@ -148,13 +159,13 @@ function ensureOverlay(): HTMLDivElement {
     return button
   }
 
-  zoomLabel = makeButton('100%', '缩放比例，点击恢复 100%', () => setScale(1))
+  zoomLabel = makeButton('100%', () => isChinese() ? '缩放比例，点击恢复 100%' : 'Zoom level; click to reset to 100%', () => setScale(1))
   controls.append(
-    makeButton('−', '缩小', () => zoomStep(1 / 1.25)),
+    makeButton('−', () => isChinese() ? '缩小' : 'Zoom out', () => zoomStep(1 / 1.25)),
     zoomLabel,
-    makeButton('+', '放大', () => zoomStep(1.25)),
-    makeButton('适应', '适应窗口', () => resetView()),
-    makeButton('1:1', '原始尺寸', () => setScale(1)),
+    makeButton('+', () => isChinese() ? '放大' : 'Zoom in', () => zoomStep(1.25)),
+    makeButton(() => isChinese() ? '适应' : 'Fit', () => isChinese() ? '适应窗口' : 'Fit to window', () => resetView()),
+    makeButton('1:1', () => isChinese() ? '原始尺寸' : 'Actual size', () => setScale(1)),
   )
   bar.appendChild(controls)
   overlay.appendChild(bar)
@@ -163,8 +174,8 @@ function ensureOverlay(): HTMLDivElement {
   closeBtn.type = 'button'
   closeBtn.className = 'cmd-lightbox-close'
   closeBtn.textContent = '✕'
-  closeBtn.title = '关闭 (Esc)'
-  closeBtn.setAttribute('aria-label', '关闭预览')
+  bindLanguage(() => { closeBtn.title = isChinese() ? '关闭 (Esc)' : 'Close (Esc)' })
+  bindLanguage(() => { closeBtn.setAttribute('aria-label', isChinese() ? '关闭预览' : 'Close preview') })
   closeBtn.addEventListener('click', (event) => {
     event.stopPropagation()
     closeLightbox()
@@ -237,6 +248,7 @@ function ensureOverlay(): HTMLDivElement {
     }
   })
 
+  onUiLanguageChanged(() => languageUpdates.forEach((update) => update()))
   document.body.appendChild(overlay)
   return overlay
 }

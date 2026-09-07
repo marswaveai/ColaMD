@@ -1,3 +1,4 @@
+import { isChinese, onUiLanguageChanged } from '../../ui-language'
 import { $view } from '@milkdown/kit/utils'
 import { imageSchema } from '@milkdown/kit/preset/commonmark'
 import type { NodeViewConstructor } from '@milkdown/kit/prose/view'
@@ -31,13 +32,17 @@ export const imageView = $view(imageSchema.node, (): NodeViewConstructor => {
     const errorBox = document.createElement('span')
     errorBox.className = 'cmd-image-error'
     const errorText = document.createElement('span')
-    errorText.textContent = '图片无法加载'
     const relocateBtn = document.createElement('button')
     relocateBtn.type = 'button'
-    relocateBtn.textContent = '重新选择文件'
     const revealBtn = document.createElement('button')
     revealBtn.type = 'button'
-    revealBtn.textContent = '打开所在文件夹'
+    const updateLanguage = (): void => {
+      errorText.textContent = isChinese() ? '图片无法加载' : 'Image could not be loaded'
+      relocateBtn.textContent = isChinese() ? '重新选择文件' : 'Choose another file'
+      revealBtn.textContent = isChinese() ? '打开所在文件夹' : 'Show in folder'
+    }
+    updateLanguage()
+    const unsubscribe = onUiLanguageChanged(updateLanguage)
     errorBox.append(errorText, relocateBtn, revealBtn)
     dom.appendChild(errorBox)
 
@@ -98,7 +103,7 @@ export const imageView = $view(imageSchema.node, (): NodeViewConstructor => {
       },
       ignoreMutation: () => true,
       destroy() {
-        // Nothing persistent — the img element dies with the dom.
+        unsubscribe()
       },
     }
   }

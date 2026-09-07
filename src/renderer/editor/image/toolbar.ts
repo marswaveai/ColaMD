@@ -1,3 +1,5 @@
+import { isChinese, onUiLanguageChanged } from '../../ui-language'
+
 import { NodeSelection, Plugin } from '@milkdown/kit/prose/state'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import { $prose } from '@milkdown/kit/utils'
@@ -438,6 +440,11 @@ function startResize(event: PointerEvent, handle: HTMLDivElement): void {
 }
 
 function makeToolbarDom(): void {
+  const languageUpdates: Array<() => void> = []
+  const bindLanguage = (update: () => void): void => {
+    update()
+    languageUpdates.push(update)
+  }
   const hostEl = host
   if (!hostEl) return
   const toolbarEl = document.createElement('div')
@@ -447,11 +454,14 @@ function makeToolbarDom(): void {
   const row = document.createElement('div')
   row.className = 'cmd-image-toolbar-row'
 
-  const button = (label: string, title: string, action: () => void): HTMLButtonElement => {
+  const button = (label: () => string, title: () => string, action: () => void): HTMLButtonElement => {
     const btn = document.createElement('button')
     btn.type = 'button'
-    btn.textContent = label
-    btn.title = title
+    bindLanguage(() => {
+      btn.textContent = label()
+      btn.title = title()
+      btn.setAttribute('aria-label', title())
+    })
     btn.addEventListener('mousedown', (event) => event.preventDefault())
     btn.addEventListener('click', action)
     return btn
@@ -461,8 +471,12 @@ function makeToolbarDom(): void {
   alignButtons = (['left', 'center', 'right'] as const).map((align) => {
     const btn = document.createElement('button')
     btn.type = 'button'
-    btn.title = align === 'left' ? '左对齐' : align === 'center' ? '居中' : '右对齐'
-    btn.setAttribute('aria-label', btn.title)
+    bindLanguage(() => {
+      btn.title = isChinese()
+        ? (align === 'left' ? '左对齐' : align === 'center' ? '居中' : '右对齐')
+        : (align === 'left' ? 'Align left' : align === 'center' ? 'Align center' : 'Align right')
+      btn.setAttribute('aria-label', btn.title)
+    })
     btn.innerHTML = ALIGN_ICON[align]
     btn.addEventListener('mousedown', (event) => event.preventDefault())
     btn.addEventListener('click', () => applyAlign(align))
@@ -474,30 +488,30 @@ function makeToolbarDom(): void {
   alignSeparator.className = 'cmd-image-toolbar-sep'
   row.appendChild(alignSeparator)
 
-  row.appendChild(button('图注', '编辑图片描述（显示在图片下方）', () => {
+  row.appendChild(button(() => isChinese() ? '图注' : 'Caption', () => isChinese() ? '编辑图片描述（显示在图片下方）' : 'Edit caption (shown below the image)', () => {
     if (!captionRow || !captionInput) return
     const img = toolbarImage()
     captionInput.value = img?.alt ?? ''
     captionRow.hidden = false
     captionInput.focus()
   }))
-  row.appendChild(button('替换', '替换为其他图片', () => { void replaceImage() }))
-  row.appendChild(button('复制', '复制图片', () => {
+  row.appendChild(button(() => isChinese() ? '替换' : 'Replace', () => isChinese() ? '替换为其他图片' : 'Replace image', () => { void replaceImage() }))
+  row.appendChild(button(() => isChinese() ? '复制' : 'Copy', () => isChinese() ? '复制图片' : 'Copy image', () => {
     const img = toolbarImage()
     if (!img) return
     void window.electronAPI.copyImage(img.currentSrc || img.src)
   }))
-  row.appendChild(button('文件夹', '在文件夹中显示', () => {
+  row.appendChild(button(() => isChinese() ? '文件夹' : 'Folder', () => isChinese() ? '在文件夹中显示' : 'Show in folder', () => {
     const img = toolbarImage()
     if (!img) return
     void window.electronAPI.revealPath(filePathFromFileUrl(img.currentSrc || img.src) ?? '')
   }))
-  row.appendChild(button('放大', '全屏查看（双击图片也可以）', () => {
+  row.appendChild(button(() => isChinese() ? '放大' : 'Zoom in', () => isChinese() ? '全屏查看（双击图片也可以）' : 'View fullscreen (or double-click the image)', () => {
     const img = toolbarImage()
     if (!img) return
     openLightbox(img.currentSrc || img.src, img.alt)
   }))
-  row.appendChild(button('删除', '删除图片', () => deleteImage()))
+  row.appendChild(button(() => isChinese() ? '删除' : 'Delete', () => isChinese() ? '删除图片' : 'Delete image', () => deleteImage()))
   toolbarEl.appendChild(row)
 
   const captionEl = document.createElement('div')
@@ -505,13 +519,13 @@ function makeToolbarDom(): void {
   captionEl.hidden = true
   const input = document.createElement('input')
   input.type = 'text'
-  input.placeholder = '图片描述（显示在图片下方）'
+  bindLanguage(() => { input.placeholder = isChinese() ? '图片描述（显示在图片下方）' : 'Caption (shown below the image)' })
   const okBtn = document.createElement('button')
   okBtn.type = 'button'
-  okBtn.textContent = '确定'
+  bindLanguage(() => { okBtn.textContent = isChinese() ? '确定' : 'OK' })
   const cancelBtn = document.createElement('button')
   cancelBtn.type = 'button'
-  cancelBtn.textContent = '取消'
+  bindLanguage(() => { cancelBtn.textContent = isChinese() ? '取消' : 'Cancel' })
   captionEl.append(input, okBtn, cancelBtn)
   toolbarEl.appendChild(captionEl)
 
@@ -543,11 +557,15 @@ function makeToolbarDom(): void {
     const handle = document.createElement('div')
     handle.className = `cmd-image-resize-handle cmd-image-handle-${corner}`
     handle.dataset.corner = corner
-    handle.title = '拖拽调整大小'
+    bindLanguage(() => { handle.title = isChinese() ? '拖拽调整大小' : 'Drag to resize' })
     handle.hidden = true
     handle.addEventListener('pointerdown', (event) => startResize(event, handle))
     hostEl.appendChild(handle)
     return handle
+  })
+  onUiLanguageChanged(() => {
+    languageUpdates.forEach((update) => update())
+    positionOverlay()
   })
 }
 

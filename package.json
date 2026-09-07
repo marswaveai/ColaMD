@@ -16,6 +16,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "test:image-review": "node --test scripts/test-image-review.mjs",
     "check:theme-colors": "node scripts/check-theme-colors.mjs",
     "preview": "electron-vite preview",
     "dist": "electron-vite build && electron-builder",

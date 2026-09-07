@@ -168,16 +168,27 @@ function scheduleAutosave(): void {
 }
 
 async function runAutosave(): Promise<void> {
-  if (!dirty || !currentFilePath) return
-  const revision = documentRevision
-  const filePath = currentFilePath
-  const content = getContent()
-  // rebuildMenu=false: autosave must never rebuild the app menu (macOS IME)
-  const path = await enqueueSave(() => window.electronAPI.saveFile(content, filePath, false))
-  if (path && revision === documentRevision && currentFilePath === filePath) {
-    currentFilePath = path
-    clearDirty()
-    showSaveStatus('saved')
+  if (!dirty || !currentFilePath || externalConflictPending) return
+  const expectedPath = currentFilePath
+  try {
+    await enqueueSave(async () => {
+      // Read the snapshot only after placeholders have their durable paths.
+      await whenImageWritesSettled()
+      if (!dirty || currentFilePath !== expectedPath || externalConflictPending) return null
+      const revision = documentRevision
+      const content = getContent()
+      // Autosave must never rebuild the app menu (macOS IME).
+      const path = await window.electronAPI.saveFile(content, expectedPath, false)
+      if (path && revision === documentRevision && currentFilePath === expectedPath) {
+        currentFilePath = path
+        clearDirty()
+        showSaveStatus('saved')
+      }
+      return path
+    })
+  } catch (error) {
+    // Keep the document dirty; a failed image write must never be persisted.
+    console.error('Autosave failed', error)
   }
 }
 
@@ -259,6 +270,7 @@ function updateUiLanguage(): void {
   if (wordTip) wordTip.textContent = zh ? '0 字 · 0 词 · 0 段' : '0 chars · 0 words · 0 paragraphs'
   updateSourceToggle()
   updateWordCount()
+  updateImageMigrationLanguage()
 }
 function scrollRatio(el: HTMLElement): number {
   const range = el.scrollHeight - el.clientHeight
@@ -656,16 +668,24 @@ function updateImageMigrationBanner(content: string): void {
   if (!banner) return
   const count = countEmbeddedDataImages(content)
   banner.hidden = count === 0
+  updateImageMigrationLanguage(count)
+}
+
+function updateImageMigrationLanguage(count = countEmbeddedDataImages(getContent())): void {
+  const zh = isChinese()
   imageMigrateTextEl().textContent = count > 0
-    ? `检测到 ${count} 张内嵌 Base64 图片：源码会难以阅读、文件体积膨胀。建议提取为本地文件。`
+    ? (zh ? `检测到 ${count} 张内嵌 Base64 图片：源码会难以阅读、文件体积膨胀。建议提取为本地文件。`
+      : `${count} embedded Base64 images make the source hard to read and increase file size. Extract them to local files.`)
     : ''
+  document.getElementById('image-migrate-action')!.textContent = zh ? '提取为本地文件' : 'Extract to local files'
+  document.getElementById('image-migrate-dismiss')!.setAttribute('aria-label', zh ? '关闭' : 'Dismiss')
 }
 
 async function extractEmbeddedImagesNow(): Promise<void> {
   const banner = imageMigrateBannerEl()
   if (imageMigrationBusy || !banner || banner.hidden) return
   if (!currentFilePath) {
-    showToast('请先保存文档，图片才能存放到它旁边')
+    showToast(isChinese() ? '请先保存文档，图片才能存放到它旁边' : 'Save the document first to store images beside it')
     return
   }
   imageMigrationBusy = true
@@ -685,7 +705,7 @@ async function extractEmbeddedImagesNow(): Promise<void> {
     scheduleOutlineUpdate()
     setDirty()
     banner.hidden = true
-    showToast(`已提取 ${result.count} 张图片到 assets 文件夹`)
+    showToast(isChinese() ? `已提取 ${result.count} 张图片到 assets 文件夹` : `Extracted ${result.count} images to the assets folder`)
   } finally {
     imageMigrationBusy = false
   }

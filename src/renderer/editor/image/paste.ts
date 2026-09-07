@@ -1,3 +1,4 @@
+import { isChinese } from '../../ui-language'
 import { Plugin } from '@milkdown/kit/prose/state'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import { $prose } from '@milkdown/kit/utils'
@@ -131,7 +132,7 @@ async function insertImageFiles(files: File[], insertPos?: number): Promise<void
   // is on disk — mirror VS Code's conservative rule for untitled buffers.
   const docPath = await hooks.ensureDocumentSaved()
   if (!docPath) {
-    hooks.notify('请先保存文档（⌘S）后再插入图片')
+    hooks.notify(isChinese() ? '请先保存文档（⌘S）后再插入图片' : 'Save the document before inserting images')
     return
   }
 
@@ -150,7 +151,7 @@ async function insertImageFiles(files: File[], insertPos?: number): Promise<void
       } catch {
         const hit = findImageBySrc(view, blobUrl)
         if (hit) view.dispatch(view.state.tr.delete(hit.pos, hit.pos + hit.nodeSize))
-        hooks.notify('图片保存失败，请重试')
+        hooks.notify(isChinese() ? '图片保存失败，请重试' : 'Could not save the image. Please try again')
       } finally {
         URL.revokeObjectURL(blobUrl)
       }
@@ -166,7 +167,7 @@ async function insertImagePaths(paths: string[]): Promise<void> {
 
   const docPath = await hooks.ensureDocumentSaved()
   if (!docPath) {
-    hooks.notify('请先保存文档（⌘S）后再插入图片')
+    hooks.notify(isChinese() ? '请先保存文档（⌘S）后再插入图片' : 'Save the document before inserting images')
     return
   }
 
@@ -174,7 +175,7 @@ async function insertImagePaths(paths: string[]): Promise<void> {
     if (!isImageFileName(srcPath)) continue
     const asset = await saveImageToAssets({ srcPath })
     if (!asset) {
-      hooks.notify('图片复制失败，请重试')
+      hooks.notify(isChinese() ? '图片复制失败，请重试' : 'Could not copy the image. Please try again')
       continue
     }
     const imageType = view.state.schema.nodes.image
@@ -189,13 +190,13 @@ async function insertIntoSourceMode(files: File[]): Promise<void> {
   if (!hooks) return
   const docPath = await hooks.ensureDocumentSaved()
   if (!docPath) {
-    hooks.notify('请先保存文档（⌘S）后再插入图片')
+    hooks.notify(isChinese() ? '请先保存文档（⌘S）后再插入图片' : 'Save the document before inserting images')
     return
   }
   const refs: string[] = []
   for (const file of files) {
     const asset = await saveImageToAssets({ file })
-    if (asset) refs.push(`![](${escapeMarkdownDestination(asset.relPath)})`)
+    if (asset) refs.push(`![](${escapeMarkdownDestination(asset.fileUrl)})`)
   }
   if (refs.length > 0) hooks.insertSourceText(refs.join('\n'))
 }
@@ -250,13 +251,13 @@ export async function insertImagesFromPicker(): Promise<void> {
   if (hooks.isSourceMode()) {
     const docPath = await hooks.ensureDocumentSaved()
     if (!docPath) {
-      hooks.notify('请先保存文档（⌘S）后再插入图片')
+      hooks.notify(isChinese() ? '请先保存文档（⌘S）后再插入图片' : 'Save the document before inserting images')
       return
     }
     const refs: string[] = []
     for (const srcPath of paths) {
       const asset = await saveImageToAssets({ srcPath })
-      if (asset) refs.push(`![](${escapeMarkdownDestination(asset.relPath)})`)
+      if (asset) refs.push(`![](${escapeMarkdownDestination(asset.fileUrl)})`)
     }
     if (refs.length > 0) hooks.insertSourceText(refs.join('\n'))
     return

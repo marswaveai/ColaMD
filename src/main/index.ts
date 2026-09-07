@@ -770,7 +770,7 @@ ipcMain.handle('pick-image', async (event) => {
   if (!win) return null
   const result = await dialog.showOpenDialog(win, {
     filters: [
-      { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp'] },
+      { name: getPreferredLanguage() === 'zh' ? '图片' : 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp'] },
       { name: 'All Files', extensions: ['*'] }
     ],
     properties: ['openFile', 'multiSelections']
