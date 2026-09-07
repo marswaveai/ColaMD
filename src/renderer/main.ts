@@ -236,13 +236,13 @@ function fileLocationLabel(): string {
       ? '在 Finder 中显示'
       : fileManagerName === 'explorer'
         ? '在资源管理器中显示'
-        : '在文件管理器中显示'
+        : '打开所在文件夹'
   }
   return fileManagerName === 'finder'
     ? 'Reveal in Finder'
     : fileManagerName === 'explorer'
-      ? 'Show in File Explorer'
-      : 'Show in File Manager'
+      ? 'Reveal in File Explorer'
+      : 'Open Containing Folder'
 }
 
 function updateFileRevealButton(): void {
