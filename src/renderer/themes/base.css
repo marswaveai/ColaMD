@@ -846,6 +846,7 @@ body.theme-elegant #editor .ProseMirror table td {
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -857,6 +858,10 @@ body.theme-elegant #editor .ProseMirror table td {
   border-radius: 3px;
 }
 
+::-webkit-scrollbar-corner {
+  background: var(--bg-color);
+}
+
 /* ======= SEARCH PANEL ======= */
 
 .search-panel {
@@ -864,11 +869,15 @@ body.theme-elegant #editor .ProseMirror table td {
   top: 10px;
   right: 56px;
   z-index: 1000;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  grid-template-areas:
+    "query count prev next close"
+    "replace replace replace replace replace";
   align-items: center;
-  gap: 4px;
-  width: 306px;
+  column-gap: 4px;
+  row-gap: 6px;
+  width: 360px;
   padding: 6px 8px;
   background: var(--bg-color);
   border: 1px solid var(--border-color);
@@ -899,11 +908,18 @@ body.theme-elegant #editor .ProseMirror table td {
   text-align: center;
 }
 
+.search-panel > .search-input { grid-area: query; min-width: 0; width: auto; }
+.search-panel > .search-count { grid-area: count; min-width: 32px; }
+.search-panel > .search-btn:nth-of-type(1) { grid-area: prev; }
+.search-panel > .search-btn:nth-of-type(2) { grid-area: next; }
+.search-panel > .search-btn.search-close { grid-area: close; }
+
 .search-replace-row {
-  display: flex;
-  width: 100%;
+  grid-area: replace;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 4px;
-  padding-top: 2px;
+  padding: 0;
 }
 
 .search-replace-input {
