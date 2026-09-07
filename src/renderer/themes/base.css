@@ -108,6 +108,34 @@ body {
   background: rgba(127, 127, 127, 0.2);
 }
 
+#reveal-file-btn {
+  position: absolute;
+  top: 6px;
+  right: 140px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+  transition: background 0.15s, color 0.15s;
+}
+
+#reveal-file-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+#reveal-file-btn:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
 /* Source (Markdown) / WYSIWYG toggle */
 #source-toggle-btn {
   position: absolute;
@@ -150,7 +178,8 @@ body {
 /* Top-right controls: keep labels hidden until their icon is hovered. */
 #word-count:hover,
 #source-toggle-btn:hover,
-#file-toggle-btn:hover {
+#file-toggle-btn:hover,
+#reveal-file-btn:hover {
   background: rgba(127, 127, 127, 0.14);
   color: var(--text-color);
 }

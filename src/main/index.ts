@@ -607,6 +607,25 @@ ipcMain.on('open-external', (_event, url: string) => {
   }
 })
 
+ipcMain.handle('get-file-manager-name', () => {
+  if (process.platform === 'darwin') return 'finder'
+  if (process.platform === 'win32') return 'explorer'
+  return 'file-manager'
+})
+
+ipcMain.handle('reveal-file', (event) => {
+  const win = getWinFromEvent(event)
+  if (!win) return false
+  const filePath = getState(win).filePath
+  if (!filePath) return false
+  try {
+    shell.showItemInFolder(filePath)
+    return true
+  } catch {
+    return false
+  }
+})
+
 ipcMain.handle('open-file', async (event) => {
   const win = getWinFromEvent(event)
   if (!win) return null
