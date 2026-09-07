@@ -34,6 +34,8 @@ export interface ElectronAPI {
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => Promise<boolean>
   exportDOCX: (content: string) => Promise<boolean>
   exportImage: (snapshot: ImageExportSnapshot, preset: ImageExportPreset) => Promise<boolean>
+  getLanguage: () => Promise<'zh' | 'en'>
+  onLanguageChanged: (callback: (language: 'zh' | 'en') => void) => void
   loadCustomTheme: () => Promise<{ name: string; css: string } | null>
   loadThemeCSS: (fileName: string) => Promise<string | null>
   reportTheme: (theme: string) => Promise<void>
@@ -66,6 +68,8 @@ export interface ElectronAPI {
   onExternalConflictResult: (callback: (result: { action: 'keep' | 'load'; content?: string }) => void) => void
   onUpdateAvailable: (callback: (version: string) => void) => void
   onUpdateDownloaded: (callback: (version: string) => void) => void
+  onUpdateProgress: (callback: (percent: number) => void) => void
+  onUpdateError: (callback: () => void) => void
   downloadUpdate: () => Promise<void>
   installUpdate: () => Promise<void>
   reportDirty: (isDirty: boolean) => void
@@ -85,6 +89,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => ipcRenderer.invoke('export-html', snapshot),
   exportDOCX: (content: string) => ipcRenderer.invoke('export-docx', content),
   exportImage: (snapshot: ImageExportSnapshot, preset: ImageExportPreset) => ipcRenderer.invoke('export-image', snapshot, preset),
+  getLanguage: () => ipcRenderer.invoke('get-language') as Promise<'zh' | 'en'>,
+  onLanguageChanged: (callback: (language: 'zh' | 'en') => void) => {
+    ipcRenderer.on('language-changed', (_event, language) => {
+      if (language === 'zh' || language === 'en') callback(language)
+    })
+  },
   loadCustomTheme: () => ipcRenderer.invoke('load-custom-theme'),
   loadThemeCSS: (fileName: string) => ipcRenderer.invoke('load-theme-css', fileName),
   reportTheme: (theme: string) => ipcRenderer.invoke('report-theme', theme),
@@ -173,6 +183,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onUpdateDownloaded: (callback: (version: string) => void) => {
     ipcRenderer.on('update-downloaded', (_event, version) => callback(version))
+  },
+  onUpdateProgress: (callback: (percent: number) => void) => {
+    ipcRenderer.on('update-progress', (_event, percent) => callback(percent))
+  },
+  onUpdateError: (callback: () => void) => {
+    ipcRenderer.on('update-error', () => callback())
   },
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),

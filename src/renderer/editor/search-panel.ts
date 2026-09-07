@@ -1,5 +1,6 @@
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import { getEditorView, searchPluginKey } from './editor'
+import { getUiLanguage, type UiLanguage } from '../ui-language'
 
 export class SearchPanel {
   private container: HTMLDivElement
@@ -7,6 +8,11 @@ export class SearchPanel {
   private replaceInput: HTMLInputElement
   private countEl: HTMLSpanElement
   private replaceRow: HTMLDivElement
+  private replaceButton: HTMLButtonElement
+  private replaceAllButton: HTMLButtonElement
+  private prevButton: HTMLButtonElement
+  private nextButton: HTMLButtonElement
+  private closeButton: HTMLButtonElement
   private matches: { from: number; to: number }[] = []
   private currentIndex = -1
   private visible = false
@@ -32,11 +38,16 @@ export class SearchPanel {
     this.replaceInput.className = 'search-input search-replace-input'
     const replaceBtn = this.btn('替换', 'search-action', () => this.replaceCurrent())
     const replaceAllBtn = this.btn('全部替换', 'search-action', () => this.replaceAll())
+    this.replaceButton = replaceBtn
+    this.replaceAllButton = replaceAllBtn
     this.replaceRow.append(this.replaceInput, replaceBtn, replaceAllBtn)
 
     const prevBtn = this.btn('\u2039', 'search-btn', () => this.prev())
     const nextBtn = this.btn('\u203A', 'search-btn', () => this.next())
     const closeBtn = this.btn('\u00D7', 'search-btn search-close', () => this.hide())
+    this.prevButton = prevBtn
+    this.nextButton = nextBtn
+    this.closeButton = closeBtn
 
     this.container.append(this.input, this.countEl, prevBtn, nextBtn, closeBtn, this.replaceRow)
 
@@ -84,10 +95,22 @@ export class SearchPanel {
     )
 
     document.body.appendChild(this.container)
+    this.setLanguage(getUiLanguage())
+  }
+
+  setLanguage(language: UiLanguage): void {
+    const zh = language === 'zh'
+    this.input.placeholder = zh ? '查找' : 'Find'
+    this.replaceInput.placeholder = zh ? '替换为' : 'Replace with'
+    this.replaceButton.textContent = zh ? '替换' : 'Replace'
+    this.replaceAllButton.textContent = zh ? '全部替换' : 'Replace All'
+    this.prevButton.title = zh ? '上一个' : 'Previous'
+    this.nextButton.title = zh ? '下一个' : 'Next'
+    this.closeButton.title = zh ? '关闭' : 'Close'
   }
 
   show(): void {
-    this.container.style.display = 'flex'
+    this.container.style.display = 'grid'
     this.visible = true
     this.input.focus()
     this.input.select()

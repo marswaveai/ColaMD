@@ -84,6 +84,29 @@ function ensureThemesDir(): void {
 // --- Recent files + session restore (#28, #45) ---
 const recentStorePath = join(app.getPath('home'), '.colamd', 'recent.json')
 let recentStore: { recent: string[]; restoreOnLaunch: boolean } = { recent: [], restoreOnLaunch: true }
+const languagePreferencePath = join(app.getPath('userData'), 'language.json')
+type UiLanguage = 'zh' | 'en'
+let preferredLanguage: UiLanguage | null = null
+try {
+  const parsed = JSON.parse(readFileSync(languagePreferencePath, 'utf-8')) as { language?: unknown }
+  if (parsed.language === 'zh' || parsed.language === 'en') preferredLanguage = parsed.language
+} catch { /* first run or unreadable preference */ }
+
+function getPreferredLanguage(): UiLanguage {
+  return preferredLanguage ?? (app.getLocale().toLowerCase().startsWith('zh') ? 'zh' : 'en')
+}
+
+function setPreferredLanguage(language: UiLanguage): void {
+  preferredLanguage = language
+  try {
+    mkdir(dirname(languagePreferencePath), { recursive: true }).catch(() => {})
+    writeFileSync(languagePreferencePath, JSON.stringify({ language }), 'utf-8')
+  } catch { /* best effort */ }
+  setTimeout(() => buildMenu(), 0)
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.webContents.isDestroyed()) win.webContents.send('language-changed', language)
+  }
+}
 try {
   const parsed = JSON.parse(readFileSync(recentStorePath, 'utf-8'))
   if (Array.isArray(parsed.recent)) {
@@ -809,7 +832,7 @@ ipcMain.handle('export-pdf', async (event) => {
   try {
     const background = await win.webContents.executeJavaScript('getComputedStyle(document.body).backgroundColor') as string
     const cssKey = await win.webContents.insertCSS(
-      `@page { margin: 0; } html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; } #titlebar { display: none !important; } #editor { padding: 20mm !important; } #editor .ProseMirror { min-height: auto !important; }`
+      `@page { margin: 0; } html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; } #titlebar, #file-panel, #source-editor, #update-banner, .search-panel { display: none !important; } #editor { margin-left: 0 !important; padding: 20mm !important; } #editor .ProseMirror { min-height: auto !important; }`
     )
     try {
       const pdfData = await win.webContents.printToPDF({
@@ -1048,6 +1071,8 @@ ipcMain.handle('report-theme', (_event, theme: unknown) => {
   updateThemeMenuChecks()
 })
 
+ipcMain.handle('get-language', () => getPreferredLanguage())
+
 // Menu — targets the focused window
 
 function setAsDefaultApp(): void {
@@ -1115,7 +1140,7 @@ function getFocusedWindow(): BrowserWindow | null {
 }
 
 function getPreferredCheatsheetLanguage(): 'zh' | 'en' {
-  return app.getLocale().toLowerCase().startsWith('zh') ? 'zh' : 'en'
+  return getPreferredLanguage()
 }
 
 let latestVersion: string | null = null
@@ -1166,6 +1191,7 @@ function buildMenu(): void {
         undo: '撤销', redo: '重做', cut: '剪切', copy: '复制', paste: '粘贴', selectAll: '全选',
         actualSize: '实际大小', zoomIn: '放大', zoomOut: '缩小', fullscreen: '切换全屏',
         fontSettings: '编辑器字体…',
+        language: '界面语言', chinese: '中文', english: 'English',
         hide: '隐藏 ColaMD', hideOthers: '隐藏其他应用', showAll: '显示全部', quit: '退出 ColaMD',
       }
     : {
@@ -1183,6 +1209,7 @@ function buildMenu(): void {
         undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
         actualSize: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
         fontSettings: 'Editor Font…',
+        language: 'Language', chinese: '中文', english: 'English',
         hide: 'Hide ColaMD', hideOthers: 'Hide Others', showAll: 'Show All', quit: 'Quit ColaMD',
       }
 
@@ -1358,6 +1385,13 @@ function buildMenu(): void {
         },
         { type: 'separator' },
         { label: labels.fontSettings, click: () => sendToFocused('open-font-settings') },
+        {
+          label: labels.language,
+          submenu: [
+            { label: labels.chinese, type: 'checkbox' as const, checked: getPreferredLanguage() === 'zh', click: () => setPreferredLanguage('zh') },
+            { label: labels.english, type: 'checkbox' as const, checked: getPreferredLanguage() === 'en', click: () => setPreferredLanguage('en') }
+          ]
+        },
         { type: 'separator' },
         { label: labels.fullscreen, role: 'togglefullscreen' }
       ]
@@ -1386,7 +1420,10 @@ function buildMenu(): void {
         },
         ...(latestVersion ? [{
           label: `${labels.updateAvailable} v${latestVersion}`,
-          click: () => { void autoUpdater.downloadUpdate() }
+          click: () => {
+            updateDownloadRequested = true
+            void autoUpdater.downloadUpdate()
+          }
         }] : []),
         { type: 'separator' },
         { label: labels.about, role: 'about' }
@@ -1413,6 +1450,7 @@ function updateThemeMenuChecks(): void {
 
 // --- Auto update (weak, non-blocking) ---
 let manualUpdateCheck = false
+let updateDownloadRequested = false
 
 function showUpdateMessage(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
   const win = getFocusedWindow()
@@ -1466,8 +1504,22 @@ function setupAutoUpdater(): void {
       detail: chinese ? `当前版本：v${app.getVersion()}` : `Current version: v${app.getVersion()}`
     })
   })
-  autoUpdater.on('update-downloaded', (info) => broadcast('update-downloaded', info.version))
-  autoUpdater.on('error', (err) => console.error('autoUpdater:', err.message))
+  autoUpdater.on('update-downloaded', (info) => {
+    updateDownloadRequested = false
+    broadcast('update-downloaded', info.version)
+  })
+  autoUpdater.on('download-progress', (progress) => {
+    if (!updateDownloadRequested) return
+    broadcast('update-progress', String(Math.min(100, Math.round(progress.percent))))
+  })
+  autoUpdater.on('error', (err) => {
+    console.error('autoUpdater:', err.message)
+    // Only surface failures for a user-initiated download; background
+    // update checks fail silently (weak, non-blocking philosophy).
+    if (!updateDownloadRequested) return
+    updateDownloadRequested = false
+    broadcast('update-error', '')
+  })
 
   // Defer the first check so it never delays startup.
   setTimeout(() => {
@@ -1476,6 +1528,7 @@ function setupAutoUpdater(): void {
 }
 
 ipcMain.handle('download-update', async () => {
+  updateDownloadRequested = true
   await autoUpdater.downloadUpdate()
 })
 
@@ -1489,9 +1542,6 @@ app.whenReady().then(() => {
   markStartup('app-ready')
   ensureThemesDir()
   buildMenu()
-
-  // Warm the system font list in the background for the font settings dialog
-  void loadSystemFontFamilies()
 
   // Check command line args for file paths
   const args = process.argv.slice(app.isPackaged ? 1 : 2)

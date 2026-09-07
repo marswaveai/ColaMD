@@ -123,6 +123,11 @@ window.addEventListener('message', (event) => {
   }
 })
 
+export function releaseMermaidRenderer(): void {
+  rejectAllPending(new Error('文档已切换'))
+  destroyIframe()
+}
+
 export function renderMermaid(code: string): Promise<string> {
   ensureIframe()
   return new Promise<string>((resolve, reject) => {

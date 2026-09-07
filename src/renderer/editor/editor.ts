@@ -11,8 +11,10 @@ import { replaceAll, $prose } from '@milkdown/kit/utils'
 import { remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema } from '@milkdown/plugin-math'
 import { htmlView } from './html-view'
 import { mermaidView } from './mermaid-view'
+import { releaseMermaidRenderer as releaseMermaidRendererBridge } from './mermaid-bridge'
 import { mathModal } from './math-modal'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
+import { isChinese } from '../ui-language'
 
 import 'katex/dist/katex.min.css'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
@@ -100,6 +102,14 @@ const mathEditorPlugin = $prose(() => {
 
 export function showMathModal(): void {
   mathModal.show()
+}
+
+export function setMathModalLanguage(language: 'zh' | 'en'): void {
+  mathModal.setLanguage(language)
+}
+
+export function releaseMermaidRenderer(): void {
+  releaseMermaidRendererBridge()
 }
 
 let editorInstance: Editor | null = null
@@ -194,9 +204,9 @@ function createCopyButton(): HTMLButtonElement {
   const button = document.createElement('button')
   button.type = 'button'
   button.className = 'code-copy-btn'
-  button.textContent = '复制'
-  button.title = '复制代码'
-  button.setAttribute('aria-label', '复制代码')
+  button.textContent = isChinese() ? '复制' : 'Copy'
+  button.title = isChinese() ? '复制代码' : 'Copy code'
+  button.setAttribute('aria-label', button.title)
   button.style.position = 'absolute'
   button.addEventListener('mousedown', (event) => event.preventDefault())
   button.addEventListener('click', async (event) => {
@@ -206,17 +216,17 @@ function createCopyButton(): HTMLButtonElement {
     const code = copyButtonPre.querySelector('code')?.textContent ?? ''
     try {
       await copyText(code)
-      button.textContent = '已复制 ✓'
+      button.textContent = isChinese() ? '已复制 ✓' : 'Copied ✓'
       button.classList.add('copied')
       if (copyButtonResetTimer) clearTimeout(copyButtonResetTimer)
       copyButtonResetTimer = setTimeout(() => {
-        button.textContent = '复制'
+        button.textContent = isChinese() ? '复制' : 'Copy'
         button.classList.remove('copied')
       }, 1500)
     } catch {
-      button.textContent = '复制失败'
+      button.textContent = isChinese() ? '复制失败' : 'Copy failed'
       if (copyButtonResetTimer) clearTimeout(copyButtonResetTimer)
-      copyButtonResetTimer = setTimeout(() => { button.textContent = '复制' }, 1500)
+      copyButtonResetTimer = setTimeout(() => { button.textContent = isChinese() ? '复制' : 'Copy' }, 1500)
     }
   })
   document.getElementById('editor')?.appendChild(button)
@@ -293,9 +303,11 @@ function toggleStrongMark(): void {
   })
 }
 
-const defaultContent = navigator.language.toLowerCase().startsWith('zh')
-  ? '# **欢迎使用 ColaMD**\n\n开始写作...\n'
-  : '# **Welcome to ColaMD**\n\nStart typing here...\n'
+function defaultContent(): string {
+  return isChinese()
+    ? '# **欢迎使用 ColaMD**\n\n开始写作...\n'
+    : '# **Welcome to ColaMD**\n\nStart typing here...\n'
+}
 
 export async function createEditor(
   rootId: string,
@@ -322,7 +334,7 @@ export async function createEditor(
   let editor = Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, root)
-      ctx.set(defaultValueCtx, defaultContent)
+      ctx.set(defaultValueCtx, defaultContent())
       ctx.set(remarkPluginsCtx, [
         { plugin: remarkBreaks, options: {} },
         { plugin: remarkHighlight, options: {} },
