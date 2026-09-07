@@ -322,31 +322,6 @@ function visualOutline(): OutlineItem[] {
     .filter((item) => item.title)
 }
 
-function updateActiveOutlineItem(): void {
-  const active = activeOutlineElement
-  for (const button of Array.from(outlineListEl().querySelectorAll<HTMLButtonElement>('button[data-heading-index]'))) {
-    button.classList.toggle('active', active !== null && Number(button.dataset.headingIndex) === Number(active.dataset.outlineIndex))
-  }
-}
-
-function observeOutlineProgress(): void {
-  outlineScrollObserver?.disconnect()
-  outlineScrollObserver = null
-  activeOutlineElement = null
-  if (sourceModeActive) return
-  const headings = Array.from(document.querySelectorAll<HTMLElement>('#editor .ProseMirror h1, #editor .ProseMirror h2, #editor .ProseMirror h3, #editor .ProseMirror h4, #editor .ProseMirror h5, #editor .ProseMirror h6'))
-  headings.forEach((heading, index) => { heading.dataset.outlineIndex = String(index) })
-  if (headings.length === 0) return
-  outlineScrollObserver = new IntersectionObserver((entries) => {
-    const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-    if (visible.length > 0) {
-      activeOutlineElement = visible[0].target as HTMLElement
-      updateActiveOutlineItem()
-    }
-  }, { root: editorEl(), rootMargin: '-10% 0px -75% 0px', threshold: 0 })
-  headings.forEach((heading) => outlineScrollObserver!.observe(heading))
-}
-
 function renderOutline(): void {
   const list = outlineListEl()
   outlineItems = sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline()
@@ -416,7 +391,6 @@ function revealOutlineEntry(button: HTMLButtonElement): void {
   } else if (bottom > panel.scrollTop + panel.clientHeight) {
     panel.scrollTop = bottom - panel.clientHeight
   }
-  updateActiveOutlineItem()
 }
 
 function beginOutlineJump(): void {
@@ -527,7 +501,6 @@ function scheduleOutlineUpdate(): void {
   outlineUpdateQueued = true
   requestAnimationFrame(() => {
     outlineUpdateQueued = false
-    observeOutlineProgress()
     renderOutline()
   })
 }
