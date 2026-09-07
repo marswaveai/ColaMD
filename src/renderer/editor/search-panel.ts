@@ -1,10 +1,18 @@
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import { getEditorView, searchPluginKey } from './editor'
+import { getUiLanguage, type UiLanguage } from '../ui-language'
 
 export class SearchPanel {
   private container: HTMLDivElement
   private input: HTMLInputElement
+  private replaceInput: HTMLInputElement
   private countEl: HTMLSpanElement
+  private replaceRow: HTMLDivElement
+  private replaceButton: HTMLButtonElement
+  private replaceAllButton: HTMLButtonElement
+  private prevButton: HTMLButtonElement
+  private nextButton: HTMLButtonElement
+  private closeButton: HTMLButtonElement
   private matches: { from: number; to: number }[] = []
   private currentIndex = -1
   private visible = false
@@ -22,18 +30,46 @@ export class SearchPanel {
     this.countEl = document.createElement('span')
     this.countEl.className = 'search-count'
 
+    this.replaceRow = document.createElement('div')
+    this.replaceRow.className = 'search-replace-row'
+    this.replaceInput = document.createElement('input')
+    this.replaceInput.type = 'text'
+    this.replaceInput.placeholder = 'Replace...'
+    this.replaceInput.className = 'search-input search-replace-input'
+    const replaceBtn = this.btn('替换', 'search-action', () => this.replaceCurrent())
+    const replaceAllBtn = this.btn('全部替换', 'search-action', () => this.replaceAll())
+    this.replaceButton = replaceBtn
+    this.replaceAllButton = replaceAllBtn
+    this.replaceRow.append(this.replaceInput, replaceBtn, replaceAllBtn)
+
     const prevBtn = this.btn('\u2039', 'search-btn', () => this.prev())
     const nextBtn = this.btn('\u203A', 'search-btn', () => this.next())
     const closeBtn = this.btn('\u00D7', 'search-btn search-close', () => this.hide())
+    this.prevButton = prevBtn
+    this.nextButton = nextBtn
+    this.closeButton = closeBtn
 
-    this.container.append(this.input, this.countEl, prevBtn, nextBtn, closeBtn)
+    this.container.append(this.input, this.countEl, prevBtn, nextBtn, closeBtn, this.replaceRow)
 
     this.input.addEventListener('input', () => this.search())
     this.input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        this.replaceAll()
+      } else if (e.key === 'Enter') {
         e.preventDefault()
         if (e.shiftKey) this.prev()
         else this.next()
+      }
+    })
+
+    this.replaceInput.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        this.replaceAll()
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        this.replaceCurrent()
       }
     })
 
@@ -59,10 +95,22 @@ export class SearchPanel {
     )
 
     document.body.appendChild(this.container)
+    this.setLanguage(getUiLanguage())
+  }
+
+  setLanguage(language: UiLanguage): void {
+    const zh = language === 'zh'
+    this.input.placeholder = zh ? '查找' : 'Find'
+    this.replaceInput.placeholder = zh ? '替换为' : 'Replace with'
+    this.replaceButton.textContent = zh ? '替换' : 'Replace'
+    this.replaceAllButton.textContent = zh ? '全部替换' : 'Replace All'
+    this.prevButton.title = zh ? '上一个' : 'Previous'
+    this.nextButton.title = zh ? '下一个' : 'Next'
+    this.closeButton.title = zh ? '关闭' : 'Close'
   }
 
   show(): void {
-    this.container.style.display = 'flex'
+    this.container.style.display = 'grid'
     this.visible = true
     this.input.focus()
     this.input.select()
@@ -83,6 +131,50 @@ export class SearchPanel {
     }
     const view = getEditorView()
     if (view) view.focus()
+  }
+
+  private replaceCurrent(): void {
+    if (this.currentIndex < 0 || this.currentIndex >= this.matches.length) return
+    const sourceEditor = this.getSourceEditor()
+    const replacement = this.replaceInput.value
+    if (sourceEditor) {
+      const match = this.matches[this.currentIndex]
+      sourceEditor.setRangeText(replacement, match.from, match.to, 'select')
+      sourceEditor.dispatchEvent(new Event('input', { bubbles: true }))
+      this.searchSourceEditor(this.input.value, sourceEditor)
+      return
+    }
+    const view = getEditorView()
+    if (!view) return
+    const match = this.matches[this.currentIndex]
+    view.dispatch(view.state.tr.insertText(replacement, match.from, match.to))
+    this.search()
+  }
+
+  private replaceAll(): void {
+    const query = this.input.value
+    if (!query || this.matches.length === 0) return
+    const sourceEditor = this.getSourceEditor()
+    const replacement = this.replaceInput.value
+    if (sourceEditor) {
+      sourceEditor.value = sourceEditor.value.replace(new RegExp(this.escapeRegExp(query), 'gi'), () => replacement)
+      sourceEditor.dispatchEvent(new Event('input', { bubbles: true }))
+      this.searchSourceEditor(query, sourceEditor)
+      return
+    }
+    const view = getEditorView()
+    if (!view) return
+    let tr = view.state.tr
+    for (let index = this.matches.length - 1; index >= 0; index--) {
+      const match = this.matches[index]
+      tr = tr.insertText(replacement, match.from, match.to)
+    }
+    view.dispatch(tr)
+    this.search()
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
   private btn(text: string, className: string, onClick: () => void): HTMLButtonElement {

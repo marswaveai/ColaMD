@@ -44,7 +44,7 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 - **Task Lists** — Click checkboxes to complete tasks, or use the keyboard shortcut.
 - **Highlights & LaTeX** — Write `==highlighted text==` and render mathematical formulas with KaTeX.
 - **Mermaid Diagrams** — Mermaid code blocks render as diagrams in an isolated hidden iframe with strict parsing; click a diagram to edit its source.
-- **Search** — Find anything in the current document with ⌘/Ctrl+F.
+- **Search & Replace** — Find anything in the current document with ⌘/Ctrl+F, then replace the current match or all matches.
 - **Smart Line Breaks** — Single newlines render as line breaks, matching how people and AI tools write Markdown.
 - **Rich Text Copy** — Copy content with formatting preserved into WeChat, email, and other rich-text editors.
 - **Themes** — Twelve built-in themes for focused writing in light or dark environments.
@@ -93,6 +93,7 @@ ColaMD will evolve alongside the agent ecosystem:
 - v1.8.0 — Portable image paths for Markdown and HTML images, plus editing fixes from community feedback
 - v1.8.1 — Refined first-launch experience and macOS icon; removed Mermaid rendering so code blocks remain native and editable
 - v1.9.0 — Word export, desktop and mobile reading-page image export, a document outline, themed PDF pages, and leaner startup loading
+- v2.0.3 — Find & replace, UI language switch, large-document source-mode fallback, update download progress with retry, and differential (blockmap) updates
 - v2.0.1 — Universal macOS build for Apple silicon and Intel Macs, plus custom-theme restoration, Mermaid render recovery, and Windows updater fixes
 - v2.0.0 — 1000-star release: Mermaid diagrams return with luminance-aware colors, recent files & session restore, editor font settings, heading anchors, multiple windows, and a save status hint
 - Future — More themes, editor integrations, and smoother Markdown workflows

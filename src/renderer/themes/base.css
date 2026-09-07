@@ -453,6 +453,11 @@ body.panel-resizing {
   font-weight: 500;
 }
 
+#outline-list button.active {
+  background: rgba(241, 117, 45, 0.14);
+  color: #F1752D;
+}
+
 #file-list button.parent {
   color: var(--text-secondary, var(--text-muted));
   border-bottom: 1px solid var(--border-color);
@@ -815,6 +820,7 @@ body.theme-elegant #editor .ProseMirror table td {
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -826,6 +832,10 @@ body.theme-elegant #editor .ProseMirror table td {
   border-radius: 3px;
 }
 
+::-webkit-scrollbar-corner {
+  background: var(--bg-color);
+}
+
 /* ======= SEARCH PANEL ======= */
 
 .search-panel {
@@ -833,9 +843,15 @@ body.theme-elegant #editor .ProseMirror table td {
   top: 10px;
   right: 56px;
   z-index: 1000;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  grid-template-areas:
+    "query count prev next close"
+    "replace replace replace replace replace";
   align-items: center;
-  gap: 4px;
+  column-gap: 4px;
+  row-gap: 6px;
+  width: 360px;
   padding: 6px 8px;
   background: var(--bg-color);
   border: 1px solid var(--border-color);
@@ -866,8 +882,47 @@ body.theme-elegant #editor .ProseMirror table td {
   text-align: center;
 }
 
+.search-panel > .search-input { grid-area: query; min-width: 0; width: auto; }
+.search-panel > .search-count { grid-area: count; min-width: 32px; }
+.search-panel > .search-btn:nth-of-type(1) { grid-area: prev; }
+.search-panel > .search-btn:nth-of-type(2) { grid-area: next; }
+.search-panel > .search-btn.search-close { grid-area: close; }
+
+.search-replace-row {
+  grid-area: replace;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 4px;
+  padding: 0;
+}
+
+.search-replace-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-action {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 7px;
+  background: none;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-action:hover {
+  background: var(--code-bg);
+  color: var(--text-color);
+}
+
 .search-btn {
-  padding: 2px 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: none;
@@ -882,7 +937,7 @@ body.theme-elegant #editor .ProseMirror table td {
 }
 
 .search-close {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .search-match {

@@ -1,4 +1,5 @@
-// Editor font preferences (#7752855).
+import { isChinese } from '../ui-language'
+
 // Layering: user preference > theme > built-in defaults. Themes keep their own
 // font rules; a body class + CSS variables override only the editor prose and
 // the source editor, leaving code blocks and the rest of the UI untouched.
@@ -11,7 +12,7 @@ export interface EditorFontPrefs {
 const STORE_KEY = 'colamd-editor-font'
 
 function isZh(): boolean {
-  return navigator.language.toLowerCase().startsWith('zh')
+  return isChinese()
 }
 
 export function loadSavedEditorFont(): EditorFontPrefs | null {
