@@ -13,6 +13,7 @@ import { htmlView } from './html-view'
 import { mermaidView } from './mermaid-view'
 import { releaseMermaidRenderer as releaseMermaidRendererBridge } from './mermaid-bridge'
 import { mathModal } from './math-modal'
+import { remarkMathFalsePositiveGuard } from './math-guard'
 import { highlight, remarkHighlight, highlightStringifyHandler } from './highlight'
 import { isChinese } from '../ui-language'
 
@@ -433,6 +434,7 @@ export async function createEditor(
       ctx.set(remarkPluginsCtx, [
         { plugin: remarkBreaks, options: {} },
         { plugin: remarkHighlight, options: {} },
+        { plugin: remarkMathFalsePositiveGuard, options: {} },
       ])
       ctx.set(katexOptionsCtx.key, { throwOnError: false })
       // Teach remark-stringify how to emit our custom ==highlight== node
