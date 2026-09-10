@@ -1237,3 +1237,11 @@ body.has-custom-font #source-editor {
   display: flex;
   gap: 10px;
 }
+
+/* Print only document content; app overlays can appear at any time. */
+@media print {
+  body > :not(#editor),
+  #editor > .code-copy-btn {
+    display: none !important;
+  }
+}

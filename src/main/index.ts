@@ -832,11 +832,16 @@ ipcMain.handle('export-pdf', async (event) => {
   try {
     const background = await win.webContents.executeJavaScript('getComputedStyle(document.body).backgroundColor') as string
     const cssKey = await win.webContents.insertCSS(
-      `@page { margin: 0; } html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; } #titlebar, #file-panel, #source-editor, #update-banner, .search-panel { display: none !important; } #editor { margin-left: 0 !important; padding: 20mm !important; } #editor .ProseMirror { min-height: auto !important; }`
+      `@media print {
+        @page { margin: 0; }
+        html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; }
+        #editor { margin-left: 0 !important; padding: 20mm !important; }
+        #editor .ProseMirror { min-height: auto !important; }
+      }`
     )
     try {
       const pdfData = await win.webContents.printToPDF({
-        margins: { marginType: 'none' },
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
         printBackground: true,
         pageSize: 'A4'
       })
