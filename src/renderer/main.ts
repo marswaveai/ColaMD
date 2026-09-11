@@ -950,20 +950,6 @@ async function init(): Promise<void> {
     updateBannerEl().hidden = true
   })
 
-  const agentDot = document.getElementById('agent-dot')
-  api.onAgentActivity((state) => {
-    if (!agentDot) return
-    agentDot.className = state === 'idle' ? '' : state
-    const label = state === 'active'
-      ? (isChinese() ? 'Agent 正在修改文档' : 'Agent is editing')
-      : state === 'cooldown'
-        ? (isChinese() ? 'Agent 刚刚完成修改' : 'Agent finished editing')
-        : (isChinese() ? 'Agent 状态' : 'Agent status')
-    agentDot.setAttribute('aria-label', label)
-    const tip = agentDot.querySelector('.toolbar-tip')
-    if (tip) tip.textContent = label
-  })
-
   document.addEventListener('dragover', (e) => e.preventDefault())
   document.addEventListener('drop', async (e) => {
     e.preventDefault()

@@ -57,7 +57,6 @@ export interface ElectronAPI {
   onSetTheme: (callback: (theme: string) => void) => void
   onSetCustomCSS: (callback: (css: string) => void) => void
   onMenuImportTheme: (callback: () => void) => void
-  onAgentActivity: (callback: (state: string) => void) => void
   onSearch: (callback: () => void) => void
   onMathModal: (callback: () => void) => void
   onSiblingsChanged: (callback: (files: SiblingFile[]) => void) => void
@@ -146,9 +145,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onMenuImportTheme: (callback: () => void) => {
     ipcRenderer.on('menu-import-theme', () => callback())
-  },
-  onAgentActivity: (callback: (state: string) => void) => {
-    ipcRenderer.on('agent-activity', (_event, state) => callback(state))
   },
   onSearch: (callback: () => void) => {
     ipcRenderer.on('editor:search', () => callback())

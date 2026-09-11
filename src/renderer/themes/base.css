@@ -40,6 +40,7 @@ body {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  min-width: 0;
   font-size: 13px;
   line-height: 1.3;
   color: var(--text-muted);
@@ -60,20 +61,6 @@ body {
 /* Only unsaved edits are announced; a successful save fades out silently. */
 #save-status.pending {
   opacity: 0.55;
-}
-
-#agent-dot {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  opacity: 0.3;
-  cursor: help;
-  -webkit-app-region: no-drag;
-  transition: background 0.3s ease, opacity 0.3s ease;
 }
 
 #file-toggle-btn {
@@ -109,11 +96,10 @@ body {
 }
 
 #reveal-file-btn {
-  position: absolute;
-  top: 6px;
-  right: 140px;
+  position: relative;
   width: 28px;
   height: 28px;
+  flex: 0 0 28px;
   border-radius: 6px;
   border: none;
   background: transparent;
@@ -123,17 +109,26 @@ body {
   align-items: center;
   justify-content: center;
   -webkit-app-region: no-drag;
-  transition: background 0.15s, color 0.15s;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
 
 #reveal-file-btn:disabled {
-  opacity: 0.45;
+  opacity: 0;
+  pointer-events: none;
   cursor: default;
 }
 
 #reveal-file-btn:disabled:hover {
   background: transparent;
   color: var(--text-muted);
+}
+
+#titlebar:hover #reveal-file-btn:not(:disabled),
+#reveal-file-btn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Source (Markdown) / WYSIWYG toggle */
@@ -206,34 +201,14 @@ body {
 }
 
 #titlebar > button:hover .toolbar-tip,
-#agent-dot:hover .toolbar-tip {
+#reveal-file-btn:hover .toolbar-tip,
+#reveal-file-btn:focus-visible .toolbar-tip {
   opacity: 1;
   transform: translateY(0);
 }
 
 #word-count {
   cursor: default;
-}
-
-#agent-dot .toolbar-tip {
-  top: calc(100% + 8px);
-}
-
-#agent-dot.active {
-  background: #e8913a;
-  opacity: 1;
-  animation: agent-breathe 2s ease-in-out infinite;
-}
-
-#agent-dot.cooldown {
-  background: #3dba5c;
-  opacity: 1;
-  animation: none;
-}
-
-@keyframes agent-breathe {
-  0%, 100% { opacity: 0.45; transform: scale(0.95); }
-  50% { opacity: 1; transform: scale(1.05); }
 }
 
 #editor {
@@ -501,6 +476,12 @@ body.panel-resizing {
 body.show-file-panel #editor,
 body.show-file-panel #source-editor {
   margin-left: var(--file-panel-width, 220px);
+}
+
+/* The source editor has an explicit width, so account for the panel margin
+   instead of extending past the viewport when both are visible. */
+body.show-file-panel #source-editor {
+  width: calc(100% - var(--file-panel-width, 220px));
 }
 
 #editor.hidden {
@@ -1265,4 +1246,12 @@ body.has-custom-font #source-editor {
 .font-modal-footer-group {
   display: flex;
   gap: 10px;
+}
+
+/* Print only document content; app overlays can appear at any time. */
+@media print {
+  body > :not(#editor),
+  #editor > .code-copy-btn {
+    display: none !important;
+  }
 }

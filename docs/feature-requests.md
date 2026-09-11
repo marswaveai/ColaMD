@@ -139,7 +139,7 @@ Bug report: opening the first .md is fast, but opening another file while one is
 
 **Status:** Deferred. The initial menu, paste, and drag-and-drop implementation was removed before `v1.9.0` after it proved unreliable.
 
-**Status:** Planned for next week's development review.
+**Scope constraint (2026-09-11):** two complete image pipelines were declined this day (see Declined → Rich image pipelines). If this is ever restarted it must stay minimal: zero configuration by default, images written next to the document as relative references, no new menu, settings panel, floating toolbar, or other persistent UI.
 
 ### Publish ColaMD for iOS
 
@@ -162,6 +162,12 @@ Bug report: opening the first .md is fast, but opening another file while one is
 **Why it fits:** Reduces top chrome on Windows where the separate native menu bar wastes height.
 
 **Constraints:** Keep native minimize/maximize/close behavior, keyboard access to menus, existing shortcuts, and window dragging. Only affects Windows; macOS already integrates menus natively.
+
+### AI-assisted features (scope undecided)
+
+**Raised:** 2026-09-11, by the maintainer, without a chosen scope (translation mentioned as one example).
+
+No decision yet on which AI capabilities belong in the editor, and therefore no commitment. The earlier notes on built-in translation still describe the cost of getting this wrong (provider, configuration, privacy, product scope). Any concrete proposal should start from a narrow, zero-configuration shape that does not add persistent UI, and be reviewed against the same principles as everything else.
 
 ### Footnote hover preview
 
@@ -186,3 +192,19 @@ ColaMD deliberately avoids workspace and tab-system complexity. Existing file op
 ### Resizable file panel
 
 Implemented in the `2.0.2` candidate: the file panel width can be adjusted and is retained locally.
+
+### Rich image pipelines
+
+**Sources:** [#73](https://github.com/marswaveai/ColaMD/pull/73), [#74](https://github.com/marswaveai/ColaMD/pull/74)
+
+Two full image workflows were declined: a configurable import pipeline (Image menu, seven folder choices, copy/reference/embed modes) and a paste pipeline with a Feishu-style floating toolbar, lightbox, and base64 migration. Both add persistent UI, settings, or image-management subsystems, and the product keeps the interface to title bar, editor, and file panel — one setting screen is already too much, and a default that needs configuring is the wrong default.
+
+### Heuristic agent activity indicator
+
+The status dot driven by file-watcher timing was removed on 2026-09-11. It could not distinguish an agent from any other external write (a checkout, a sync tool, another editor), so its "Agent is editing" label was a guess; and it duplicated the signal the hot reload already gives, since the document visibly updates. A real agent indicator would require an actual session handshake — an agent runtime telling the app which document it is editing — and is a separate feature, not a watcher heuristic.
+
+### Ultrawide paged reading layouts
+
+**Source:** [#67](https://github.com/marswaveai/ColaMD/pull/67)
+
+Two- and three-page reading layouts for ultrawide displays were declined. ColaMD is an editor, not a paginated reader; the feature costs ~480 lines of pagination logic, hijacks wheel/trackpad/page keys, and sits on the known-fragile CSS multicol + contenteditable ground (IME, cross-column selection, position loss after external reload) for a single edge-case scenario.

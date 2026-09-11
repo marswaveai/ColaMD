@@ -8,14 +8,14 @@
   <!-- Keep the titlebar stable before the renderer CSS bundle loads. -->
   <style>
     #titlebar { height: 40px; position: relative; -webkit-app-region: drag; }
-    #titlebar > button, #agent-dot { position: absolute; -webkit-app-region: no-drag; }
-    #titlebar > button { border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; }
-    #word-count, #source-toggle-btn, #file-toggle-btn, #reveal-file-btn { top: 6px; width: 28px; height: 28px; }
+    #titlebar > button { position: absolute; -webkit-app-region: no-drag; }
+    #title-center > button { position: relative; -webkit-app-region: no-drag; }
+    #titlebar > button, #title-center > button { border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; }
+    #word-count, #source-toggle-btn, #file-toggle-btn { top: 6px; width: 28px; height: 28px; }
+    #reveal-file-btn { width: 28px; height: 28px; }
     #word-count { right: 32px; }
     #source-toggle-btn { right: 68px; }
     #file-toggle-btn { right: 104px; }
-    #reveal-file-btn { right: 140px; }
-    #agent-dot { top: 16px; right: 16px; width: 8px; height: 8px; border-radius: 50%; background: rgba(127, 127, 127, 0.3); }
     #title-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: calc(100% - 300px); display: flex; align-items: center; gap: 8px; pointer-events: none; }
     #file-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; pointer-events: none; }
     #save-status { flex-shrink: 0; font-size: 11px; line-height: 1.3; color: rgba(127, 127, 127, 0.9); opacity: 0; transition: opacity 0.4s ease; pointer-events: none; }
@@ -29,10 +29,13 @@
   <div id="titlebar">
     <div id="title-center">
       <span id="file-title">未命名</span>
+      <button id="reveal-file-btn" type="button" disabled title="打开所在文件夹" aria-label="打开所在文件夹">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 9.33 5 7.4a1.33 1.33 0 0 1 1.16-.73h7.33a1.33 1.33 0 0 1 1.29 1.67l-1.03 4a1.33 1.33 0 0 1-1.3 1H2.67a1.33 1.33 0 0 1-1.33-1.33V3.33A1.33 1.33 0 0 1 2.67 2h2.6a1.33 1.33 0 0 1 1.13.6l.54.8a1.33 1.33 0 0 0 1.11.6H12a1.33 1.33 0 0 1 1.33 1.33v1.33"/>
+        </svg>
+        <span class="toolbar-tip">打开所在文件夹</span>
+      </button>
       <span id="save-status" aria-live="polite"></span>
-    </div>
-    <div id="agent-dot" aria-label="Agent 状态">
-      <span class="toolbar-tip">Agent 状态</span>
     </div>
     <button id="word-count" aria-label="文档统计">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
@@ -55,12 +58,6 @@
         <line x1="5.3" y1="3" x2="5.3" y2="13"/>
       </svg>
       <span class="toolbar-tip">显示 / 隐藏文件列表 (⌘⇧B)</span>
-    </button>
-    <button id="reveal-file-btn" type="button" disabled title="打开所在文件夹" aria-label="打开所在文件夹">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 9.33 5 7.4a1.33 1.33 0 0 1 1.16-.73h7.33a1.33 1.33 0 0 1 1.29 1.67l-1.03 4a1.33 1.33 0 0 1-1.3 1H2.67a1.33 1.33 0 0 1-1.33-1.33V3.33A1.33 1.33 0 0 1 2.67 2h2.6a1.33 1.33 0 0 1 1.13.6l.54.8a1.33 1.33 0 0 0 1.11.6H12a1.33 1.33 0 0 1 1.33 1.33v1.33"/>
-      </svg>
-      <span class="toolbar-tip">打开所在文件夹</span>
     </button>
   </div>
   <aside id="file-panel" hidden>
