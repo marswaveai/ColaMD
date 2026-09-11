@@ -1,8 +1,16 @@
 # ColaMD Changelog
 
-欢迎来到 ColaMD 的**可玩 changelog**。左侧面板列出的就是本目录的文件——点击切换，每个文件演示一组功能。这是演示副本，玩坏了随时可以从仓库恢复。
+欢迎来到 ColaMD 的**可玩 changelog**。左侧面板列出的就是本目录的文件，点击切换，每个文件演示一组功能。这是演示副本，玩坏了随时可以从仓库恢复。
 
 ---
+
+## v2.0.4 · 导出修复与更干净的标题栏
+
+- **PDF 导出修复**：导出时不再把更新提示等浮层当成正文内容（[#71](https://github.com/marswaveai/ColaMD/issues/71)）
+- **源码模式修复**：源码模式与文件面板同时打开时不再横向溢出（[#76](https://github.com/marswaveai/ColaMD/pull/76)）
+- **打开所在文件夹**：鼠标移到标题上时，文档名右侧出现一个文件夹按钮，点击即可在 Finder 或资源管理器中定位当前文档（[#77](https://github.com/marswaveai/ColaMD/pull/77)）
+- **复制不再带空行**：复制到微信、钉钉等聊天工具时，段落之间不再多出空行（[#81](https://github.com/marswaveai/ColaMD/issues/81)）
+- **移除 Agent 活动指示器**：标题栏的小圆点已删除。它只能根据文件变化的时间间隔猜测，无法区分 Agent 与其他外部写入，而内容实时更新本身已经说明了一切
 
 ## v2.0.3 · 查找替换与更可靠的更新
 
@@ -100,7 +108,7 @@
 
 ## 更早
 
-v1.6.x — 可勾选的待办列表、`==高亮==` 语法、Markdown 语法速查、实时同步加固。详见 [GitHub Releases](https://github.com/marswaveai/colamd/releases)。
+v1.6.x：可勾选的待办列表、`==高亮==` 语法、Markdown 语法速查、实时同步加固。详见 [GitHub Releases](https://github.com/marswaveai/colamd/releases)。
 
 ---
 
@@ -120,6 +128,6 @@ echo '- [ ] 这是 Agent 刚写入的任务' >> tasks.md
 echo '# 全新文件' > new.md
 ```
 
-第二行会**实时**出现在左侧面板里——文件面板和内容一起动。
+第二行会**实时**出现在左侧面板里，文件面板和内容一起动。
 
 Markdown 语法请使用 Help 中的主入口，内容会根据系统语言自动选择。
