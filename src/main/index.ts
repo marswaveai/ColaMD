@@ -172,9 +172,6 @@ interface WindowState {
   lastInternalSaveContent: string | null
   debounceTimer: ReturnType<typeof setTimeout> | null
   siblingsTimer: ReturnType<typeof setTimeout> | null
-  agentState: 'idle' | 'active' | 'cooldown'
-  lastExternalChange: number
-  agentCooldownTimer: ReturnType<typeof setTimeout> | null
   dirty: boolean
   closePromise: Promise<boolean> | null
   rendererReady: boolean
@@ -202,7 +199,7 @@ const pendingDocumentStateRequests = new Map<string, PendingDocumentStateRequest
 function getState(win: BrowserWindow): WindowState {
   let state = windowStates.get(win.id)
   if (!state) {
-    state = { filePath: null, browsePath: null, watcher: null, isInternalSave: false, internalSaveCount: 0, lastInternalSaveContent: null, debounceTimer: null, siblingsTimer: null, agentState: 'idle', lastExternalChange: 0, agentCooldownTimer: null, dirty: false, closePromise: null, rendererReady: false, writeQueue: Promise.resolve(), closeAuthorized: false }
+    state = { filePath: null, browsePath: null, watcher: null, isInternalSave: false, internalSaveCount: 0, lastInternalSaveContent: null, debounceTimer: null, siblingsTimer: null, dirty: false, closePromise: null, rendererReady: false, writeQueue: Promise.resolve(), closeAuthorized: false }
     windowStates.set(win.id, state)
   }
   return state
@@ -304,39 +301,6 @@ function stopWatching(state: WindowState): void {
     state.watcher.close()
     state.watcher = null
   }
-  if (state.agentCooldownTimer) {
-    clearTimeout(state.agentCooldownTimer)
-    state.agentCooldownTimer = null
-  }
-  state.agentState = 'idle'
-  state.lastExternalChange = 0
-}
-
-function transitionAgentState(win: BrowserWindow, state: WindowState, newState: 'idle' | 'active' | 'cooldown'): void {
-  if (state.agentCooldownTimer) {
-    clearTimeout(state.agentCooldownTimer)
-    state.agentCooldownTimer = null
-  }
-
-  if (newState === 'active') {
-    if (state.agentState !== 'active') {
-      state.agentState = 'active'
-      if (!win.isDestroyed()) win.webContents.send('agent-activity', 'active')
-    }
-    // Reset cooldown timer — 3s after last write
-    state.agentCooldownTimer = setTimeout(() => {
-      transitionAgentState(win, state, 'cooldown')
-    }, 3000)
-  } else if (newState === 'cooldown') {
-    state.agentState = 'cooldown'
-    if (!win.isDestroyed()) win.webContents.send('agent-activity', 'cooldown')
-    state.agentCooldownTimer = setTimeout(() => {
-      transitionAgentState(win, state, 'idle')
-    }, 2000)
-  } else {
-    state.agentState = 'idle'
-    if (!win.isDestroyed()) win.webContents.send('agent-activity', 'idle')
-  }
 }
 
 function watchFile(win: BrowserWindow, state: WindowState): void {
@@ -372,16 +336,6 @@ function watchFile(win: BrowserWindow, state: WindowState): void {
   const onExternalChange = (): void => {
     if (state.isInternalSave) return
     if (Date.now() < suppressUntil) return
-
-    // Agent activity detection
-    const now = Date.now()
-    const gap = now - state.lastExternalChange
-    state.lastExternalChange = now
-    if (gap > 0 && gap < 2000) {
-      transitionAgentState(win, state, 'active')
-    } else if (state.agentState === 'active') {
-      transitionAgentState(win, state, 'active') // reset cooldown timer
-    }
 
     scheduleReload()
   }

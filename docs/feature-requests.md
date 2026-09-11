@@ -163,6 +163,12 @@ Bug report: opening the first .md is fast, but opening another file while one is
 
 **Constraints:** Keep native minimize/maximize/close behavior, keyboard access to menus, existing shortcuts, and window dragging. Only affects Windows; macOS already integrates menus natively.
 
+### AI-assisted features (scope undecided)
+
+**Raised:** 2026-09-11, by the maintainer, without a chosen scope (translation mentioned as one example).
+
+No decision yet on which AI capabilities belong in the editor, and therefore no commitment. The earlier notes on built-in translation still describe the cost of getting this wrong (provider, configuration, privacy, product scope). Any concrete proposal should start from a narrow, zero-configuration shape that does not add persistent UI, and be reviewed against the same principles as everything else.
+
 ### Footnote hover preview
 
 **Source:** [#25](https://github.com/marswaveai/ColaMD/issues/25)
@@ -192,6 +198,10 @@ Implemented in the `2.0.2` candidate: the file panel width can be adjusted and i
 **Sources:** [#73](https://github.com/marswaveai/ColaMD/pull/73), [#74](https://github.com/marswaveai/ColaMD/pull/74)
 
 Two full image workflows were declined: a configurable import pipeline (Image menu, seven folder choices, copy/reference/embed modes) and a paste pipeline with a Feishu-style floating toolbar, lightbox, and base64 migration. Both add persistent UI, settings, or image-management subsystems, and the product keeps the interface to title bar, editor, and file panel — one setting screen is already too much, and a default that needs configuring is the wrong default.
+
+### Heuristic agent activity indicator
+
+The status dot driven by file-watcher timing was removed on 2026-09-11. It could not distinguish an agent from any other external write (a checkout, a sync tool, another editor), so its "Agent is editing" label was a guess; and it duplicated the signal the hot reload already gives, since the document visibly updates. A real agent indicator would require an actual session handshake — an agent runtime telling the app which document it is editing — and is a separate feature, not a watcher heuristic.
 
 ### Ultrawide paged reading layouts
 

@@ -62,20 +62,6 @@ body {
   opacity: 0.55;
 }
 
-#agent-dot {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  opacity: 0.3;
-  cursor: help;
-  -webkit-app-region: no-drag;
-  transition: background 0.3s ease, opacity 0.3s ease;
-}
-
 #file-toggle-btn {
   position: absolute;
   top: 6px;
@@ -176,35 +162,13 @@ body {
   transition: opacity 0.15s, transform 0.15s;
 }
 
-#titlebar > button:hover .toolbar-tip,
-#agent-dot:hover .toolbar-tip {
+#titlebar > button:hover .toolbar-tip {
   opacity: 1;
   transform: translateY(0);
 }
 
 #word-count {
   cursor: default;
-}
-
-#agent-dot .toolbar-tip {
-  top: calc(100% + 8px);
-}
-
-#agent-dot.active {
-  background: #e8913a;
-  opacity: 1;
-  animation: agent-breathe 2s ease-in-out infinite;
-}
-
-#agent-dot.cooldown {
-  background: #3dba5c;
-  opacity: 1;
-  animation: none;
-}
-
-@keyframes agent-breathe {
-  0%, 100% { opacity: 0.45; transform: scale(0.95); }
-  50% { opacity: 1; transform: scale(1.05); }
 }
 
 #editor {

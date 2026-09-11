@@ -8,13 +8,12 @@
   <!-- Keep the titlebar stable before the renderer CSS bundle loads. -->
   <style>
     #titlebar { height: 40px; position: relative; -webkit-app-region: drag; }
-    #titlebar > button, #agent-dot { position: absolute; -webkit-app-region: no-drag; }
+    #titlebar > button { position: absolute; -webkit-app-region: no-drag; }
     #titlebar > button { border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; }
     #word-count, #source-toggle-btn, #file-toggle-btn { top: 6px; width: 28px; height: 28px; }
     #word-count { right: 32px; }
     #source-toggle-btn { right: 68px; }
     #file-toggle-btn { right: 104px; }
-    #agent-dot { top: 16px; right: 16px; width: 8px; height: 8px; border-radius: 50%; background: rgba(127, 127, 127, 0.3); }
     #title-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: calc(100% - 300px); display: flex; align-items: center; gap: 8px; pointer-events: none; }
     #file-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; pointer-events: none; }
     #save-status { flex-shrink: 0; font-size: 11px; line-height: 1.3; color: rgba(127, 127, 127, 0.9); opacity: 0; transition: opacity 0.4s ease; pointer-events: none; }
@@ -29,9 +28,6 @@
     <div id="title-center">
       <span id="file-title">未命名</span>
       <span id="save-status" aria-live="polite"></span>
-    </div>
-    <div id="agent-dot" aria-label="Agent 状态">
-      <span class="toolbar-tip">Agent 状态</span>
     </div>
     <button id="word-count" aria-label="文档统计">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
