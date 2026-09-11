@@ -148,6 +148,8 @@ ColaMD's thesis is Markdown as a database: fixed fields in `.md`, many views on 
 
 Interop is cheap because Knap is an AST interpreter with no `eval` and ships a CLI; reimplementing a templating language would not be.
 
+The maintainer also raised the mirror idea on 2026-09-11: ColaMD itself could ship as a plugin for another host, so the product is both a host for templates and guests in other ecosystems. Tracked here as direction only, with no scope decided.
+
 ### Markdown formatting shortcuts
 
 **Source:** [#58](https://github.com/marswaveai/ColaMD/issues/58)
