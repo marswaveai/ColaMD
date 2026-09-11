@@ -86,15 +86,13 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Deferred. The current restore behavior remains in `v2.0.0`; do not change it in this release.
 
-## Scheduled
+### Reveal in file manager (hover on the document title)
 
-### Reveal in folder as a constant titlebar button
+**Sources:** [#83](https://github.com/marswaveai/ColaMD/issues/83), [#84](https://github.com/marswaveai/ColaMD/pull/84) by @moyu12-ae
 
-**Target:** v2.0.6
+The reveal button shipped in v2.0.4 and v2.0.5 was unreachable, but not because hover in the titlebar is unreliable. Commit `8dc5097` (stop undo from crossing documents) refactored `main.ts` and deleted every renderer hookup for the button: the element accessor, the `fileManagerName` state, `fileLocationLabel()`, `updateFileRevealButton()` and the click binding, while `index.html` kept its hardcoded `disabled`. The visibility rule is `#titlebar:hover #reveal-file-btn:not(:disabled)`, so a permanently disabled button can never match and stays at `opacity: 0`, which presents as a broken hover. The wiring is restored, and the button appears when the file name is hovered.
 
-The reveal button shipped in v2.0.4 and v2.0.5 was unreachable, but not because hover in the titlebar is unreliable. Commit `8dc5097` (stop undo from crossing documents) refactored `main.ts` and deleted every renderer hookup for the button: the element accessor, the `fileManagerName` state, `fileLocationLabel()`, `updateFileRevealButton()` and the click binding. `index.html` kept its hardcoded `disabled`. The visibility rule is `#titlebar:hover #reveal-file-btn:not(:disabled)`, so a permanently disabled button can never match and stayed at `opacity: 0`, which presents as a broken hover. `#titlebar:hover` in fact matches normally once the hover target on the file name is interactive.
-
-With the wiring restored the button appears on hovering the file name and the click reaches the main process, so the hover reveal works as designed. Making it a constant button remains a reasonable discoverability preference, but it is not required for correctness and the two changes should be decided separately.
+**Decision (2026-09-12):** the button stays hover-only. A constant fourth titlebar icon was considered and dropped: the hover reveal works, and the titlebar should stay as empty as possible.
 
 ## Security Maintenance
 
