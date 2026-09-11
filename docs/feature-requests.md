@@ -92,11 +92,9 @@ These features are implemented on `main` and await release verification.
 
 **Target:** v2.0.6
 
-The reveal button shipped in v2.0.4 and v2.0.5 is gated on hovering the file name, and that gate never opens on a real build: the titlebar is a window drag region, and moving the hover target onto the file name (`no-drag` + `pointer-events: auto`) worked in a browser harness but not in 2.0.5 on macOS. The button is therefore in the titlebar markup but unreachable.
+The reveal button shipped in v2.0.4 and v2.0.5 was unreachable, but not because hover in the titlebar is unreliable. Commit `8dc5097` (stop undo from crossing documents) refactored `main.ts` and deleted every renderer hookup for the button: the element accessor, the `fileManagerName` state, `fileLocationLabel()`, `updateFileRevealButton()` and the click binding. `index.html` kept its hardcoded `disabled`. The visibility rule is `#titlebar:hover #reveal-file-btn:not(:disabled)`, so a permanently disabled button can never match and stayed at `opacity: 0`, which presents as a broken hover. `#titlebar:hover` in fact matches normally once the hover target on the file name is interactive.
 
-Decision: drop the hover reveal and let the button always show as the fourth icon in the titlebar row (document stats, source mode, file panel, reveal in folder).
-
-The v2.0.5 changelog line that describes the hover behaviour is inaccurate for the shipped build; the v2.0.6 entry should carry the correction.
+With the wiring restored the button appears on hovering the file name and the click reaches the main process, so the hover reveal works as designed. Making it a constant button remains a reasonable discoverability preference, but it is not required for correctness and the two changes should be decided separately.
 
 ## Security Maintenance
 
