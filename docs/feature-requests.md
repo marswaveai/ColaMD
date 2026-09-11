@@ -117,7 +117,7 @@ Bug report: opening the first .md is fast, but opening another file while one is
 
 **Need:** Reduce repeated new-window creation when moving among a few Markdown files in the same directory, especially on Windows, without introducing a workspace model.
 
-**Scope:** A quiet switcher below the title bar, shown only with two or more documents. Start with up to three same-directory documents; preserve each document's content, dirty state, scroll position, and source/visual mode while switching. Do not support cross-directory tabs, drag sorting, pinned tabs, persistence, or startup session restoration. Current-item distinction should rely on subtle light/dark surfaces—not an accent-color underline. Refine the left-side visual spacing before implementation.
+**Scope:** A quiet switcher below the title bar, shown only with two or more documents. Start with up to three same-directory documents; preserve each document's content, dirty state, scroll position, and source/visual mode while switching. Do not support cross-directory tabs, drag sorting, pinned tabs, persistence, or startup session restoration. Current-item distinction should rely on subtle light/dark surfaces，not an accent-color underline. Refine the left-side visual spacing before implementation.
 
 **Status:** Candidate. Prototype accepted as direction; not scheduled.
 
@@ -136,6 +136,17 @@ Re-opened as a candidate on 2026-09-11, at the maintainer's request, instead of 
 Let people write their own plugins, so ColaMD grows through an ecosystem instead of shipping every capability itself. Mermaid is the first candidate to be extracted into a plugin, which would prove the API and keep the core small.
 
 Open questions before any implementation: what a plugin may touch (editor commands, menus, export pipeline, file I/O), how plugins are installed and updated, the security and permission model (plugins run in the renderer, so sandboxing matters), and how to keep a default install zero-configuration.
+
+### Knap interop (data to Markdown templates)
+
+**Raised:** 2026-09-11, after Obsidian's author released [Knap](https://github.com/obsidianmd/knap) (MIT, `obsidianmd/knap`), a template language that turns data into Markdown, shared by Obsidian Web Clipper and Importer.
+
+ColaMD's thesis is Markdown as a database: fixed fields in `.md`, many views on top. Knap is the mirror step, data into Markdown, so it is closer to an ingestion standard than a competitor. Two shapes worth considering, neither committed:
+
+- Point users at Knap instead of inventing a template language: `npx knap render template.md --data article.json --output note.md` writes a file that ColaMD already hot-reloads, which makes ColaMD the live view for generated Markdown.
+- Later, treat Knap as the structured-input path for the database workflow (fields in, Markdown out) and keep HTML templates as the view layer.
+
+Interop is cheap because Knap is an AST interpreter with no `eval` and ships a CLI; reimplementing a templating language would not be.
 
 ### Markdown formatting shortcuts
 
@@ -209,11 +220,11 @@ Implemented in the `2.0.2` candidate: the file panel width can be adjusted and i
 
 **Sources:** [#73](https://github.com/marswaveai/ColaMD/pull/73), [#74](https://github.com/marswaveai/ColaMD/pull/74)
 
-Two full image workflows were declined: a configurable import pipeline (Image menu, seven folder choices, copy/reference/embed modes) and a paste pipeline with a Feishu-style floating toolbar, lightbox, and base64 migration. Both add persistent UI, settings, or image-management subsystems, and the product keeps the interface to title bar, editor, and file panel — one setting screen is already too much, and a default that needs configuring is the wrong default.
+Two full image workflows were declined: a configurable import pipeline (Image menu, seven folder choices, copy/reference/embed modes) and a paste pipeline with a Feishu-style floating toolbar, lightbox, and base64 migration. Both add persistent UI, settings, or image-management subsystems, and the product keeps the interface to title bar, editor, and file panel，one setting screen is already too much, and a default that needs configuring is the wrong default.
 
 ### Heuristic agent activity indicator
 
-The status dot driven by file-watcher timing was removed on 2026-09-11. It could not distinguish an agent from any other external write (a checkout, a sync tool, another editor), so its "Agent is editing" label was a guess; and it duplicated the signal the hot reload already gives, since the document visibly updates. A real agent indicator would require an actual session handshake — an agent runtime telling the app which document it is editing — and is a separate feature, not a watcher heuristic.
+The status dot driven by file-watcher timing was removed on 2026-09-11. It could not distinguish an agent from any other external write (a checkout, a sync tool, another editor), so its "Agent is editing" label was a guess; and it duplicated the signal the hot reload already gives, since the document visibly updates. A real agent indicator would require an actual session handshake，an agent runtime telling the app which document it is editing，and is a separate feature, not a watcher heuristic.
 
 ### Ultrawide paged reading layouts
 

@@ -2,6 +2,12 @@
 
 产品与工程上的判断标准。规范的细节在各自的文件里，这里记录**为什么这样定**，以及踩过的坑。
 
+## 适用范围
+
+这份文档对**所有参与者**生效：维护者、外部贡献者，以及在本仓库里干活的 Agent。动手之前先读 [AGENT.md](AGENT.md) 与本文档；提交界面改动前还要过一遍 [design.md](design.md) 的贡献检查清单。
+
+与这些原则冲突的方案会被拒绝或要求先改规范，理由会写进 [docs/feature-requests.md](docs/feature-requests.md)。其中「如非必要，勿增实体」是默认立场：新增任何 UI 元素、依赖或子系统，都需要先证明必要性。
+
 相关文档：[AGENT.md](AGENT.md)（产品定位与分工）· [design.md](design.md)（界面规范）· [docs/feature-requests.md](docs/feature-requests.md)（需求裁决记录）
 
 ## 1. 稳定性优先
