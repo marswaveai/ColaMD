@@ -135,6 +135,8 @@ Re-opened as a candidate on 2026-09-11, at the maintainer's request, instead of 
 
 Let people write their own plugins, so ColaMD grows through an ecosystem instead of shipping every capability itself. Mermaid is the first candidate to be extracted into a plugin, which would prove the API and keep the core small.
 
+Requests already queued for this direction: image hosting such as PicGo ([#79](https://github.com/marswaveai/ColaMD/issues/79)), which is exactly the kind of integration that should not be built in.
+
 Open questions before any implementation: what a plugin may touch (editor commands, menus, export pipeline, file I/O), how plugins are installed and updated, the security and permission model (plugins run in the renderer, so sandboxing matters), and how to keep a default install zero-configuration.
 
 ### Knap interop (data to Markdown templates)
@@ -197,6 +199,12 @@ The maintainer also raised the mirror idea on 2026-09-11: ColaMD itself could sh
 **Raised:** 2026-09-11, by the maintainer, without a chosen scope (translation mentioned as one example).
 
 No decision yet on which AI capabilities belong in the editor, and therefore no commitment. The earlier notes on built-in translation still describe the cost of getting this wrong (provider, configuration, privacy, product scope). Any concrete proposal should start from a narrow, zero-configuration shape that does not add persistent UI, and be reviewed against the same principles as everything else.
+
+### Code block syntax highlighting
+
+**Sources:** [#54](https://github.com/marswaveai/ColaMD/issues/54)
+
+Fenced code blocks currently render as plain styled text with a copy button, without language-aware colouring. Adding it means shipping a highlighter and deciding which languages to support, so it stays tracked rather than committed. The issue remains open.
 
 ### Footnote hover preview
 
