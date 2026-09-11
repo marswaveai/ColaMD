@@ -129,7 +129,8 @@ ColaMD 是轻量 Markdown 编辑器，不追求功能堆叠。每增加一个按
 - hover 说明不能遮挡主要内容，也不能阻止鼠标操作。
 - disabled 控件必须降低透明度并停止 hover 强调。
 - **标题栏是窗口拖拽区（`-webkit-app-region: drag`），其中的元素不会派发鼠标事件**：点击、mouseenter、hover 都不会触发。控件必须自己标 `-webkit-app-region: no-drag` 才能被点击。
-- **不要在标题栏内依赖 hover 显隐控件**：v2.0.5 试过把 hover 触发点下移到文件名（`no-drag` + `pointer-events: auto`），浏览器复现页里成立，但 2.0.5 真机上按钮始终不出现。机制细节未最终定位，结论已经明确：拖拽区内的 hover 不可靠，需要悬停才出现的控件不要放在标题栏，标题栏里的操作做成常驻按钮。
+- **标题栏内可以依赖 hover 显隐控件，但触发点必须自身可接收指针事件**：把 hover 触发点放在文件名（`no-drag` + `pointer-events: auto`）上，标题栏内的 hover 显隐是可靠的，`#titlebar:hover` 也会随之命中。v2.0.5 的「打开所在文件夹」按钮一度被认为 hover 失效，实际原因是提交 8dc5097 重构 `main.ts` 时删掉了该按钮的全部渲染层接线（元素引用、状态、`updateFileRevealButton()` 与点击绑定），按钮停在 `disabled`，而显隐规则是 `#titlebar:hover #reveal-file-btn:not(:disabled)`，禁用态永远不满足，因此永远不可见。接线恢复后 hover 与点击均正常。
+- **禁用态不要当作显隐门**：需要 hover 才出现的控件，不要再把它同时设成 `disabled` 又用 `:not(:disabled)` 显隐，否则一处遗漏就会表现为「hover 失灵」，排查成本高。
 - 文件切换、覆盖或丢失未保存内容前，必须给出明确确认。
 - 外部 Agent 修改文件时，使用已有的状态点和刷新机制，不新增常驻提示条。
 - 导出功能统一放在 File 菜单中；当前支持 PDF 和 HTML。
