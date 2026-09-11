@@ -44,7 +44,12 @@ body {
   font-size: 13px;
   line-height: 1.3;
   color: var(--text-muted);
-  pointer-events: none;
+  /* The titlebar is a window drag region and never receives pointer events, so
+     the reveal button hangs its hover on the title itself, which must stay
+     interactive to be hoverable. */
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  cursor: default;
 }
 
 #save-status {
