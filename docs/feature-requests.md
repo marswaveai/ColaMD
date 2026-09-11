@@ -86,6 +86,18 @@ These features are implemented on `main` and await release verification.
 
 **Status:** Deferred. The current restore behavior remains in `v2.0.0`; do not change it in this release.
 
+## Scheduled
+
+### Reveal in folder as a constant titlebar button
+
+**Target:** v2.0.6
+
+The reveal button shipped in v2.0.4 and v2.0.5 is gated on hovering the file name, and that gate never opens on a real build: the titlebar is a window drag region, and moving the hover target onto the file name (`no-drag` + `pointer-events: auto`) worked in a browser harness but not in 2.0.5 on macOS. The button is therefore in the titlebar markup but unreachable.
+
+Decision: drop the hover reveal and let the button always show as the fourth icon in the titlebar row (document stats, source mode, file panel, reveal in folder).
+
+The v2.0.5 changelog line that describes the hover behaviour is inaccurate for the shipped build; the v2.0.6 entry should carry the correction.
+
 ## Security Maintenance
 
 ### Upgrade Electron and transitive security dependencies
