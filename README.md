@@ -37,7 +37,6 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 ## Features
 
 - **Live Agent Sync** — Changes made by Claude Code, Cursor, Copilot, or other AI agents appear in the editor in real time.
-- **Agent Activity Indicator** — A subtle titlebar dot shows when an agent is writing and when it has finished.
 - **True WYSIWYG Editing** — Type Markdown and see rich text directly. No split-pane preview.
 - **Files & Outline** — Browse Markdown files in the selected folder, or switch to a document outline for focused heading navigation.
 - **Source Mode** — Switch to the raw Markdown source whenever you need to inspect or edit it directly.
@@ -93,9 +92,10 @@ ColaMD will evolve alongside the agent ecosystem:
 - v1.8.0 — Portable image paths for Markdown and HTML images, plus editing fixes from community feedback
 - v1.8.1 — Refined first-launch experience and macOS icon; removed Mermaid rendering so code blocks remain native and editable
 - v1.9.0 — Word export, desktop and mobile reading-page image export, a document outline, themed PDF pages, and leaner startup loading
-- v2.0.3 — Find & replace, UI language switch, large-document source-mode fallback, update download progress with retry, and differential (blockmap) updates
-- v2.0.1 — Universal macOS build for Apple silicon and Intel Macs, plus custom-theme restoration, Mermaid render recovery, and Windows updater fixes
 - v2.0.0 — 1000-star release: Mermaid diagrams return with luminance-aware colors, recent files & session restore, editor font settings, heading anchors, multiple windows, and a save status hint
+- v2.0.1 — Universal macOS build for Apple silicon and Intel Macs, plus custom-theme restoration, Mermaid render recovery, and Windows updater fixes
+- v2.0.2 — Resizable file panel (180–420px, remembered) and an outline progress view that highlights the current heading and flashes the landing point after a jump
+- v2.0.3 — Find & replace, UI language switch, large-document source-mode fallback, update download progress with retry, and differential (blockmap) updates
 - Future — More themes, editor integrations, and smoother Markdown workflows
 
 ## License
