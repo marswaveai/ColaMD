@@ -9,6 +9,7 @@ export interface SiblingFile {
 type FileOpenedData = { path: string | null; content: string }
 type ImageExportPreset = 'desktop' | 'mobile'
 type ImageExportSnapshot = { html: string; styles: string; bodyClass: string; background: string }
+export type FileManagerName = 'finder' | 'explorer' | 'file-manager'
 
 const pendingFileOpened: FileOpenedData[] = []
 let fileOpenedHandler: ((data: FileOpenedData) => void) | null = null
@@ -26,6 +27,8 @@ ipcRenderer.on('file-opened', (_event, data: FileOpenedData) => {
 export interface ElectronAPI {
   openFile: () => Promise<{ path: string; content: string } | null>
   openFilePath: (path: string) => Promise<{ path: string; content: string } | null>
+  getFileManagerName: () => Promise<FileManagerName>
+  revealFile: () => Promise<boolean>
   listSiblings: () => Promise<SiblingFile[] | null>
   openSibling: (path: string) => Promise<boolean>
   saveFile: (content: string, expectedPath?: string, rebuildMenu?: boolean) => Promise<string | null>
@@ -80,6 +83,8 @@ export interface ElectronAPI {
 contextBridge.exposeInMainWorld('electronAPI', {
   openFile: () => ipcRenderer.invoke('open-file'),
   openFilePath: (path: string) => ipcRenderer.invoke('open-file-path', path),
+  getFileManagerName: () => ipcRenderer.invoke('get-file-manager-name') as Promise<FileManagerName>,
+  revealFile: () => ipcRenderer.invoke('reveal-file') as Promise<boolean>,
   listSiblings: () => ipcRenderer.invoke('list-siblings'),
   openSibling: (path: string) => ipcRenderer.invoke('open-sibling', path),
   saveFile: (content: string, expectedPath?: string, rebuildMenu?: boolean) => ipcRenderer.invoke('save-file', content, expectedPath, rebuildMenu),

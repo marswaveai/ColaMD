@@ -40,6 +40,7 @@ body {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  min-width: 0;
   font-size: 13px;
   line-height: 1.3;
   color: var(--text-muted);
@@ -94,6 +95,42 @@ body {
   background: rgba(127, 127, 127, 0.2);
 }
 
+#reveal-file-btn {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+#reveal-file-btn:disabled {
+  opacity: 0;
+  pointer-events: none;
+  cursor: default;
+}
+
+#reveal-file-btn:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+#titlebar:hover #reveal-file-btn:not(:disabled),
+#reveal-file-btn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* Source (Markdown) / WYSIWYG toggle */
 #source-toggle-btn {
   position: absolute;
@@ -136,7 +173,8 @@ body {
 /* Top-right controls: keep labels hidden until their icon is hovered. */
 #word-count:hover,
 #source-toggle-btn:hover,
-#file-toggle-btn:hover {
+#file-toggle-btn:hover,
+#reveal-file-btn:hover {
   background: rgba(127, 127, 127, 0.14);
   color: var(--text-color);
 }
@@ -162,7 +200,9 @@ body {
   transition: opacity 0.15s, transform 0.15s;
 }
 
-#titlebar > button:hover .toolbar-tip {
+#titlebar > button:hover .toolbar-tip,
+#reveal-file-btn:hover .toolbar-tip,
+#reveal-file-btn:focus-visible .toolbar-tip {
   opacity: 1;
   transform: translateY(0);
 }
