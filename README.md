@@ -105,4 +105,4 @@ ColaMD will keep growing as a focused, free Markdown editor:
 
 ---
 
-ColaMD is designed and maintained by [orange2ai](https://github.com/orange2ai), built by [marswave.ai](https://marswave.ai) for a simpler Markdown future. Issues, ideas and pull requests are welcome.
+ColaMD is built by [Cola.app](https://cola.app) and maintained by [orange2ai](https://github.com/orange2ai). Issues, ideas and pull requests are welcome.
