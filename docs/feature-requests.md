@@ -139,7 +139,7 @@ Bug report: opening the first .md is fast, but opening another file while one is
 
 **Status:** Deferred. The initial menu, paste, and drag-and-drop implementation was removed before `v1.9.0` after it proved unreliable.
 
-**Status:** Planned for next week's development review.
+**Scope constraint (2026-09-11):** two complete image pipelines were declined this day (see Declined → Rich image pipelines). If this is ever restarted it must stay minimal: zero configuration by default, images written next to the document as relative references, no new menu, settings panel, floating toolbar, or other persistent UI.
 
 ### Publish ColaMD for iOS
 
@@ -186,3 +186,15 @@ ColaMD deliberately avoids workspace and tab-system complexity. Existing file op
 ### Resizable file panel
 
 Implemented in the `2.0.2` candidate: the file panel width can be adjusted and is retained locally.
+
+### Rich image pipelines
+
+**Sources:** [#73](https://github.com/marswaveai/ColaMD/pull/73), [#74](https://github.com/marswaveai/ColaMD/pull/74)
+
+Two full image workflows were declined: a configurable import pipeline (Image menu, seven folder choices, copy/reference/embed modes) and a paste pipeline with a Feishu-style floating toolbar, lightbox, and base64 migration. Both add persistent UI, settings, or image-management subsystems, and the product keeps the interface to title bar, editor, and file panel — one setting screen is already too much, and a default that needs configuring is the wrong default.
+
+### Ultrawide paged reading layouts
+
+**Source:** [#67](https://github.com/marswaveai/ColaMD/pull/67)
+
+Two- and three-page reading layouts for ultrawide displays were declined. ColaMD is an editor, not a paginated reader; the feature costs ~480 lines of pagination logic, hijacks wheel/trackpad/page keys, and sits on the known-fragile CSS multicol + contenteditable ground (IME, cross-column selection, position loss after external reload) for a single edge-case scenario.
