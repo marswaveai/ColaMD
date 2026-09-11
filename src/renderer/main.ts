@@ -324,7 +324,15 @@ function visualOutline(): OutlineItem[] {
     .filter((item) => item.title)
 }
 
+function outlineVisible(): boolean {
+  return !manualHidden && panelMode === 'outline'
+}
+
 function renderOutline(): void {
+  // The outline is only ever read from the panel, which is hidden by default.
+  // Rebuilding it on every keystroke (and on every scroll) burned a full DOM
+  // teardown plus forced layout per frame for output nobody could see.
+  if (!outlineVisible()) return
   const list = outlineListEl()
   outlineItems = sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline()
   list.innerHTML = ''
@@ -433,6 +441,7 @@ function setActiveOutlineIndex(index: number): void {
 }
 
 function scheduleOutlineActiveSync(): void {
+  if (!outlineVisible()) return
   if (outlineJumping) return
   if (outlineSyncQueued) return
   outlineSyncQueued = true
@@ -499,6 +508,7 @@ function revealSourceHeading(source: HTMLTextAreaElement, line: number): void {
 }
 
 function scheduleOutlineUpdate(): void {
+  if (!outlineVisible()) return
   if (outlineUpdateQueued) return
   outlineUpdateQueued = true
   requestAnimationFrame(() => {

@@ -257,6 +257,15 @@ function enhanceClipboard(e: ClipboardEvent): void {
   })
 
   e.clipboardData?.setData('text/html', doc.body.innerHTML)
+
+  // The plain-text flavour matters as much as the HTML one: ProseMirror joins
+  // blocks with a blank line, so pasting into a plain-text target doubles every
+  // line break the reader typed. One newline per block keeps the text tight, and
+  // a deliberately empty paragraph still yields its blank line.
+  const plain = Array.from(doc.body.children)
+    .map((el) => (el.textContent ?? '').replace(/\s+$/u, ''))
+    .join('\n')
+  e.clipboardData?.setData('text/plain', plain)
 }
 
 async function copyText(text: string): Promise<void> {
