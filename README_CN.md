@@ -105,4 +105,4 @@ ColaMD 会继续把「免费、优雅、专注」这件事做好：
 
 ---
 
-ColaMD 由 [orange2ai](https://github.com/orange2ai) 设计与维护，由 [marswave.ai](https://marswave.ai) 为更简单的 Markdown 未来而造。欢迎提交 Issue、想法和 Pull Request。
+ColaMD 由 [Cola.app](https://cola.app) 开发，作者 [orange2ai](https://github.com/orange2ai)。欢迎提交 Issue、想法和 Pull Request。
