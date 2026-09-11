@@ -1,14 +1,14 @@
 # ColaMD
 
-> A free, elegant Markdown editor for humans and AI agents — with real-time sync for AI-generated changes.
+> A free, elegant Markdown editor anyone can pick up. No toolbars, no clutter — and the file on disk is always what you see.
 
 **Language / 语言: [English](README.md) · [中文](README_CN.md)** · [Website](https://colamd.com/)
 
-ColaMD is an open-source, free, lightweight Markdown editor for writing, notes, and documentation.
+ColaMD is an open-source, free, elegant Markdown editor for writing, notes, and documentation. It is built for people who just want to write: no toolbars, no status bar, nothing to configure — the window holds a title bar, your text, and a file list.
 
-It offers true WYSIWYG editing, themes, rich-text copy, smart line breaks, PDF and HTML export, and support for macOS, Windows, and Linux.
+It offers true WYSIWYG editing, 12 built-in themes, rich-text copy, smart line breaks, search and replace, a document outline, PDF / HTML / Word export, and support for macOS, Windows, and Linux.
 
-When Claude Code, Codex, Cola, or another agent edits an open `.md` file, ColaMD syncs the changes in real time.
+Whatever writes the file — an AI agent such as Claude Code or Codex, a script, or another editor — ColaMD shows the new content right away. No reopening, no manual refresh.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release](https://img.shields.io/github/release/marswaveai/colamd.svg)](https://github.com/marswaveai/colamd/releases)
@@ -36,7 +36,7 @@ Twelve built-in themes — six light, six dark — inspired by Bear, Notion, iA 
 
 ## Features
 
-- **Live Agent Sync** — Changes made by Claude Code, Cursor, Copilot, or other AI agents appear in the editor in real time.
+- **Always in Sync** — Whenever the file changes on disk — an AI agent, a script, another editor — the editor updates immediately. No reopening, no manual refresh.
 - **True WYSIWYG Editing** — Type Markdown and see rich text directly. No split-pane preview.
 - **Files & Outline** — Browse Markdown files in the selected folder, or switch to a document outline for focused heading navigation.
 - **Source Mode** — Switch to the raw Markdown source whenever you need to inspect or edit it directly.
@@ -76,7 +76,7 @@ ColaMD does not ask you to change your habits. It works well alongside Obsidian,
 
 ## Roadmap
 
-ColaMD will evolve alongside the agent ecosystem:
+ColaMD will keep growing as a focused, free Markdown editor:
 
 - v1.1 — Live file reload, file associations, drag & drop, themes
 - v1.2 — New icon

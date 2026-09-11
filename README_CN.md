@@ -1,14 +1,14 @@
 # ColaMD
 
-> 一款免费、优雅的 Markdown 编辑器，支持 AI Agent 改动实时同步。
+> 一款免费、优雅、谁都能上手的 Markdown 编辑器。没有工具栏，没有多余的东西——而且文件永远是最新的。
 
 **Language / 语言: [English](README.md) · [中文](README_CN.md)** · [官网](https://colamd.com/)
 
-ColaMD 是一款开源、免费、轻量的 Markdown 编辑器，用于写作、记录和文档。
+ColaMD 是一款开源、免费、优雅的 Markdown 编辑器，用于写作、记录和文档。它为「只想好好写字」的人而做：没有工具栏、没有状态栏、不需要任何配置——窗口里只有标题栏、你的文字和文件列表。
 
-它支持所见即所得、主题切换、富文本复制、智能换行、PDF 与 HTML 导出，并支持 macOS、Windows 和 Linux。
+它支持所见即所得、12 个内置主题、富文本复制、智能换行、查找替换、文档大纲、PDF / HTML / Word 导出，并支持 macOS、Windows 和 Linux。
 
-当 Claude Code、Codex、Cola 或其他 Agent 修改正在打开的 `.md` 文件时，ColaMD 会实时同步改动。
+无论是什么在写这个文件——Claude Code、Codex 这类 AI Agent，一个脚本，还是另一个编辑器——ColaMD 都会立刻显示最新内容，不用重开文件，也不用手动刷新。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release](https://img.shields.io/github/release/marswaveai/colamd.svg)](https://github.com/marswaveai/colamd/releases)
@@ -36,7 +36,7 @@ ColaMD 是一款开源、免费、轻量的 Markdown 编辑器，用于写作、
 
 ## 功能
 
-- **实时 Agent 同步** — Claude Code、Cursor、Copilot 或其他 AI Agent 修改文件后，内容实时出现在编辑器中。
+- **文件实时同步** — 无论是 AI Agent、脚本还是另一个编辑器改了文件，内容都会立刻出现在编辑器中，不用重开、不用刷新。
 - **真正的所见即所得** — 输入 Markdown，直接看到富文本，无需分屏预览。
 - **文件与大纲** — 浏览所选目录中的 Markdown 文件，或切换为文档大纲，专注在标题之间导航。
 - **源码模式** — 需要查看或直接修改原始 Markdown 时，一键切换源码编辑。
@@ -76,7 +76,7 @@ ColaMD 不要求你改变现有习惯，也适合与 Obsidian、Typora、VS Code
 
 ## 路线图
 
-ColaMD 将随 Agent 生态一起演进：
+ColaMD 会继续把「免费、优雅、专注」这件事做好：
 
 - v1.1 — 实时文件热更新、文件关联、拖拽打开、主题系统
 - v1.2 — 新图标
