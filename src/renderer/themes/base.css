@@ -22,6 +22,10 @@ body {
   height: 40px;
   flex-shrink: 0;
   position: relative;
+  /* Tooltips inside the titlebar must paint above the editor. `#title-center`
+     carries a transform, so it forms its own stacking context and the tooltip's
+     z-index cannot escape it. */
+  z-index: 30;
 }
 
 #title-center {
@@ -71,7 +75,7 @@ body {
 #file-toggle-btn {
   position: absolute;
   top: 6px;
-  right: 104px;
+  right: 78px;
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -140,7 +144,7 @@ body {
 #source-toggle-btn {
   position: absolute;
   top: 6px;
-  right: 68px;
+  right: 42px;
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -202,7 +206,9 @@ body {
   opacity: 0;
   pointer-events: none;
   transform: translateY(-3px);
-  transition: opacity 0.15s, transform 0.15s;
+  /* No opacity transition: a hover label is either fully visible or not there
+     at all. A fade reads as a transparent label over the document text. */
+  transition: transform 0.15s;
 }
 
 #titlebar > button:hover .toolbar-tip,
