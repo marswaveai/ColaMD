@@ -121,6 +121,22 @@ Bug report: opening the first .md is fast, but opening another file while one is
 
 **Status:** Candidate. Prototype accepted as direction; not scheduled.
 
+### Tabs and multi-document workspace
+
+**Sources:** [#59](https://github.com/marswaveai/ColaMD/issues/59)
+
+Requested: keep documents from different paths open together in one window instead of replacing the current document.
+
+Re-opened as a candidate on 2026-09-11, at the maintainer's request, instead of staying declined. `design.md` still states "no persistent workspace and no full file tree", so the design document must be updated before this is implemented. The shape is also undecided: a tab strip, an extension of the temporary same-directory switcher, or something else that avoids a permanent extra region.
+
+### Plugin ecosystem
+
+**Raised:** 2026-09-11, by the maintainer.
+
+Let people write their own plugins, so ColaMD grows through an ecosystem instead of shipping every capability itself. Mermaid is the first candidate to be extracted into a plugin, which would prove the API and keep the core small.
+
+Open questions before any implementation: what a plugin may touch (editor commands, menus, export pipeline, file I/O), how plugins are installed and updated, the security and permission model (plugins run in the renderer, so sandboxing matters), and how to keep a default install zero-configuration.
+
 ### Markdown formatting shortcuts
 
 **Source:** [#58](https://github.com/marswaveai/ColaMD/issues/58)
@@ -184,10 +200,6 @@ No decision yet on which AI capabilities belong in the editor, and therefore no 
 ### Built-in translation
 
 Translation introduces provider, configuration, privacy, and product-scope complexity outside ColaMD's focused Markdown editing role.
-
-### Tabs and persistent multi-document workspace
-
-ColaMD deliberately avoids workspace and tab-system complexity. Existing file opening and lightweight directory browsing remain the primary document navigation model. A narrowly scoped temporary same-directory switcher is tracked separately as a candidate.
 
 ### Resizable file panel
 
