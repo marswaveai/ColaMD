@@ -216,7 +216,7 @@ const inlineStyles: Record<string, string> = {
   'h4': 'margin:.8em 0 .4em;',
   'h5': 'margin:.8em 0 .4em;',
   'h6': 'margin:.8em 0 .4em;',
-  'p': 'margin:.5em 0;line-height:1.75;',
+  'p': 'margin:0;line-height:1.75;',
   'strong': 'font-weight:600;',
   'a': 'color:#0969da;text-decoration:none;',
   'code': 'background:rgba(175,184,193,0.2);padding:2px 6px;border-radius:3px;font-size:.875em;font-family:Menlo,Monaco,monospace;',
@@ -247,6 +247,13 @@ function enhanceClipboard(e: ClipboardEvent): void {
   // pre > code: override code style inside code blocks
   doc.querySelectorAll('pre code').forEach((el) => {
     ;(el as HTMLElement).setAttribute('style', 'background:none;padding:0;font-size:.875em;line-height:1.6;font-family:Menlo,Monaco,monospace;')
+  })
+
+  // Paragraphs carry no margins, so consecutive lines stay tight in chat apps
+  // that turn block spacing into visible blank lines. A paragraph the user left
+  // empty on purpose still needs one line, which an empty block would lose.
+  doc.querySelectorAll('p').forEach((el) => {
+    if (!el.textContent?.trim() && !el.querySelector('img,br')) el.appendChild(doc.createElement('br'))
   })
 
   e.clipboardData?.setData('text/html', doc.body.innerHTML)
