@@ -474,6 +474,12 @@ body.show-file-panel #source-editor {
   margin-left: var(--file-panel-width, 220px);
 }
 
+/* The source editor has an explicit width, so account for the panel margin
+   instead of extending past the viewport when both are visible. */
+body.show-file-panel #source-editor {
+  width: calc(100% - var(--file-panel-width, 220px));
+}
+
 #editor.hidden {
   display: none;
 }
