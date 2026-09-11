@@ -589,9 +589,12 @@ export function getMarkdown(): string {
   return markdown
 }
 
-export function setMarkdown(content: string): void {
+export function setMarkdown(content: string, flushHistory = false): void {
   if (!editorInstance) return
-  editorInstance.action(replaceAll(content))
+  // flush=true rebuilds the editor state, which also empties the undo stack.
+  // Used when the document identity changes (file switch, new file, external
+  // reload), so undo can never reach into a different document's content.
+  editorInstance.action(replaceAll(content, flushHistory))
 }
 
 export function getEditorView(): EditorView | null {

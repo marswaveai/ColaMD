@@ -16,7 +16,6 @@ const fileTabEl = () => document.getElementById('file-panel-files') as HTMLButto
 const outlineTabEl = () => document.getElementById('file-panel-outline') as HTMLButtonElement
 const fileToggleBtnEl = () => document.getElementById('file-toggle-btn') as HTMLButtonElement
 const sourceToggleBtnEl = () => document.getElementById('source-toggle-btn') as HTMLButtonElement
-const revealFileBtnEl = () => document.getElementById('reveal-file-btn') as HTMLButtonElement
 const wordCountEl = () => document.getElementById('word-count') as HTMLElement
 const fileTitleEl = () => document.getElementById('file-title') as HTMLElement
 const saveStatusEl = () => document.getElementById('save-status') as HTMLElement
@@ -26,7 +25,6 @@ const updateBannerActionEl = () => document.getElementById('update-banner-action
 
 // --- Same-directory file panel ---
 let currentFilePath: string | null = null
-let fileManagerName: import('../preload/index').FileManagerName = 'file-manager'
 let dirty = false
 // Programmatic Markdown replacement dispatches a synchronous ProseMirror
 // transaction. Suppress only that transaction, never a time window of input.
@@ -68,10 +66,10 @@ function applyFilePanelWidth(width: number): void {
 
 applyFilePanelWidth(clampFilePanelWidth(Number.parseInt(localStorage.getItem('file-panel-width') ?? '', 10) || FILE_PANEL_DEFAULT_WIDTH))
 
-function setMarkdownProgrammatically(content: string): void {
+function setMarkdownProgrammatically(content: string, flushHistory = false): void {
   applyingProgrammaticChange = true
   try {
-    setMarkdown(content)
+    setMarkdown(content, flushHistory)
   } finally {
     applyingProgrammaticChange = false
   }
@@ -191,7 +189,6 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
 
   currentFilePath = path
   updateFileTitle()
-  updateFileRevealButton()
   refreshSiblings()
   if (revision === documentRevision) {
     clearDirty()
@@ -203,7 +200,9 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
 }
 
 function applyContent(content: string): void {
-  setContent(content)
+  // Reached only when the document identity changes (New file, loading a disk
+  // version after an external conflict), so the undo stack must not survive.
+  setContent(content, true)
 }
 
 // --- Document statistics (top-right hover indicator) ---
@@ -230,31 +229,6 @@ function updateWordCount(content?: string): void {
     : `${countCharacters(text)} chars · ${countTokens(text)} words · ${countParagraphs(text)} paragraphs`
 }
 
-function fileLocationLabel(): string {
-  if (isChinese()) {
-    return fileManagerName === 'finder'
-      ? '在 Finder 中显示'
-      : fileManagerName === 'explorer'
-        ? '在资源管理器中显示'
-        : '打开所在文件夹'
-  }
-  return fileManagerName === 'finder'
-    ? 'Reveal in Finder'
-    : fileManagerName === 'explorer'
-      ? 'Reveal in File Explorer'
-      : 'Open Containing Folder'
-}
-
-function updateFileRevealButton(): void {
-  const btn = revealFileBtnEl()
-  const label = fileLocationLabel()
-  btn.disabled = currentFilePath === null
-  btn.title = label
-  btn.setAttribute('aria-label', label)
-  const tip = btn.querySelector('.toolbar-tip')
-  if (tip) tip.textContent = label
-}
-
 // --- Markdown source / WYSIWYG toggle ---
 function updateSourceToggle(): void {
   const btn = sourceToggleBtnEl()
@@ -277,7 +251,6 @@ function updateUiLanguage(): void {
   outlineTabEl().textContent = zh ? '大纲' : 'Outline'
   fileToggleBtnEl().setAttribute('aria-label', zh ? '显示 / 隐藏文件列表' : 'Show / hide file list')
   sourceToggleBtnEl().setAttribute('aria-label', zh ? '切换 Markdown 源码 / 所见即所得' : 'Toggle Markdown source / WYSIWYG')
-  updateFileRevealButton()
   const wordTip = wordCountEl().querySelector('.word-count-tip')
   if (wordTip) wordTip.textContent = zh ? '0 字 · 0 词 · 0 段' : '0 chars · 0 words · 0 paragraphs'
   updateSourceToggle()
@@ -642,7 +615,7 @@ function exitSourceMode(): void {
 
 const LARGE_DOCUMENT_SOURCE_THRESHOLD = 512 * 1024
 
-function setContent(content: string): void {
+function setContent(content: string, flushHistory = false): void {
   if (content.length >= LARGE_DOCUMENT_SOURCE_THRESHOLD) {
     // ProseMirror renders the whole document eagerly. Keep very large files in
     // the existing source editor so opening them stays responsive on Windows.
@@ -651,7 +624,7 @@ function setContent(content: string): void {
     return
   }
   exitSourceMode()
-  setMarkdownProgrammatically(content)
+  setMarkdownProgrammatically(content, flushHistory)
   updateWordCount(content)
 }
 
@@ -729,7 +702,6 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
 async function init(): Promise<void> {
   const api = window.electronAPI
   const language = await api.getLanguage()
-  fileManagerName = await api.getFileManagerName()
   setUiLanguage(language)
   const savedTheme = loadSavedTheme()
   if (savedTheme.startsWith('custom:')) {
@@ -774,7 +746,6 @@ async function init(): Promise<void> {
   })
 
   fileToggleBtnEl().addEventListener('click', togglePanel)
-  revealFileBtnEl().addEventListener('click', () => { void api.revealFile() })
   initPanelResize()
   fileTabEl().addEventListener('click', () => setPanelMode('files'))
   outlineTabEl().addEventListener('click', () => setPanelMode('outline'))
@@ -816,13 +787,12 @@ async function init(): Promise<void> {
   api.onMenuExportDOCX(() => { void api.exportDOCX(getContent()) })
   api.onMenuExportImage((preset) => { void exportCurrentImage(preset) })
 
-  api.onNewFile(() => { releaseMermaidRenderer(); exitSourceMode(); applyContent('') })
+  api.onNewFile(() => { releaseMermaidRenderer(); exitSourceMode(); applyContent(''); scheduleOutlineUpdate() })
   api.onFileOpened((data) => {
     releaseMermaidRenderer()
     currentFilePath = data.path
-    updateFileRevealButton()
     resetDirty()
-    setContent(data.content)
+    setContent(data.content, true)
     const resetScroll = () => {
       editorEl().scrollTop = 0
       sourceEl().scrollTop = 0
@@ -861,7 +831,9 @@ async function init(): Promise<void> {
     if (sourceModeActive) {
       sourceEl().value = content
     } else {
-      setMarkdownProgrammatically(content)
+      // An external write is not something the reader can undo into; making it
+      // one undo step would also let a stray undo write stale content back.
+      setMarkdownProgrammatically(content, true)
     }
     updateSourceToggle()
     updateWordCount()
