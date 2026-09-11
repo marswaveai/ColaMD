@@ -35,7 +35,7 @@
   "devDependencies": {
     "@types/katex": "^0.16.8",
     "electron": "^34.0.0",
-    "electron-builder": "^26.0.0",
+    "electron-builder": "^26.16.1",
     "electron-vite": "^3.0.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0"
