@@ -8,6 +8,23 @@ directories:
 
 files:
   - dist/**/*
+  # All runtime JavaScript is bundled by electron-vite. Do not let
+  # electron-builder copy the complete production dependency tree into app.asar.
+  - '!node_modules/**/*'
+
+asar:
+  # The packaged app has no native modules. Avoid builder's broad automatic
+  # unpacking heuristics and keep the archive self-contained.
+  smartUnpack: false
+
+# ColaMD provides its own Chinese/English UI and only needs these Chromium
+# locale resources. Keeping every Electron locale adds tens of megabytes.
+# Electron uses hyphens on Linux and underscores in macOS .lproj names.
+electronLanguages:
+  - en-US
+  - en_US
+  - zh-CN
+  - zh_CN
 
 extraResources:
   - from: resources/templates
@@ -35,9 +52,20 @@ fileAssociations:
     mimeType: text/plain
 
 mac:
+  compression: maximum
+  # Publish separate installers for each CPU architecture instead of a
+  # universal binary. This keeps both Intel and Apple Silicon support while
+  # avoiding the duplicated Electron framework in every download.
+  artifactName: '${productName}-${version}-${arch}.${ext}'
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
   category: public.app-category.productivity
   icon: resources/icon.icns
   hardenedRuntime: true
