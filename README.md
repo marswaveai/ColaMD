@@ -95,6 +95,7 @@ ColaMD will keep growing as a focused, free Markdown editor:
 - v2.0.0: 1000-star release: Mermaid diagrams return with luminance-aware colors, recent files & session restore, editor font settings, heading anchors, multiple windows, and a save status hint
 - v2.0.1: Universal macOS build for Apple silicon and Intel Macs, plus custom-theme restoration, Mermaid render recovery, and Windows updater fixes
 - v2.0.2: Resizable file panel (180–420px, remembered) and an outline progress view that highlights the current heading and flashes the landing point after a jump
+- v2.0.5: The reveal-in-file-manager button is now reachable, hovering the document title brings it out
 - v2.0.4: PDF export no longer captures app overlays, undo can no longer cross documents, rich-text copy no longer adds blank lines in chat apps, source mode no longer overflows with the file panel open, a reveal-in-file-manager action next to the document title, and the heuristic agent activity dot removed
 - v2.0.3: Find & replace, UI language switch, large-document source-mode fallback, update download progress with retry, and differential (blockmap) updates
 - Future: More themes, editor integrations, and smoother Markdown workflows
