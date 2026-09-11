@@ -16,6 +16,7 @@ const fileTabEl = () => document.getElementById('file-panel-files') as HTMLButto
 const outlineTabEl = () => document.getElementById('file-panel-outline') as HTMLButtonElement
 const fileToggleBtnEl = () => document.getElementById('file-toggle-btn') as HTMLButtonElement
 const sourceToggleBtnEl = () => document.getElementById('source-toggle-btn') as HTMLButtonElement
+const revealFileBtnEl = () => document.getElementById('reveal-file-btn') as HTMLButtonElement
 const wordCountEl = () => document.getElementById('word-count') as HTMLElement
 const fileTitleEl = () => document.getElementById('file-title') as HTMLElement
 const saveStatusEl = () => document.getElementById('save-status') as HTMLElement
@@ -25,6 +26,7 @@ const updateBannerActionEl = () => document.getElementById('update-banner-action
 
 // --- Same-directory file panel ---
 let currentFilePath: string | null = null
+let fileManagerName: import('../preload/index').FileManagerName = 'file-manager'
 let dirty = false
 // Programmatic Markdown replacement dispatches a synchronous ProseMirror
 // transaction. Suppress only that transaction, never a time window of input.
@@ -189,6 +191,7 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
 
   currentFilePath = path
   updateFileTitle()
+  updateFileRevealButton()
   refreshSiblings()
   if (revision === documentRevision) {
     clearDirty()
@@ -229,6 +232,36 @@ function updateWordCount(content?: string): void {
     : `${countCharacters(text)} chars · ${countTokens(text)} words · ${countParagraphs(text)} paragraphs`
 }
 
+// --- Reveal the current file in the OS file manager ---
+function fileLocationLabel(): string {
+  if (isChinese()) {
+    return fileManagerName === 'finder'
+      ? '在 Finder 中显示'
+      : fileManagerName === 'explorer'
+        ? '在资源管理器中显示'
+        : '打开所在文件夹'
+  }
+  return fileManagerName === 'finder'
+    ? 'Reveal in Finder'
+    : fileManagerName === 'explorer'
+      ? 'Reveal in File Explorer'
+      : 'Open Containing Folder'
+}
+
+// The titlebar is a window drag region, so the button cannot rely on
+// `#titlebar:hover`. Its gate lives on the file title instead; this keeps the
+// label and the disabled state in sync with the loaded document.
+function updateFileRevealButton(): void {
+  const btn = revealFileBtnEl()
+  const label = fileLocationLabel()
+  btn.disabled = currentFilePath === null
+  // Only the styled .toolbar-tip is used; a native title tooltip would stack a
+  // second label on top of it. Sibling titlebar buttons rely on aria-label too.
+  btn.setAttribute('aria-label', label)
+  const tip = btn.querySelector('.toolbar-tip')
+  if (tip) tip.textContent = label
+}
+
 // --- Markdown source / WYSIWYG toggle ---
 function updateSourceToggle(): void {
   const btn = sourceToggleBtnEl()
@@ -251,6 +284,7 @@ function updateUiLanguage(): void {
   outlineTabEl().textContent = zh ? '大纲' : 'Outline'
   fileToggleBtnEl().setAttribute('aria-label', zh ? '显示 / 隐藏文件列表' : 'Show / hide file list')
   sourceToggleBtnEl().setAttribute('aria-label', zh ? '切换 Markdown 源码 / 所见即所得' : 'Toggle Markdown source / WYSIWYG')
+  updateFileRevealButton()
   const wordTip = wordCountEl().querySelector('.word-count-tip')
   if (wordTip) wordTip.textContent = zh ? '0 字 · 0 词 · 0 段' : '0 chars · 0 words · 0 paragraphs'
   updateSourceToggle()
@@ -712,6 +746,7 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
 async function init(): Promise<void> {
   const api = window.electronAPI
   const language = await api.getLanguage()
+  fileManagerName = await api.getFileManagerName()
   setUiLanguage(language)
   const savedTheme = loadSavedTheme()
   if (savedTheme.startsWith('custom:')) {
@@ -756,6 +791,7 @@ async function init(): Promise<void> {
   })
 
   fileToggleBtnEl().addEventListener('click', togglePanel)
+  revealFileBtnEl().addEventListener('click', () => { void api.revealFile() })
   initPanelResize()
   fileTabEl().addEventListener('click', () => setPanelMode('files'))
   outlineTabEl().addEventListener('click', () => setPanelMode('outline'))
@@ -801,6 +837,7 @@ async function init(): Promise<void> {
   api.onFileOpened((data) => {
     releaseMermaidRenderer()
     currentFilePath = data.path
+    updateFileRevealButton()
     resetDirty()
     setContent(data.content, true)
     const resetScroll = () => {
