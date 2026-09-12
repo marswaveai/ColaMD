@@ -7,13 +7,14 @@ on:
   workflow_dispatch:
     inputs:
       mac_arch:
-        description: 'macOS architecture to build'
+        description: 'macOS architecture (separate = one installer per architecture)'
         type: choice
         options:
+          - separate
           - universal
           - x64
           - arm64
-        default: universal
+        default: separate
 
 jobs:
   build:
@@ -47,11 +48,12 @@ jobs:
         run: |
           ARCH_ARGS=""
           if [ "${{ matrix.platform }}" = "mac" ]; then
-            case "${{ inputs.mac_arch || 'universal' }}" in
+            case "${{ inputs.mac_arch || 'separate' }}" in
+              separate) ARCH_ARGS="" ;;
               x64) ARCH_ARGS="--x64" ;;
               arm64) ARCH_ARGS="--arm64" ;;
               universal) ARCH_ARGS="--universal" ;;
-              *) ARCH_ARGS="--universal" ;;
+              *) ARCH_ARGS="" ;;
             esac
           fi
           npx electron-builder --${{ matrix.platform }} $ARCH_ARGS --publish never
