@@ -4,33 +4,27 @@
 
 ## 时间花在哪里
 
+单架构 `--dir` 实测（arm64 主机、Electron 运行时已在本地缓存，`release/` 干净、无并发打包）：
+
 | 步骤 | 实测耗时 | 说明 |
 | --- | --- | --- |
-| `npm run build`（electron-vite） | 约 6 秒 | 渲染层、主进程、preload 全量打包，其中 vite 自身报告 3.9 秒 |
-| `electron-builder --mac --dir` | **6 到 8 分钟** | 与代码改动量无关，几乎是固定成本 |
-| 总计 | 6 到 8 分钟 | 单架构、未压缩、未签名 |
+| `npm run build`（electron-vite） | 4 到 6 秒 | 渲染层、主进程、preload 全量打包 |
+| `electron-builder --mac --dir --arm64` | **约 12 秒** | 连续两次：11.0 秒、12.8 秒 |
 
-打包耗时长的原因，按日志顺序：
+**更正**：这个文件最初记录「打包 6 到 8 分钟为常态」，那个数字不可信。测出 6 到 8 分钟的那几次，同时有别的打包进程在写同一个 `release/` 目录，其中一个还是被中途杀掉、留下半成品 bundle，之后的打包要在那个目录上重做一遍拷贝与属性清理。干净状态下是十几秒级。要复核耗时，请在无并发打包、`release/` 干净的前提下测，并且用 `time` 记录实际值，不要凭印象。
 
-1. **复制 Electron 运行时**：每个架构约 231MB、几万个文件，这一步是主因
-2. **清理扩展属性**：日志里的 `Cleaning extended attributes and resource forks`，逐文件处理，很慢
-3. 签名与压缩：本地验证时用 `CSC_IDENTITY_AUTO_DISCOVERY=false` 跳过签名，`--dir` 不做压缩，所以这两步省掉了
-
-作为对比，CI 上打 universal 包要下载并合并两套运行时，再加签名与公证，mac job 在 7 分钟左右属于正常水位。
+CI 上的 mac job（universal 加签名、公证、dmg 压缩）实测 7 分 20 秒（v2.0.5），那部分成本主要在等 Apple 公证和压缩，和本地不同。
 
 ## 本地验证打包的规矩
 
-- **只打单架构 `--dir`**：本地验证用 `npx electron-builder --mac --dir --arm64`，不要打 `universal`、不要打 `dmg`，压缩与合并是最贵的部分
+- **只打单架构 `--dir`**：本地验证用 `npx electron-builder --mac --dir --arm64`。`universal` 要合并两套运行时，`dmg` 要压缩，这两件事只在发版时做，本地验证用不上
 - **不要在软链 `node_modules` 的 worktree 里打包**：`git worktree` + 软链 `node_modules` 时，electron-builder 解析生产依赖会失败，日志里出现一串 `cannot find path for dependency dependencies=[katex@undefined, ...]`。产物可能缺失依赖，且依赖解析仍会走一遍。要在有真实 `node_modules` 的目录里打包
 - **跳过签名**：本地用 `CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --dir`，避免钥匙串报错。本地包未签名未公证，只用于自己测试，不要发给用户
 - **`files` 保持只装 `dist/**/*`**：渲染层与主进程已由 electron-vite 打包完整，不需要把 `node_modules` 装进 asar
 
-## 待验证的优化
+## 不必要做的优化
 
-以下都还没实测，做之前先量一次，避免「想当然的优化」：
-
-- `npmRebuild: false`：`@electron/rebuild` 每次都会跑。当前生产依赖里没有需要重建的原生模块（`.node` 文件只有 `fsevents` 与 rollup 的产物，均为构建期或 dev 依赖），确认后可以跳过
-- 交叉验证一次「跳过 xattr 清理」是否可行，若可行能省掉可观时间
+这里曾经列了两条优化（`npmRebuild: false`、跳过扩展属性清理），前提是「打包要 6 到 8 分钟」。重新测量后本地打包是**十几秒级**，这个前提不成立，所以不做。先测量再优化，不要凭印象预防性地折腾构建配置。
 
 ## 参考
 
