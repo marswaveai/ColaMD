@@ -27,6 +27,7 @@ const updateBannerActionEl = () => document.getElementById('update-banner-action
 const tabBarEl = () => document.getElementById('tab-bar') as HTMLElement
 const tabListEl = () => document.getElementById('tab-list') as HTMLElement
 const newTabBtnEl = () => document.getElementById('new-tab-btn') as HTMLButtonElement
+const tabMoreBtnEl = () => document.getElementById('tab-more-btn') as HTMLButtonElement
 
 // --- Same-directory file panel ---
 let currentFilePath: string | null = null
@@ -128,6 +129,47 @@ interface TabSession {
 
 const tabs = new Map<number, TabSession>()
 let activeTabId = -1
+
+// COLAMD_TAB_BENCH=1: populate four tabs with a realistic ~120KB document,
+// then walk the switch ring and record real switch latency and per-tab heap
+// growth (docs/tabs-tech-design.md §6 performance budget).
+async function runTabBench(): Promise<void> {
+  const paragraphs: string[] = []
+  for (let i = 0; i < 600; i++) {
+    paragraphs.push(`## 第 ${i + 1} 节\n\n这是一段用于标签页性能测量的正文，包含**加粗**、*斜体*与 \`inline code\`，以及一行普通文字用来撑起真实文档体量。`)
+  }
+  const markdown = paragraphs.join('\n\n')
+  const heapOf = () => (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0
+  if (activeTabId < 0) return
+  setContent(markdown, true)
+  const heapAfterFirst = heapOf()
+  const ids = [activeTabId]
+  for (let i = 0; i < 3; i++) {
+    const id = 900000 + i
+    createLocalSession(id)
+    activateSession(id)
+    setContent(markdown, true)
+    ids.push(id)
+  }
+  const heapAll = heapOf()
+  const switches: number[] = []
+  for (let round = 0; round < 8; round++) {
+    for (const id of ids) {
+      const t0 = performance.now()
+      activateSession(id)
+      switches.push(Math.round((performance.now() - t0) * 100) / 100)
+    }
+  }
+  switches.sort((a, b) => a - b)
+  void window.electronAPI.reportTabBench({
+    docKB: Math.round(markdown.length / 1024),
+    tabs: ids.length,
+    perTabHeapMB: Math.round(((heapAll - heapAfterFirst) / 3 / 1048576) * 100) / 100,
+    switchMedianMs: switches[Math.floor(switches.length / 2)],
+    switchP95Ms: switches[Math.floor(switches.length * 0.95)],
+    switchMaxMs: switches[switches.length - 1],
+  })
+}
 
 function tabName(filePath: string | null): string {
   return filePath ? (filePath.split(/[\\/]/).pop() || filePath) : (isChinese() ? '未命名' : 'Untitled')
@@ -247,7 +289,9 @@ function activateSession(tabId: number): void {
   scheduleOutlineUpdate()
   surfaceDeferredConflict()
   void window.electronAPI.notifyActiveTab(tabId)
-  renderTabStrip()
+  // Switching never changes the tab set, so only the highlight moves; a full
+  // strip rebuild here would dominate the switch cost (tab-bench data).
+  highlightActiveTab()
   updateTabBarVisibility()
 }
 
@@ -310,6 +354,24 @@ function renderTabStrip(): void {
     })
     item.append(label, closeBtn)
     list.appendChild(item)
+  }
+  updateTabMoreVisibility()
+}
+
+// The ··· affordance appears only when the tab strip actually overflows
+// (temporary-document-switcher-prototype.html).
+function updateTabMoreVisibility(): void {
+  const list = tabListEl()
+  const more = tabMoreBtnEl()
+  if (!list || !more) return
+  more.hidden = list.scrollWidth <= list.clientWidth + 1
+}
+
+function highlightActiveTab(): void {
+  const list = tabListEl()
+  if (!list) return
+  for (const el of Array.from(list.querySelectorAll<HTMLElement>('.tab-item'))) {
+    el.classList.toggle('active', el.dataset.tabId === String(activeTabId))
   }
 }
 
@@ -1190,6 +1252,17 @@ async function init(): Promise<void> {
   })
   api.onActivateTab((tabId) => activateSession(tabId))
   newTabBtnEl().addEventListener('click', () => { void api.newTab() })
+  // design.md tab context menu (关闭 / 关闭其他 / 关闭右侧 / 复制路径 / 在文件管理器中显示)
+  tabListEl().addEventListener('contextmenu', (e) => {
+    const item = (e.target as HTMLElement).closest('.tab-item') as HTMLElement | null
+    const tabId = item?.dataset.tabId
+    if (!tabId) return
+    e.preventDefault()
+    void api.showTabContextMenu(Number(tabId))
+  })
+  tabMoreBtnEl().addEventListener('click', () => { void api.showTabOverflowMenu() })
+  window.addEventListener('resize', updateTabMoreVisibility)
+  api.onRunTabBench(() => { void runTabBench() })
 
   api.onSetTheme((theme) => applyTheme(theme))
   api.onLanguageChanged((language: UiLanguage) => {

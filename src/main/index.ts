@@ -1276,6 +1276,43 @@ function closeTabInFocusedWindow(): void {
   void closeTabInWindow(win, active.tabId)
 }
 
+// Batch close (close others / close to the right). Closing never funnels to
+// window close here: the surviving tab keeps the window alive, and each dirty
+// tab is confirmed before it goes away.
+async function closeTabsInWindow(win: BrowserWindow, tabIds: number[]): Promise<void> {
+  const state = getState(win)
+  for (const tabId of tabIds) {
+    const tab = state.tabs.get(tabId)
+    if (!tab) continue
+    if (tab.dirty && !await confirmAndSaveTab(win, tab)) return
+    if (!state.tabs.has(tabId)) continue
+    stopWatching(tab)
+    if (tab.debounceTimer) clearTimeout(tab.debounceTimer)
+    state.tabs.delete(tabId)
+    if (!win.isDestroyed()) win.webContents.send('tab-closed', { closedTabId: tabId, activateTabId: null })
+  }
+  if (win.isDestroyed() || state.tabs.has(state.activeTabId)) {
+    if (!win.isDestroyed()) updateTitle(win)
+    return
+  }
+  const ordered = [...state.tabs.keys()].sort((a, b) => a - b)
+  if (ordered.length === 0) return
+  state.activeTabId = ordered[0]
+  updateTitle(win)
+  win.webContents.send('activate-tab', state.activeTabId)
+}
+
+function activateTabByIndexInFocusedWindow(index: number): void {
+  const win = getFocusedWindow() ?? BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed())
+  if (!win) return
+  const state = getState(win)
+  const ordered = [...state.tabs.keys()].sort((a, b) => a - b)
+  const tabId = ordered[index]
+  if (tabId === undefined) return
+  state.activeTabId = tabId
+  win.webContents.send('activate-tab', tabId)
+}
+
 function buildMenu(): void {
   const isMac = process.platform === 'darwin'
 
@@ -1403,6 +1440,16 @@ function buildMenu(): void {
           label: labels.newTab,
           accelerator: 'CmdOrCtrl+T',
           click: () => newTabInFocusedWindow()
+        },
+        {
+          // Not in design.md yet: offered for the maintainer's ruling in the
+          // tabs PR, following the switcher prototype's ⌘1…5 precedent.
+          label: preferredCheatsheetLanguage === 'zh' ? '切换标签页' : 'Switch Tab',
+          submenu: Array.from({ length: 9 }, (_unused, i) => ({
+            label: preferredCheatsheetLanguage === 'zh' ? `标签页 ${i + 1}` : `Tab ${i + 1}`,
+            accelerator: `CmdOrCtrl+${i + 1}`,
+            click: () => activateTabByIndexInFocusedWindow(i)
+          }))
         },
         {
           label: labels.open,
@@ -1754,6 +1801,17 @@ ipcMain.on('renderer-ready', (event) => {
   if (win) getState(win).rendererReady = true
   markStartup('renderer-ready')
   writeStartupTrace()
+  // Optional switch-latency / heap benchmark (COLAMD_TAB_BENCH=1): run once
+  // against the first ready window and record the numbers.
+  if (process.env.COLAMD_TAB_BENCH === '1' && win && !win.isDestroyed()) {
+    win.webContents.send('run-tab-bench')
+  }
+})
+
+ipcMain.handle('tab-bench-result', async (_event, result: unknown) => {
+  const line = JSON.stringify({ at: new Date().toISOString(), ...(result as Record<string, unknown>) })
+  console.info(`[tab-bench] ${line}`)
+  await appendFile(join(app.getPath('userData'), 'tab-bench.jsonl'), `${line}\n`).catch(() => {})
 })
 
 // Renderer reports its unsaved state as a fast path for quit coordination.
@@ -1788,6 +1846,58 @@ ipcMain.handle('close-tab', (event, tabId: unknown) => {
   const win = getWinFromEvent(event)
   if (!win || typeof tabId !== 'number') return
   void closeTabInWindow(win, tabId)
+})
+
+// design.md tab context menu: 关闭 / 关闭其他 / 关闭右侧 / 复制路径 /
+// 在文件管理器中显示, as a native popup.
+ipcMain.handle('tab-context-menu', (event, tabId: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof tabId !== 'number') return
+  const state = getState(win)
+  const tab = state.tabs.get(tabId)
+  if (!tab) return
+  const zh = getPreferredLanguage() === 'zh'
+  const manager = fileManagerName()
+  const ordered = [...state.tabs.keys()].sort((a, b) => a - b)
+  const index = ordered.indexOf(tabId)
+  const others = ordered.filter((id) => id !== tabId)
+  const right = ordered.slice(index + 1)
+  const hasPath = tab.filePath !== null
+  const items: Electron.MenuItemConstructorOptions[] = [
+    { label: zh ? '关闭' : 'Close', click: () => { void closeTabInWindow(win, tabId) } },
+    { label: zh ? '关闭其他' : 'Close Others', enabled: others.length > 0, click: () => { void closeTabsInWindow(win, others) } },
+    { label: zh ? '关闭右侧' : 'Close to the Right', enabled: right.length > 0, click: () => { void closeTabsInWindow(win, right) } },
+    { type: 'separator' },
+    { label: zh ? '复制路径' : 'Copy Path', enabled: hasPath, click: () => { if (tab.filePath) clipboard.writeText(tab.filePath) } },
+    {
+      label: manager === 'explorer' ? (zh ? '在资源管理器中显示' : 'Reveal in File Explorer') : (zh ? '在 Finder 中显示' : 'Reveal in Finder'),
+      enabled: hasPath,
+      click: () => { if (tab.filePath) shell.showItemInFolder(tab.filePath) }
+    }
+  ]
+  Menu.buildFromTemplate(items).popup({ window: win })
+})
+
+// The ··· overflow listing: every open document in one native menu, the
+// active one checked (temporary-document-switcher-design.md: no horizontal
+// scrolling, a small list instead).
+ipcMain.handle('tab-overflow-menu', (event) => {
+  const win = getWinFromEvent(event)
+  if (!win) return
+  const state = getState(win)
+  const zh = getPreferredLanguage() === 'zh'
+  const ordered = [...state.tabs.values()].sort((a, b) => a.tabId - b.tabId)
+  if (ordered.length === 0) return
+  const items: Electron.MenuItemConstructorOptions[] = ordered.map((tab) => ({
+    label: tab.filePath ? basename(tab.filePath) : (zh ? '未命名' : 'Untitled'),
+    type: 'checkbox' as const,
+    checked: tab.tabId === state.activeTabId,
+    click: () => {
+      state.activeTabId = tab.tabId
+      if (!win.isDestroyed()) win.webContents.send('activate-tab', tab.tabId)
+    }
+  }))
+  Menu.buildFromTemplate(items).popup({ window: win })
 })
 
 // Concurrent close events for the same window must share one prompt and save.

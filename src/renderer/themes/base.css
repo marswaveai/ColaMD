@@ -394,6 +394,29 @@ body.has-tabs #tab-bar {
   color: var(--text-color);
 }
 
+/* The prototype's ··· overflow listing (native menu). */
+.tab-more {
+  flex: none;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.tab-more:hover {
+  color: var(--text-color);
+}
+
+.tab-more[hidden] {
+  display: none;
+}
+
 /* Same-directory file panel */
 #file-panel {
   position: fixed;

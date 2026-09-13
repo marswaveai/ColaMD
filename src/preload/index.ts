@@ -56,6 +56,10 @@ export interface ElectronAPI {
   newTab: () => Promise<number>
   closeTab: (tabId: number) => Promise<void>
   notifyActiveTab: (tabId: number) => void
+  showTabContextMenu: (tabId: number) => Promise<void>
+  showTabOverflowMenu: () => Promise<void>
+  onRunTabBench: (callback: () => void) => void
+  reportTabBench: (result: { docKB: number; tabs: number; perTabHeapMB: number; switchMedianMs: number; switchP95Ms: number; switchMaxMs: number }) => Promise<void>
   exportPDF: () => Promise<boolean>
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => Promise<boolean>
   exportDOCX: (content: string) => Promise<boolean>
@@ -119,6 +123,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   newTab: () => ipcRenderer.invoke('new-tab') as Promise<number>,
   closeTab: (tabId: number) => ipcRenderer.invoke('close-tab', tabId) as Promise<void>,
   notifyActiveTab: (tabId: number) => ipcRenderer.send('active-tab-changed', tabId),
+  showTabContextMenu: (tabId: number) => ipcRenderer.invoke('tab-context-menu', tabId) as Promise<void>,
+  showTabOverflowMenu: () => ipcRenderer.invoke('tab-overflow-menu') as Promise<void>,
+  onRunTabBench: (callback: () => void) => {
+    ipcRenderer.on('run-tab-bench', () => callback())
+  },
+  reportTabBench: (result: { docKB: number; tabs: number; perTabHeapMB: number; switchMedianMs: number; switchP95Ms: number; switchMaxMs: number }) =>
+    ipcRenderer.invoke('tab-bench-result', result) as Promise<void>,
   exportPDF: () => ipcRenderer.invoke('export-pdf'),
   exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => ipcRenderer.invoke('export-html', snapshot),
   exportDOCX: (content: string) => ipcRenderer.invoke('export-docx', content),
