@@ -141,9 +141,13 @@ async function runTabBench(): Promise<void> {
   const markdown = paragraphs.join('\n\n')
   const heapOf = () => (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0
   if (activeTabId < 0) return
+  // Run entirely in private sessions: the user's real document, if any, keeps
+  // its own session untouched and can be restored by switching back to it.
+  createLocalSession(899999)
+  activateSession(899999)
   setContent(markdown, true)
   const heapAfterFirst = heapOf()
-  const ids = [activeTabId]
+  const ids = [899999]
   for (let i = 0; i < 3; i++) {
     const id = 900000 + i
     createLocalSession(id)
@@ -289,6 +293,8 @@ function activateSession(tabId: number): void {
   scheduleOutlineUpdate()
   surfaceDeferredConflict()
   void window.electronAPI.notifyActiveTab(tabId)
+  // The panel browses the current document's directory, so it follows the tab.
+  void refreshSiblings()
   // Switching never changes the tab set, so only the highlight moves; a full
   // strip rebuild here would dominate the switch cost (tab-bench data).
   highlightActiveTab()
@@ -1231,6 +1237,7 @@ async function init(): Promise<void> {
       // file-opened may have arrived first (its queue flushes earlier) and
       // parked content here; apply it now.
       activeTabId = tabId
+      window.electronAPI.notifyActiveTab(tabId)
       if (snap.pendingLoad !== null) {
         const content = snap.pendingLoad
         snap.pendingLoad = null

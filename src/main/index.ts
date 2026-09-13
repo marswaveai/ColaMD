@@ -315,6 +315,10 @@ function createWindow(filePath?: string, initialContent?: string, initialBrowseP
 
   const state = getState(win)
   const initialTab = createTab(win)
+  // The window's first tab is active from birth: every active-tab resolution
+  // (siblings, reveal, save defaults, conflict flow) depends on it, and the
+  // renderer's first-tab path does not route through the switch protocol.
+  state.activeTabId = initialTab.tabId
   if (initialBrowsePath) initialTab.browsePath = initialBrowsePath
 
   if (process.env.ELECTRON_RENDERER_URL) {
