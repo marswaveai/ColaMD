@@ -314,12 +314,13 @@ function renderTabStrip(): void {
 }
 
 // design.md: the tab bar only exists once the user has created a second tab;
-// with fewer than two tabs there is no persistent region at all.
+// with fewer than two tabs there is no persistent region at all. The bar
+// collapses to zero height and fades (see base.css) instead of toggling
+// display, so its entrance animates rather than jumps.
 function updateTabBarVisibility(): void {
   const visible = tabs.size >= 2
-  const bar = tabBarEl()
-  if (bar) bar.hidden = !visible
   document.body.classList.toggle('has-tabs', visible)
+  if (visible) renderTabStrip()
 }
 
 function showSaveStatus(state: 'dirty' | 'saved'): void {

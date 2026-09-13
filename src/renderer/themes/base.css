@@ -263,12 +263,33 @@ body {
    (docs/temporary-document-switcher-prototype.html): a soft strip a few
    percent off the body surface, tabs separated by hairlines, active tab = body
    paper color with a faint inset baseline and heavier weight — no accent
-   underline. Colors map the prototype roles onto theme tokens. */
+   underline. Colors map the prototype roles onto theme tokens.
+   The bar is never a persistent region (design.md): it slides in over
+   ~180ms when the second tab opens. Registering --tab-bar-height with
+   @property lets the custom property itself transition, so the editor
+   height, panel top, and bar height all follow one animation. */
+@property --tab-bar-height {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
 body {
   --tab-bar-height: 0px;
+  transition: --tab-bar-height 180ms ease;
 }
+
 body.has-tabs {
   --tab-bar-height: 31px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    transition: none;
+  }
+  #tab-bar {
+    transition: none;
+  }
 }
 
 #tab-bar {
@@ -286,10 +307,16 @@ body.has-tabs {
   background: color-mix(in srgb, var(--bg-color) 94%, var(--text-color));
   border-bottom: 1px solid var(--border-color);
   -webkit-app-region: drag;
+  /* Collapsed state: the bar stays in the layout at zero height and fades,
+     so appearing never reads as a jump-cut. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
 }
 
-#tab-bar[hidden] {
-  display: none;
+body.has-tabs #tab-bar {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 #tab-list {
