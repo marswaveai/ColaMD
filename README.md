@@ -4,7 +4,7 @@
 
 **Language / 语言: [English](README.md) · [中文](README_CN.md)** · [Website](https://colamd.com/)
 
-ColaMD is an open-source, free, elegant Markdown editor for writing, notes, and documentation. It is built for people who just want to write: no toolbars, no status bar, nothing to configure: the window holds a title bar, your text, and a file list.
+ColaMD is an open-source, free, elegant Markdown editor for writing, notes, and documentation. It is built for people who just want to write: no toolbars, no status bar, nothing to configure: just your text and a file list, with a tab strip only when you open a second document.
 
 It offers true WYSIWYG editing, 12 built-in themes, rich-text copy, smart line breaks, search and replace, a document outline, PDF / HTML / Word export, and support for macOS, Windows, and Linux.
 
@@ -95,6 +95,8 @@ ColaMD will keep growing as a focused, free Markdown editor:
 - v2.0.0: 1000-star release: Mermaid diagrams return with luminance-aware colors, recent files & session restore, editor font settings, heading anchors, multiple windows, and a save status hint
 - v2.0.1: Universal macOS build for Apple silicon and Intel Macs, plus custom-theme restoration, Mermaid render recovery, and Windows updater fixes
 - v2.0.2: Resizable file panel (180–420px, remembered) and an outline progress view that highlights the current heading and flashes the landing point after a jump
+- v2.1.1: Tabs get their plus back, at the end of the tab strip; a right-click menu on tabs (close, close others, close to the right, copy path, reveal); and a quieter hover hint that waits a second and shows only the shortcut
+- v2.1.0: Tabs: keep several documents open in one window, each with its own content, undo history, unsaved state and scroll position. Open one with ⌘T, from the File menu, or with ⌘-click in the file list; with a single document the tab strip does not appear at all
 - v2.0.7: Per-architecture macOS downloads (216 MB down to about 82 MB), a Windows zip build that runs without installing, a context menu in the file panel, and a document title that stays centred
 - v2.0.6: Titlebar fixes: reveal-in-file-manager works again, tooltips paint above the document instead of showing through, and the top-right controls align with the top edge
 - v2.0.5: The reveal-in-file-manager button is now reachable, hovering the document title brings it out

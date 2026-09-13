@@ -94,6 +94,14 @@ The reveal button shipped in v2.0.4 and v2.0.5 was unreachable, but not because 
 
 **Decision (2026-09-12):** the button stays hover-only. A constant fourth titlebar icon was considered and dropped: the hover reveal works, and the titlebar should stay as empty as possible.
 
+### Tabs and multi-document workspace
+
+**Sources:** [#59](https://github.com/marswaveai/ColaMD/issues/59)
+
+**Status:** Shipped in `v2.1.0`. Keep several documents open in one window instead of replacing the current document. Each tab holds its own content, unsaved state, undo history and scroll position.
+
+Re-opened as a candidate on 2026-09-11 instead of staying declined, then designed and built during 2026-09-13. The spec lives in `design.md` (section on tabs): user-created tabs only, no strip until there are two tabs, no persistence, no drag between windows. Creation entries are `⌘T`, File → New Tab, and the file panel's right-click Open in New Tab; there is deliberately no plus button in the chrome.
+
 ## Security Maintenance
 
 ### Upgrade Electron and transitive security dependencies
@@ -105,6 +113,31 @@ The reveal button shipped in v2.0.4 and v2.0.5 was unreachable, but not because 
 **Scope:** Evaluate the required Electron major-version upgrade, then verify macOS code signing and notarization, Windows and Linux builds, auto-update manifests, Mermaid rendering, file opening, IPC boundaries, and unsaved-document protection on every supported platform.
 
 **Status:** Planned. Do not mix this with issue #55, whose reported PostCSS version is outdated and is not present in the current dependency tree.
+
+## Website feature cards (positioning)
+
+**Decision (2026-09-13):** the nine cards on colamd.com are ordered by user demand, not by internal build order:
+
+1. True WYSIWYG (真正的所见即所得)
+2. Always in Sync (文件永远是最新的)
+3. Export (导出)
+4. Tabs (标签页)
+5. Diagrams (图表)
+6. Same-Directory Files (同目录文件管理)
+7. Outline & Find (长文档导航)
+8. Rich Text Copy (富文本复制)
+9. Cross-Platform (跨平台)
+
+Evidence used:
+
+- **Our own issue tracker** (40 issues). By topic: 代码块 4 (#29, #30, #53, #54), 图表 3 (#40, #42, #51), 导出 3 (#31, #35, #71), 大纲 3 (#27, #37, #64), 保存与自动保存 3 (#34, #39, #49), 多文档 3 (#44, #59, #65), Windows 性能 2 (#32, #78), 最近文件与会话还原 2 (#28, #45).
+- **Search suggestions.** Baidu's suggester returns queries ordered by popularity, and every one of these exists as a popular query: `markdown转word`, `markdown导出pdf`, `markdown实时预览`, `markdown所见即所得`, `markdown自动保存`, `markdown流程图`. Google's suggestion endpoint was unreachable from the build machine, so it was not used. `markdown大纲` drifts to 「大纲是什么意思」, meaning the term itself has low awareness: that is why card 7 says 「长文档导航」 rather than 「大纲」.
+
+**Dropped: Clean by Design / 界面克制.** It is an identity, not a feature, and no issue asked for it. The feeling it carried (极简无负担) now lives in the hero description instead: "a quiet home: your text and a file list, no toolbar and nothing to configure".
+
+**Added: Diagrams / 图表** (Mermaid, shipped in v2.0.0).
+
+Rule kept: exactly nine cards. The order is documented in an HTML comment above the card list on the gh-pages branch.
 
 ## Candidates
 
@@ -137,14 +170,6 @@ Bug report: opening the first .md is fast, but opening another file while one is
 **Scope:** A quiet switcher below the title bar, shown only with two or more documents. Start with up to three same-directory documents; preserve each document's content, dirty state, scroll position, and source/visual mode while switching. Do not support cross-directory tabs, drag sorting, pinned tabs, persistence, or startup session restoration. Current-item distinction should rely on subtle light/dark surfaces，not an accent-color underline. Refine the left-side visual spacing before implementation.
 
 **Status:** Candidate. Prototype accepted as direction; not scheduled.
-
-### Tabs and multi-document workspace
-
-**Sources:** [#59](https://github.com/marswaveai/ColaMD/issues/59)
-
-Requested: keep documents from different paths open together in one window instead of replacing the current document.
-
-Re-opened as a candidate on 2026-09-11, at the maintainer's request, instead of staying declined. `design.md` still states "no persistent workspace and no full file tree", so the design document must be updated before this is implemented. The shape is also undecided: a tab strip, an extension of the temporary same-directory switcher, or something else that avoids a permanent extra region.
 
 ### Plugin ecosystem
 

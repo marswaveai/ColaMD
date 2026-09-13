@@ -1,4 +1,5 @@
-import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal, setMathModalLanguage, releaseMermaidRenderer, runFormatCommand, type FormatCommandId } from './editor/editor'
+import { createEditor, flashHeadingOnArrival, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal, setMathModalLanguage, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, type FormatCommandId } from './editor/editor'
+import { detectMarkdownStyle } from './editor/markdown-style'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { setUiLanguage, isChinese, type UiLanguage } from './ui-language'
@@ -128,11 +129,507 @@ function clearSaveStatus(): void {
   }
 }
 
+// An external edit landing while the user still has unsaved changes must never
+// clobber the editor, and plain autosave would silently overwrite the external
+// edit. Pause autosave and let the user choose explicitly.
+function raiseExternalConflict(): void {
+  if (externalConflictPending) return
+  externalConflictPending = true
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer)
+    autosaveTimer = null
+  }
+  const el = saveStatusEl()
+  if (el) {
+    if (saveStatusTimer) {
+      clearTimeout(saveStatusTimer)
+      saveStatusTimer = null
+    }
+    el.textContent = isChinese() ? '文件已被外部修改' : 'File changed externally'
+    el.classList.remove('saved')
+    el.classList.add('pending')
+  }
+  window.electronAPI.reportExternalConflict?.()
+}
+
+// --- Tabs (design.md) ---
+// Tabs are created by the user (the + button or ⌘T) and never appear on their own.
+// The module-level document state above always describes the ACTIVE tab, so every
+// existing path (save, autosave, external conflict, outline, source mode) keeps
+// working unchanged. Background tabs keep a snapshot of their own state, which
+// makes switching a capture/restore pair instead of a second document machine.
+interface DocumentTab {
+  id: string
+  filePath: string | null
+  dirty: boolean
+  revision: number
+  sourceMode: boolean
+  sourceText: string
+  content: string
+  editorState: import('@milkdown/kit/prose/state').EditorState | null
+  diskContent: string | null
+  scrollTop: number
+}
+
+const tabs: DocumentTab[] = []
+let activeTabId: string | null = null
+let nextTabId = 1
+let switchingTab = false
+
+const tabBarEl = () => document.getElementById('tab-bar') as HTMLElement
+
+function activeTab(): DocumentTab | null {
+  return tabs.find((tab) => tab.id === activeTabId) ?? null
+}
+
+function untitledLabel(): string {
+  return fileTitleEl().dataset.untitled || 'Untitled'
+}
+
+function tabLabel(tab: DocumentTab): string {
+  if (!tab.filePath) return untitledLabel()
+  return tab.filePath.split(/[\\/]/).pop() || tab.filePath
+}
+
+// Read the live state back into the active tab's record. Called before every
+// switch, close and bar render, so the records and the screen cannot disagree.
+function captureActiveTab(): void {
+  const tab = activeTab()
+  if (!tab) return
+  // The path is the tab's identity and only changes where a document is really
+  // opened or saved; deriving it here would let a stray render rename a tab.
+  tab.dirty = dirty
+  tab.revision = documentRevision
+  tab.sourceMode = sourceModeActive
+  tab.content = getContent()
+  if (sourceModeActive) {
+    tab.sourceText = sourceEl().value
+    tab.scrollTop = sourceEl().scrollTop
+  } else {
+    tab.editorState = getEditorState()
+    tab.scrollTop = editorEl().scrollTop
+  }
+}
+
+// The bar only carries the unsaved mark that the tab already owns; the title bar
+// keeps the primary save hint.
+function markActiveTabDirty(): void {
+  const tab = activeTab()
+  if (!tab) return
+  tab.dirty = dirty
+  const entry = tabBarEl().querySelector(`.tab-entry[data-tab-id="${tab.id}"]`)
+  entry?.classList.toggle('dirty', dirty)
+}
+
+const TAB_BAR_HEIGHT = 36
+// The tab hint waits before it appears: hovering a tab is usually a prelude to
+// clicking it, and a label that jumps out immediately is noise.
+const TAB_TIP_DELAY = 1000
+
+let tabTipTimer: ReturnType<typeof setTimeout> | undefined
+
+// The strip clips its own overflow, so the shortcut hint is a fixed layer that
+// the renderer positions under the tab on hover.
+function showTabTip(button: HTMLElement, text: string): void {
+  const tip = document.getElementById('tab-tip') as HTMLElement | null
+  if (!tip) return
+  tip.textContent = text
+  tip.hidden = false
+  const rect = button.getBoundingClientRect()
+  const width = tip.offsetWidth
+  const left = Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 8)
+  tip.style.left = `${Math.round(left)}px`
+  tip.style.top = `${Math.round(rect.bottom + 7)}px`
+}
+
+function scheduleTabTip(button: HTMLElement, text: string): void {
+  clearTimeout(tabTipTimer)
+  tabTipTimer = setTimeout(() => showTabTip(button, text), TAB_TIP_DELAY)
+}
+
+// A tab whose name fits says nothing but the shortcut; only a truncated name is
+// worth spelling out. The full path never appears on hover: it was the system
+// tooltip, and it reads as an accident.
+function tabTipText(entry: HTMLElement): string {
+  const shortcut = '⌘W'
+  const name = entry.querySelector('.tab-entry-name') as HTMLElement | null
+  const full = entry.dataset.fullName ?? ''
+  if (!name || !full) return shortcut
+  return name.scrollWidth > name.clientWidth + 1 ? `${full} · ${shortcut}` : shortcut
+}
+
+function hideTabTip(): void {
+  clearTimeout(tabTipTimer)
+  const tip = document.getElementById('tab-tip') as HTMLElement | null
+  if (tip) tip.hidden = true
+}
+// Space between the tab strip and the document, matching the editor's side
+// padding so the page does not start right under the tabs.
+const TAB_BAR_TOP_GAP = 18
+
+function closeGlyph(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('width', '9')
+  svg.setAttribute('height', '9')
+  svg.setAttribute('viewBox', '0 0 9 9')
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('stroke', 'currentColor')
+  svg.setAttribute('stroke-width', '1.3')
+  svg.setAttribute('stroke-linecap', 'round')
+  for (const [x1, y1, x2, y2] of [['1.6', '1.6', '7.4', '7.4'], ['7.4', '1.6', '1.6', '7.4']]) {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2)
+    svg.append(line)
+  }
+  return svg
+}
+
+// Same plus as the title bar button, at the tab strip's scale.
+
+// The plus at the strip's scale, same shape as the icons in the title bar.
+function plusGlyph(): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('width', '14')
+  svg.setAttribute('height', '14')
+  svg.setAttribute('viewBox', '0 0 16 16')
+  svg.setAttribute('fill', 'none')
+  svg.setAttribute('stroke', 'currentColor')
+  svg.setAttribute('stroke-width', '1.3')
+  svg.setAttribute('stroke-linecap', 'round')
+  for (const [x1, y1, x2, y2] of [['8', '3.1', '8', '12.9'], ['3.1', '8', '12.9', '8']]) {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2)
+    svg.append(line)
+  }
+  return svg
+}
+
+function renderTabBar(): void {
+  captureActiveTab()
+  const bar = tabBarEl()
+  const visible = tabs.length > 1
+  bar.hidden = !visible
+  document.body.classList.toggle('has-tabs', visible)
+  document.documentElement.style.setProperty('--tab-bar-height', visible ? `${TAB_BAR_HEIGHT}px` : '0px')
+  document.documentElement.style.setProperty('--editor-top-gap', visible ? `${TAB_BAR_TOP_GAP}px` : '0px')
+  bar.innerHTML = ''
+  if (!visible) return
+  for (const tab of tabs) {
+    const entry = document.createElement('div')
+    entry.className = 'tab-entry'
+    entry.dataset.tabId = tab.id
+    entry.setAttribute('role', 'tab')
+    entry.dataset.fullName = tabLabel(tab)
+    if (tab.id === activeTabId) {
+      entry.classList.add('active')
+      entry.setAttribute('aria-selected', 'true')
+    }
+    if (tab.dirty) entry.classList.add('dirty')
+    const name = document.createElement('span')
+    name.className = 'tab-entry-name'
+    name.textContent = tabLabel(tab)
+    const close = document.createElement('button')
+    close.type = 'button'
+    close.className = 'tab-entry-close'
+    close.setAttribute('aria-label', isChinese() ? '关闭标签页' : 'Close tab')
+    close.append(closeGlyph())
+    entry.append(name, close)
+    bar.append(entry)
+  }
+  // The plus belongs to the strip: it shows up with the strip and goes away with
+  // it, instead of appearing and vanishing in the title bar.
+  const add = document.createElement('button')
+  add.type = 'button'
+  add.className = 'tab-new-btn'
+  add.setAttribute('aria-label', isChinese() ? '新建标签页' : 'New tab')
+  add.append(plusGlyph())
+  bar.append(add)
+  const active = bar.querySelector('.tab-entry.active')
+  active?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  hideTabTip()
+  // Let the main process know which files this window holds in tabs, so opening
+  // an already open document can focus that tab instead of duplicating it.
+  window.electronAPI.setTabFiles(tabs.map((tab) => tab.filePath).filter((path): path is string => !!path))
+}
+
+function showBlankDocument(): void {
+  releaseMermaidRenderer()
+  exitSourceMode()
+  applyingProgrammaticChange = true
+  try {
+    setMarkdown('', true)
+  } finally {
+    applyingProgrammaticChange = false
+  }
+  updateWordCount('')
+  resetDirty()
+  updateFileTitle()
+  updateFileRevealButton()
+  updatePanelVisibility()
+  void refreshSiblings()
+  scheduleOutlineUpdate()
+  editorEl().scrollTop = 0
+  sourceEl().scrollTop = 0
+}
+
+// Switching away must not lose work. A tab with a path is flushed through the
+// usual queue (same rule the file panel already followed); an untitled tab keeps
+// its content in its own record and is only decided on when it would really be
+// dropped (closing the tab, or closing the window).
+async function saveTabForLeaving(tab: DocumentTab | null): Promise<boolean> {
+  if (!tab || !tab.dirty || !tab.filePath) return true
+  return await saveCurrent()
+}
+
+async function openNewTab(): Promise<void> {
+  const previous = activeTab()
+  captureActiveTab()
+  if (!await saveTabForLeaving(previous)) return
+  const tab: DocumentTab = {
+    id: `tab-${nextTabId++}`,
+    filePath: null,
+    dirty: false,
+    revision: ++documentRevision,
+    sourceMode: false,
+    sourceText: '',
+    content: '',
+    editorState: null,
+    diskContent: null,
+    scrollTop: 0
+  }
+  tabs.push(tab)
+  activeTabId = tab.id
+  currentFilePath = null
+  // Tell the main process the window is now on an untitled document, otherwise
+  // its notion of the active file still points at the previous tab's file.
+  await window.electronAPI.activateFile(null)
+  showBlankDocument()
+  renderTabBar()
+}
+
+async function activateTab(id: string): Promise<void> {
+  if (switchingTab || id === activeTabId) return
+  const target = tabs.find((tab) => tab.id === id)
+  if (!target) return
+  const previous = activeTab()
+  captureActiveTab()
+  if (!await saveTabForLeaving(previous)) return
+  switchingTab = true
+  try {
+    // Point the window at the incoming document first: this re-points the file
+    // watcher, the title and the recent list, and reports whether the file
+    // changed while this tab sat in the background. An untitled tab passes null
+    // so the window stops pointing at the tab we are leaving.
+    const disk = await window.electronAPI.activateFile(target.filePath)
+    // This document may have been written in a different style than the one we
+    // are leaving; restore its own serialiser style with its content.
+    applyMarkdownStyle(detectMarkdownStyle(target.content))
+    activeTabId = target.id
+    currentFilePath = target.filePath
+    documentRevision = target.revision
+    dirty = false
+    externalConflictPending = false
+    const changedOnDisk = !!disk && target.diskContent !== null && disk.content !== target.diskContent
+    if (changedOnDisk && !target.dirty) {
+      target.diskContent = disk!.content
+      setContent(disk!.content, true)
+      clearDirty()
+      clearSaveStatus()
+    } else if (target.sourceMode) {
+      enterSourceMode(target.sourceText, 0)
+    } else if (target.editorState) {
+      exitSourceMode()
+      // Swapping in the tab's own editor state is not a user edit. Without this
+      // guard the listener fires, the tab flips to 「已编辑」, and an autosave
+      // rewrites the file the user never touched.
+      applyingProgrammaticChange = true
+      try {
+        restoreEditorState(target.editorState)
+      } finally {
+        applyingProgrammaticChange = false
+      }
+    }
+    // The tab's own unsaved state decides, never the swap itself.
+    dirty = target.dirty
+    reportDirty()
+    if (dirty) {
+      showSaveStatus('dirty')
+      if (!changedOnDisk) scheduleAutosave()
+    } else {
+      clearSaveStatus()
+    }
+    updateWordCount()
+    updateFileTitle()
+    updateFileRevealButton()
+    updatePanelVisibility()
+    void refreshSiblings()
+    scheduleOutlineUpdate()
+    const restoreScroll = (): void => {
+      if (target.sourceMode) sourceEl().scrollTop = target.scrollTop
+      else editorEl().scrollTop = target.scrollTop
+    }
+    restoreScroll()
+    requestAnimationFrame(restoreScroll)
+    renderTabBar()
+    if (changedOnDisk && target.dirty) raiseExternalConflict()
+  } finally {
+    switchingTab = false
+  }
+}
+
+async function closeTab(id: string): Promise<void> {
+  const index = tabs.findIndex((tab) => tab.id === id)
+  if (index < 0) return
+  const tab = tabs[index]
+  if (tab.id === activeTabId) {
+    captureActiveTab()
+    if (!await saveTabForLeaving(tab)) return
+    if (tab.dirty && !tab.filePath && !confirmDiscardUntitled()) return
+  } else if (tab.dirty) {
+    // A background tab is not the active document, so it is written straight to
+    // its own path; an untitled one cannot be written without a dialog.
+    if (tab.filePath) {
+      const saved = await window.electronAPI.saveFile(tab.content, tab.filePath, false, false)
+      if (!saved) return
+      tab.dirty = false
+    } else if (!confirmDiscardUntitled()) {
+      return
+    }
+  }
+  tabs.splice(index, 1)
+  if (tabs.length === 0) {
+    // The last tab closed: the window falls back to a single blank document and
+    // the bar disappears with it.
+    activeTabId = null
+    await openNewTab()
+    return
+  }
+  if (tab.id === activeTabId) {
+    activeTabId = null
+    await activateTab(tabs[Math.min(index, tabs.length - 1)].id)
+  }
+  renderTabBar()
+}
+
+// An untitled tab has nowhere to go on disk, so closing it asks first.
+function confirmDiscardUntitled(): boolean {
+  return window.confirm(isChinese()
+    ? '这个标签页还没有保存，关闭会丢掉里面的内容。'
+    : 'This tab has unsaved content. Close it anyway?')
+}
+
+// Open a file in a tab of its own. Reuses a blank current tab, and never opens
+// the same file twice: an already open document just gets focused.
+async function openFileInNewTab(path: string): Promise<void> {
+  const existing = tabs.find((tab) => tab.filePath === path)
+  if (existing) {
+    await activateTab(existing.id)
+    return
+  }
+  const current = activeTab()
+  if (current && !current.filePath && !current.dirty) {
+    await window.electronAPI.openSibling(path)
+    return
+  }
+  await openNewTab()
+  await window.electronAPI.openSibling(path)
+}
+
+// Closing several tabs runs one at a time: each close may need its own unsaved
+// confirmation, and a cancelled one stops the rest.
+async function closeTabsMatching(keep: (index: number) => boolean): Promise<void> {
+  for (;;) {
+    const index = tabs.findIndex((_tab, i) => keep(i))
+    if (index < 0) return
+    const before = tabs.length
+    await closeTab(tabs[index].id)
+    if (tabs.length === before) return
+  }
+}
+
+function bindTabBar(api: import('../preload/index').ElectronAPI): void {
+  // Tabs are also created from the File menu / ⌘T and from the file list; the
+  // strip's own plus is bound above, in renderTabBar.
+  api.onMenuNewTab(() => { void openNewTab() })
+  api.onMenuCloseTab(() => { if (activeTabId) void closeTab(activeTabId) })
+  api.onOpenInNewTab((path) => { void openFileInNewTab(path) })
+  const handleTabMenuAction = ({ action, tabId }: { action: string; tabId: string }) => {
+    if (action === 'close') { void closeTab(tabId); return }
+    if (action === 'close-others') { void closeTabsMatching((i) => tabs[i].id !== tabId); return }
+    if (action === 'close-right') {
+      void closeTabsMatching((i) => i > tabs.findIndex((tab) => tab.id === tabId))
+    }
+  }
+  api.onTabMenuAction(handleTabMenuAction)
+  tabBarEl().addEventListener('mouseover', (e) => {
+    const target = e.target as HTMLElement
+    const entry = target.closest('.tab-entry') as HTMLElement | null
+    if (entry) scheduleTabTip(entry, tabTipText(entry))
+    else if (target.closest('.tab-new-btn')) scheduleTabTip(target.closest('.tab-new-btn') as HTMLElement, isChinese() ? '新建标签页 · ⌘T' : 'New tab · ⌘T')
+    else hideTabTip()
+  })
+  tabBarEl().addEventListener('mouseleave', hideTabTip)
+  tabBarEl().addEventListener('contextmenu', (e) => {
+    const entry = (e.target as HTMLElement).closest('.tab-entry') as HTMLElement | null
+    const id = entry?.dataset.tabId
+    if (!id) return
+    const index = tabs.findIndex((tab) => tab.id === id)
+    if (index < 0) return
+    e.preventDefault()
+    void api.showTabContextMenu({
+      tabId: id,
+      filePath: tabs[index].filePath,
+      canCloseOthers: tabs.length > 1,
+      canCloseRight: index < tabs.length - 1
+    })
+  })
+  api.onFocusFile((path) => {
+    const tab = tabs.find((candidate) => candidate.filePath === path)
+    if (tab) void activateTab(tab.id)
+  })
+  tabBarEl().addEventListener('click', (e) => {
+    const target = e.target as HTMLElement
+    if (target.closest('.tab-new-btn')) {
+      void openNewTab()
+      return
+    }
+    const entry = target.closest('.tab-entry') as HTMLElement | null
+    const id = entry?.dataset.tabId
+    if (!id) return
+    if (target.closest('.tab-entry-close')) {
+      void closeTab(id)
+      return
+    }
+    void activateTab(id)
+  })
+  // Middle click closes, the browser convention; the bar stays free of a
+  // permanent close affordance (design.md).
+  tabBarEl().addEventListener('auxclick', (e) => {
+    if (e.button !== 1) return
+    const entry = (e.target as HTMLElement).closest('.tab-entry') as HTMLElement | null
+    const id = entry?.dataset.tabId
+    if (!id) return
+    e.preventDefault()
+    void closeTab(id)
+  })
+}
+
+// Keep the active tab's record in step with a successful write, so switching
+// back to it later can tell whether the file changed underneath us.
+function noteTabSaved(content: string): void {
+  const tab = activeTab()
+  if (!tab) return
+  tab.diskContent = content
+  tab.filePath = currentFilePath
+  tab.dirty = dirty
+}
+
 function setDirty(): void {
   documentRevision += 1
   dirty = true
   reportDirty()
   showSaveStatus('dirty')
+  markActiveTabDirty()
   scheduleAutosave()
 }
 
@@ -143,6 +640,7 @@ function clearDirty(): void {
     autosaveTimer = null
   }
   reportDirty()
+  markActiveTabDirty()
 }
 
 // Invalidate any in-flight save captured from the previous document before
@@ -183,6 +681,7 @@ async function runAutosave(): Promise<void> {
   if (path && revision === documentRevision && currentFilePath === filePath) {
     currentFilePath = path
     clearDirty()
+    noteTabSaved(content)
     showSaveStatus('saved')
   }
 }
@@ -191,15 +690,19 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
   const revision = documentRevision
   const content = getContent()
   const expectedPath = currentFilePath
+  // '' states plainly that the active document is untitled, so a save can never
+  // be written into a file the window happens to have open in another tab.
   const path = await enqueueSave(() => saveAs
-    ? window.electronAPI.saveFileAs(content, expectedPath ?? undefined)
-    : window.electronAPI.saveFile(content, expectedPath ?? undefined, true))
+    ? window.electronAPI.saveFileAs(content, expectedPath ?? '')
+    : window.electronAPI.saveFile(content, expectedPath ?? '', true))
   if (!path || currentFilePath !== expectedPath) return false
 
   currentFilePath = path
   updateFileTitle()
   updateFileRevealButton()
   refreshSiblings()
+  noteTabSaved(content)
+  if (path !== expectedPath) renderTabBar()
   if (revision === documentRevision) {
     clearDirty()
     showSaveStatus('saved')
@@ -667,6 +1170,10 @@ function exitSourceMode(): void {
 const LARGE_DOCUMENT_SOURCE_THRESHOLD = 512 * 1024
 
 function setContent(content: string, flushHistory = false): void {
+  // Follow the incoming document's Markdown style before it is parsed, so a
+  // save writes the same markers the file already used.
+  const detectedStyle = detectMarkdownStyle(content)
+  applyMarkdownStyle(detectedStyle)
   if (content.length >= LARGE_DOCUMENT_SOURCE_THRESHOLD) {
     // ProseMirror renders the whole document eagerly. Keep very large files in
     // the existing source editor so opening them stays responsive on Windows.
@@ -752,6 +1259,10 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
 
 async function init(): Promise<void> {
   const api = window.electronAPI
+  // macOS keeps its own overlay scrollbars (drawn while you scroll, no layout
+  // space, never in the way). The thin custom scrollbar is only for Windows and
+  // Linux, where the platform default is a chunky always-on bar.
+  if (!/^Mac/i.test(navigator.platform)) document.body.classList.add('platform-non-mac')
   const language = await api.getLanguage()
   fileManagerName = await api.getFileManagerName()
   setUiLanguage(language)
@@ -786,8 +1297,16 @@ async function init(): Promise<void> {
   resetDirty()
 
   // Main asks for an authoritative snapshot before any close or quit.
-  api.onRequestDocumentState((requestId) => {
-    window.electronAPI.respondDocumentState(requestId, { dirty, content: getContent() })
+  api.onRequestDocumentState(async (requestId) => {
+    captureActiveTab()
+    // Report every tab that still has unsaved content. The main process writes
+    // the ones with a path and refuses to close on the untitled ones, so a
+    // background tab can never be dropped silently.
+    window.electronAPI.respondDocumentState(requestId, {
+      dirty,
+      content: getContent(),
+      tabs: tabs.filter((tab) => tab.dirty).map((tab) => ({ path: tab.filePath, content: tab.content }))
+    })
   })
   api.reportRendererReady()
 
@@ -797,6 +1316,11 @@ async function init(): Promise<void> {
     const btn = (e.target as HTMLElement).closest('button[data-path]') as HTMLButtonElement | null
     if (!btn || !btn.dataset.path) return
     if (btn.dataset.path === currentFilePath) return
+    // ⌘/Ctrl click opens the file in a tab of its own (design.md).
+    if (btn.dataset.kind === 'file' && (e.metaKey || e.ctrlKey)) {
+      await openFileInNewTab(btn.dataset.path)
+      return
+    }
     if (btn.dataset.kind === 'file' && dirty && !await saveCurrent()) return
     await api.openSibling(btn.dataset.path)
   })
@@ -814,6 +1338,8 @@ async function init(): Promise<void> {
     void api.showEntryContextMenu(path, kind === 'directory' ? 'directory' : 'file')
   })
   initPanelResize()
+  bindTabBar(api)
+  renderTabBar()
   fileTabEl().addEventListener('click', () => setPanelMode('files'))
   outlineTabEl().addEventListener('click', () => setPanelMode('outline'))
   api.onToggleFilePanel(() => togglePanel())
@@ -857,7 +1383,32 @@ async function init(): Promise<void> {
   api.onNewFile(() => { releaseMermaidRenderer(); exitSourceMode(); applyContent(''); scheduleOutlineUpdate() })
   api.onFileOpened((data) => {
     releaseMermaidRenderer()
+    // The window always opens with exactly one document; the bar for it appears
+    // only once the user creates a second tab.
+    if (tabs.length === 0) {
+      tabs.push({
+        id: `tab-${nextTabId++}`,
+        filePath: null,
+        dirty: false,
+        revision: documentRevision,
+        sourceMode: false,
+        sourceText: '',
+        content: '',
+        editorState: null,
+        diskContent: null,
+        scrollTop: 0
+      })
+      activeTabId = tabs[0].id
+    }
     currentFilePath = data.path
+    dirty = false
+    const tab = activeTab()
+    if (tab) {
+      tab.filePath = data.path
+      tab.dirty = false
+      tab.revision = documentRevision
+      tab.diskContent = data.content
+    }
     updateFileRevealButton()
     resetDirty()
     setContent(data.content, true)
@@ -871,29 +1422,11 @@ async function init(): Promise<void> {
     updatePanelVisibility()
     refreshSiblings()
     scheduleOutlineUpdate()
+    renderTabBar()
   })
   api.onFileChanged((content) => {
-    // An external edit landing while the user still has unsaved changes must
-    // never clobber the editor, and plain autosave would silently overwrite
-    // the external edit. Pause autosave and let the user choose explicitly.
     if (dirty) {
-      if (externalConflictPending) return
-      externalConflictPending = true
-      if (autosaveTimer) {
-        clearTimeout(autosaveTimer)
-        autosaveTimer = null
-      }
-      const el = saveStatusEl()
-      if (el) {
-        if (saveStatusTimer) {
-          clearTimeout(saveStatusTimer)
-          saveStatusTimer = null
-        }
-      el.textContent = isChinese() ? '文件已被外部修改' : 'File changed externally'
-      el.classList.remove('saved')
-        el.classList.add('pending')
-      }
-      window.electronAPI.reportExternalConflict?.()
+      raiseExternalConflict()
       return
     }
     if (sourceModeActive) {
@@ -915,6 +1448,8 @@ async function init(): Promise<void> {
     searchPanel.setLanguage(language)
     setMathModalLanguage(language)
     updateUiLanguage()
+    // Tab labels and the close tooltip are built in the current language.
+    renderTabBar()
   })
   api.onExternalConflictResult((result) => {
     if (result.action === 'load' && typeof result.content === 'string') {

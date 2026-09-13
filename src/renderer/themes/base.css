@@ -12,6 +12,23 @@ html, body {
   color: var(--text-color);
 }
 
+:root {
+  /* Zero when no tab bar is showing, so every height/top below keeps the
+     single-document layout identical to before tabs existed. */
+  --tab-bar-height: 0px;
+  --editor-top-gap: 0px;
+}
+
+/* One chrome surface for the title bar and the tab strip (Chrome does the same):
+   the strip never draws its own divider, and the active tab is the paper colour
+   with an open bottom edge, so it reads as connected to the document. */
+body.has-tabs {
+  --chrome-bg: color-mix(in srgb, var(--text-color) 6%, var(--bg-color));
+  /* Fully opaque, so the hovered tab and the close button that covers text use
+     one solid colour instead of stacking translucent layers. */
+  --chrome-bg-hover: color-mix(in srgb, var(--text-color) 6%, var(--chrome-bg));
+}
+
 body {
   --search-match-bg: color-mix(in srgb, var(--link-color) 18%, transparent);
   --search-match-current-bg: color-mix(in srgb, var(--link-color) 32%, transparent);
@@ -21,6 +38,7 @@ body {
   -webkit-app-region: drag;
   height: 40px;
   flex-shrink: 0;
+  background: var(--chrome-bg, transparent);
   position: relative;
   /* Tooltips inside the titlebar must paint above the editor. `#title-center`
      carries a transform, so it forms its own stacking context and the tooltip's
@@ -76,11 +94,198 @@ body {
   opacity: 0.55;
 }
 
+/* Tabs are created from the File menu / ⌘T, from the file list (⌘-click or the
+   right-click menu), and from the plus at the end of the strip, which appears
+   together with the strip. There is deliberately no plus in the title bar: it
+   would disappear the moment the strip shows up. */
+#tab-bar {
+  height: var(--tab-bar-height, 0px);
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 0 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  background: var(--chrome-bg, transparent);
+  /* The strip's baseline runs under the whole bar, and the active tab (opaque
+     paper, flush with the bottom) cuts it out, so it opens into the document. */
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text-color) 11%, transparent);
+}
+
+#tab-bar[hidden] {
+  display: none;
+}
+
+#tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+/* The plus sits at the end of the strip, right after the last tab. */
+.tab-new-btn {
+  flex: none;
+  align-self: flex-end;
+  margin: 0 0 3px 4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  -webkit-app-region: no-drag;
+  transition: background 0.12s, color 0.12s;
+}
+
+.tab-new-btn:hover {
+  background: var(--chrome-bg-hover);
+  color: var(--text-color);
+}
+
+.tab-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  /* A tab hugs its filename. The floor is the width of a tab holding `a.md`
+     (50px = 28px of text + 20px padding + 2px border): shorter names stop there
+     rather than collapsing to a bare square. */
+  min-width: 50px;
+  max-width: 190px;
+  height: 30px;
+  /* Symmetric, so the filename sits centred in a tab that hugs it. */
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: default;
+  -webkit-app-region: no-drag;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-entry:hover {
+  background: var(--chrome-bg-hover);
+  color: var(--text-secondary, var(--text-color));
+}
+
+/* The active tab wears the paper colour with no bottom edge, so it opens into the
+   document. Square corners and no shadow. Its only accent is a 1px line in the
+   theme colour along the top edge: enough to carry the product colour, thin enough
+   not to dominate the filename. */
+.tab-entry.active {
+  background: var(--bg-color);
+  border-color: color-mix(in srgb, var(--text-color) 16%, transparent);
+  color: var(--text-color);
+  box-shadow: inset 0 1px 0 var(--link-color);
+}
+
+.tab-entry-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-entry.dirty::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* The close button floats over the tab: no width, no padding, nothing reserved
+   at rest, so a resting tab hugs its filename exactly. When it shows it masks the
+   text behind it with a fully opaque surface colour, and it is never translucent:
+   a faded button lets the tab name read straight through it. Quietness comes from
+   the muted glyph colour, not from an opacity on the button. */
+.tab-entry-close {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: var(--chrome-bg-hover);
+  color: inherit;
+  opacity: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: opacity 0s, background 0.12s, color 0.12s;
+}
+
+.tab-entry.active .tab-entry-close {
+  background: var(--bg-color);
+}
+
+.tab-entry:hover .tab-entry-close,
+.tab-entry-close:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  /* A resting tab's surface fades in over 0.15s: wait for it, so the opaque mask
+     never lands on a half-transparent tab. */
+  transition: opacity 0s 0.15s, background 0.12s, color 0.12s;
+}
+
+/* The active tab's paper surface never fades, so its close button pops at once. */
+.tab-entry.active:hover .tab-entry-close,
+.tab-entry.active .tab-entry-close:focus-visible {
+  transition: opacity 0s, background 0.12s, color 0.12s;
+}
+
+.tab-entry-close:hover {
+  background: color-mix(in srgb, var(--text-color) 14%, var(--chrome-bg-hover));
+  color: var(--text-color);
+}
+
+.tab-entry.active .tab-entry-close:hover {
+  background: color-mix(in srgb, var(--text-color) 12%, var(--bg-color));
+}
+
+/* The strip clips its own overflow, so the shortcut hint lives in a fixed layer
+   and is positioned by the renderer instead of being a child of the tab. */
+#tab-tip {
+  position: fixed;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text-color) 86%, transparent);
+  color: var(--bg-color);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 60;
+}
+
+#tab-tip[hidden] {
+  display: none;
+}
+
 #file-toggle-btn {
   position: absolute;
   top: 6px;
-  right: 78px;
-  width: 28px;
+  right: 78px;  width: 28px;
   height: 28px;
   border-radius: 6px;
   border: none;
@@ -124,9 +329,19 @@ body {
   align-items: center;
   justify-content: center;
   -webkit-app-region: no-drag;
+  /* Opaque surface, and hit-testable even while hidden: the button is only ever
+     clicked when the pointer is on it, and being on it is what shows it. */
+  pointer-events: auto;
   opacity: 0;
-  pointer-events: none;
   transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+/* A wide, invisible hit area bridging the gap to the title, so the pointer
+   travelling from the filename to the icon does not make it blink. */
+#reveal-file-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 -10px;
 }
 
 #reveal-file-btn:disabled {
@@ -140,7 +355,12 @@ body {
   color: var(--text-muted);
 }
 
-#titlebar:hover #reveal-file-btn:not(:disabled),
+/* Reveal on hovering the title itself or the button, never when the pointer is
+   over the right-hand actions: those are unrelated controls and the extra icon
+   appearing out there is noise (design.md). The button stays hit-testable while
+   hidden, otherwise it could never be reached or clicked. */
+#file-title:hover ~ #reveal-file-btn:not(:disabled),
+#reveal-file-btn:hover:not(:disabled),
 #reveal-file-btn:focus-visible {
   opacity: 1;
   pointer-events: auto;
@@ -230,18 +450,18 @@ body {
 
 #editor {
   position: relative; /* anchor for the absolutely-positioned code copy button */
-  height: calc(100vh - 40px);
+  height: calc(100vh - 40px - var(--tab-bar-height, 0px));
   overflow-y: auto;
-  padding: 0 40px 40px;
+  padding: var(--editor-top-gap, 0px) 40px 40px;
 }
 
 #source-editor {
   display: none;
-  height: calc(100vh - 40px);
+  height: calc(100vh - 40px - var(--tab-bar-height, 0px));
   width: 100%;
   /* Center a column matching the visual editor (780px) so switching modes
      keeps the text in the same place (#48). Falls back to 40px on narrow windows. */
-  padding: 40px max(40px, calc((100% - 780px) / 2));
+  padding: calc(40px + var(--editor-top-gap, 0px)) max(40px, calc((100% - 780px) / 2));
   box-sizing: border-box;
   border: none;
   outline: none;
@@ -261,7 +481,7 @@ body {
 /* Same-directory file panel */
 #file-panel {
   position: fixed;
-  top: 40px;
+  top: calc(40px + var(--tab-bar-height, 0px));
   left: 0;
   bottom: 0;
   width: var(--file-panel-width, 220px);
@@ -282,7 +502,7 @@ body {
    stripe is the only affordance (design.md). */
 #panel-resizer {
   position: fixed;
-  top: 40px;
+  top: calc(40px + var(--tab-bar-height, 0px));
   bottom: 0;
   left: calc(var(--file-panel-width, 220px) - 3px);
   width: 6px;
@@ -505,11 +725,24 @@ body.show-file-panel #source-editor {
   display: none;
 }
 
+/* Milkdown's wrapper holds the editable. It has to reach the bottom of the visible
+   area for two reasons: the editable above it must cover the empty space (clicking
+   under the last line has to place the caret), and a short document must not leave
+   a scrollable sliver behind. min-height: 100% resolves against the editor's own
+   height, so no viewport arithmetic to go stale. */
+#editor > .milkdown {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 #editor .ProseMirror {
   outline: none;
   max-width: 780px;
   margin: 0 auto;
-  min-height: calc(100vh - 92px);
+  /* Fills the wrapper, grows with the text. */
+  flex: 1 0 auto;
+  width: 100%;
   font-size: 16px;
   line-height: 1.75;
   color: var(--text-color);
@@ -844,22 +1077,27 @@ body.theme-elegant #editor .ProseMirror table td {
   border-right: none;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
+/* Scrollbar: macOS keeps its native overlay bars, which are drawn while you
+   scroll, take no layout space and are absent the rest of the time. Only Windows
+   and Linux get the thin custom bar below. Chromium never repaints a custom
+   scrollbar on hover, so a "reveal the thumb on :hover" rule paints nothing
+   (verified on the tab bar and the editor): the honest options are the system
+   overlay bars or an always-on bar. */
+body.platform-non-mac *::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-::-webkit-scrollbar-track {
+body.platform-non-mac *::-webkit-scrollbar-track {
   background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
+body.platform-non-mac *::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 3px;
 }
 
-::-webkit-scrollbar-corner {
+body.platform-non-mac *::-webkit-scrollbar-corner {
   background: var(--bg-color);
 }
 
