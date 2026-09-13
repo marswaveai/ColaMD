@@ -404,6 +404,95 @@ function setupCodeBlockCopy(root: HTMLElement): void {
   resizeObserver.observe(root)
 }
 
+// --- Footnote hover preview (#25) ---
+// Hovering a footnote reference shows its definition in a floating card.
+// Data comes from the same ProseMirror document (no re-parsing, no IPC);
+// clicking a reference keeps its existing jump behavior.
+
+const FOOTNOTE_PREVIEW_DELAY = 300
+
+function setupFootnotePreview(root: HTMLElement): void {
+  const card = document.createElement('div')
+  card.className = 'footnote-preview'
+  card.hidden = true
+  root.appendChild(card)
+
+  let showTimer: ReturnType<typeof setTimeout> | null = null
+  let currentRef: HTMLElement | null = null
+
+  const findDefinitionText = (label: string): string | null => {
+    const view = getEditorView()
+    if (!view) return null
+    let text: string | null = null
+    view.state.doc.descendants((node) => {
+      if (text !== null) return false
+      if (node.type.name === 'footnote_definition' && (node.attrs.label === label || node.attrs.identifier === label)) {
+        text = node.textContent
+        return false
+      }
+      return true
+    })
+    return text
+  }
+
+  const hide = (): void => {
+    if (showTimer) {
+      clearTimeout(showTimer)
+      showTimer = null
+    }
+    currentRef = null
+    card.hidden = true
+  }
+
+  const show = (ref: HTMLElement): void => {
+    // The content may have been re-set while the timer ran; a detached
+    // reference must never surface a stale card.
+    if (!ref.isConnected) {
+      hide()
+      return
+    }
+    const label = ref.getAttribute('data-label') ?? ''
+    const text = label ? findDefinitionText(label) : null
+    if (text === null || !text.trim()) {
+      hide()
+      return
+    }
+    card.textContent = text
+    card.hidden = false
+    const refRect = ref.getBoundingClientRect()
+    const cardRect = card.getBoundingClientRect()
+    const left = Math.max(8, Math.min(refRect.left, window.innerWidth - cardRect.width - 8))
+    let top = refRect.bottom + 6
+    if (top + cardRect.height > window.innerHeight - 8) {
+      top = Math.max(8, refRect.top - cardRect.height - 6)
+    }
+    card.style.left = `${left}px`
+    card.style.top = `${top}px`
+  }
+
+  root.addEventListener('mouseover', (e) => {
+    const ref = (e.target as HTMLElement).closest<HTMLElement>('sup[data-type="footnote_reference"]')
+    if (!ref || ref === currentRef) return
+    if (showTimer) clearTimeout(showTimer)
+    currentRef = ref
+    showTimer = setTimeout(() => {
+      if (currentRef === ref) show(ref)
+    }, FOOTNOTE_PREVIEW_DELAY)
+  })
+  root.addEventListener('mouseout', (e) => {
+    const ref = (e.target as HTMLElement).closest<HTMLElement>('sup[data-type="footnote_reference"]')
+    if (!ref || ref !== currentRef) return
+    const to = e.relatedTarget as HTMLElement | null
+    if (to && ref.contains(to)) return
+    hide()
+  })
+  // Fixed positioning goes stale the moment the document moves.
+  root.addEventListener('scroll', hide, { passive: true })
+  window.addEventListener('resize', hide)
+  // Clicking a reference jumps to the definition; the card must not linger.
+  root.addEventListener('click', hide)
+}
+
 function toggleStrongMark(): void {
   if (!editorInstance) return
   editorInstance.action((ctx) => {
@@ -446,6 +535,7 @@ export async function createEditor(
     : null
 
   setupCodeBlockCopy(root)
+  setupFootnotePreview(root)
 
   let editor = Editor.make()
     .config((ctx) => {
