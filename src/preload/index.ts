@@ -60,6 +60,7 @@ export interface ElectronAPI {
   onMenuImportTheme: (callback: () => void) => void
   onSearch: (callback: () => void) => void
   onMathModal: (callback: () => void) => void
+  onFormatCommand: (callback: (id: string) => void) => void
   onSiblingsChanged: (callback: (files: SiblingFile[]) => void) => void
   onToggleFilePanel: (callback: () => void) => void
   onToggleSourceMode: (callback: () => void) => void
@@ -153,6 +154,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onMathModal: (callback: () => void) => {
     ipcRenderer.on('editor:math', () => callback())
+  },
+  onFormatCommand: (callback: (id: string) => void) => {
+    ipcRenderer.on('editor:format', (_event, id: string) => callback(id))
   },
   onSiblingsChanged: (callback: (files: SiblingFile[]) => void) => {
     ipcRenderer.on('siblings-changed', (_event, files) => callback(files))

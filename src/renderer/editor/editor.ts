@@ -8,6 +8,7 @@ import { history } from '@milkdown/kit/plugin/history'
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener'
 import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { replaceAll, $prose } from '@milkdown/kit/utils'
+import { wrapInList } from '@milkdown/kit/prose/schema-list'
 import { remarkMathPlugin, katexOptionsCtx, mathInlineSchema, mathBlockSchema } from '@milkdown/plugin-math'
 import { htmlView } from './html-view'
 import { mermaidView } from './mermaid-view'
@@ -399,18 +400,46 @@ function setupCodeBlockCopy(root: HTMLElement): void {
   resizeObserver.observe(root)
 }
 
-function toggleStrongMark(): void {
+// --- Format commands (#58): one pipeline for every format shortcut ---
+// Marks toggle on the selection; lists wrap the current block. Empty
+// selections are a no-op for marks, matching the previous cmd+B behavior.
+
+export type FormatCommandId = 'bold' | 'italic' | 'inlineCode' | 'strikethrough' | 'link' | 'bulletList' | 'orderedList'
+
+export function runFormatCommand(id: FormatCommandId): void {
   if (!editorInstance) return
   editorInstance.action((ctx) => {
     const view = ctx.get(editorViewCtx)
     const { from, to, empty } = view.state.selection
-    if (empty) return
-    const strong = view.state.schema.marks.strong
-    if (!strong) return
-    const transaction = view.state.doc.rangeHasMark(from, to, strong)
-      ? view.state.tr.removeMark(from, to, strong)
-      : view.state.tr.addMark(from, to, strong.create())
-    view.dispatch(transaction)
+    if (id === 'bulletList' || id === 'orderedList') {
+      const nodeType = view.state.schema.nodes[id === 'bulletList' ? 'bullet_list' : 'ordered_list']
+      if (nodeType) wrapInList(nodeType)(view.state, view.dispatch)
+      return
+    }
+    if (id === 'link') {
+      const link = view.state.schema.marks.link
+      if (!link || empty) return
+      // The URL comes from the clipboard: copy a link, select text, cmd+K.
+      void navigator.clipboard.readText().then((text) => {
+        const url = text.trim()
+        const liveView = getEditorView()
+        if (!liveView || !/^https?:\/\/\S+$/i.test(url)) return
+        const selection = liveView.state.selection
+        liveView.dispatch(liveView.state.tr.addMark(selection.from, selection.to, link.create({ href: url })))
+      })
+      return
+    }
+    const candidates = id === 'bold'
+      ? ['strong']
+      : id === 'italic'
+        ? ['em', 'emphasis']
+        : id === 'inlineCode'
+          ? ['inlineCode', 'code']
+          : ['strikethrough']
+    const mark = candidates.map((name) => view.state.schema.marks[name]).find(Boolean)
+    if (!mark || empty) return
+    const has = view.state.doc.rangeHasMark(from, to, mark)
+    view.dispatch(has ? view.state.tr.removeMark(from, to, mark) : view.state.tr.addMark(from, to, mark.create()))
   })
 }
 
@@ -488,14 +517,6 @@ export async function createEditor(
   // Enhance clipboard with inline styles for rich text paste (e.g. WeChat)
   root.addEventListener('copy', enhanceClipboard)
   root.addEventListener('cut', enhanceClipboard)
-
-  // Cmd/Ctrl+B toggles the strong mark for an existing selection. This keeps
-  // basic formatting editable without adding a permanent toolbar.
-  root.addEventListener('keydown', (e) => {
-    if (e.defaultPrevented || !(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'b') return
-    e.preventDefault()
-    toggleStrongMark()
-  })
 
   // Intra-document anchor links are pure navigation: handle them in the
   // capture phase and keep ProseMirror out, so placing the caret (and its

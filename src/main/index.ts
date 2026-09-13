@@ -1407,6 +1407,19 @@ function buildMenu(): void {
           label: labels.insertFormula,
           accelerator: 'CmdOrCtrl+Shift+E',
           click: () => sendToFocused('editor:math')
+        },
+        {
+          // #58: discoverable format shortcuts; the menu is the documentation.
+          label: preferredCheatsheetLanguage === 'zh' ? '格式' : 'Format',
+          submenu: [
+            { label: preferredCheatsheetLanguage === 'zh' ? '加粗' : 'Bold', accelerator: 'CmdOrCtrl+B', click: () => sendToFocused('editor:format', 'bold') },
+            { label: preferredCheatsheetLanguage === 'zh' ? '斜体' : 'Italic', accelerator: 'CmdOrCtrl+I', click: () => sendToFocused('editor:format', 'italic') },
+            { label: preferredCheatsheetLanguage === 'zh' ? '行内代码' : 'Inline Code', accelerator: 'CmdOrCtrl+E', click: () => sendToFocused('editor:format', 'inlineCode') },
+            { label: preferredCheatsheetLanguage === 'zh' ? '删除线' : 'Strikethrough', accelerator: 'CmdOrCtrl+Shift+X', click: () => sendToFocused('editor:format', 'strikethrough') },
+            { label: preferredCheatsheetLanguage === 'zh' ? '链接（网址取自剪贴板）' : 'Link (URL from clipboard)', accelerator: 'CmdOrCtrl+K', click: () => sendToFocused('editor:format', 'link') },
+            { label: preferredCheatsheetLanguage === 'zh' ? '无序列表' : 'Bullet List', accelerator: 'CmdOrCtrl+Shift+8', click: () => sendToFocused('editor:format', 'bulletList') },
+            { label: preferredCheatsheetLanguage === 'zh' ? '有序列表' : 'Ordered List', accelerator: 'CmdOrCtrl+Shift+7', click: () => sendToFocused('editor:format', 'orderedList') }
+          ]
         }
       ]
     },
