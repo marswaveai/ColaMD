@@ -202,7 +202,17 @@ The maintainer also raised the mirror idea on 2026-09-11: ColaMD itself could sh
 
 **Scope:** First evaluate the common commands and conflicts with editor/browser shortcuts. Keep shortcut customization and disable controls out of the initial implementation; they require a broader preferences/keybinding system.
 
-**Status:** Candidate.
+**Status:** Candidate. Implemented on the `feat/format-shortcuts` branch as a Format submenu in the Edit menu, within the scope above (no customization, no toolbar).
+
+### Shortcut customization (keybinding preferences)
+
+**Source:** User request (2026-09-13), raised while reviewing the formatting shortcuts.
+
+**Need:** Let users remap or disable shortcuts, starting with the format shortcuts.
+
+**Scope:** This is a preferences subsystem, not a toggle: storage, conflict detection against existing accelerators, re-registration, and a settings dialog in the pattern of the editor-font dialog (the only preference UI in the app). macOS users can already remap any menu accelerator in System Settings → Keyboard → App Shortcuts without code; Windows and Linux have no such mechanism, which is where the real gap sits.
+
+**Status:** Candidate. Explicitly out of #58's first version per its scope note. Revisit when the shortcut surface grows or Windows/Linux users ask.
 
 ### Import local images
 
