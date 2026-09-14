@@ -22,11 +22,11 @@ ColaMD 是一款开源、免费、优雅的 Markdown 编辑器，用于写作、
 ## 截图
 
 <p align="center">
-  <img src="docs/images/markdown-cheatsheet.png" alt="ColaMD Markdown 语法速查与交互式待办列表" width="49%">
-  <img src="docs/images/markdown-rendering.png" alt="ColaMD Markdown 渲染、代码块、引用、表格与智能换行" width="49%">
+  <img src="docs/images/tasks-zh.png" alt="ColaMD 打开的待办列表演示文档" width="49%">
+  <img src="docs/images/rendering-zh.png" alt="ColaMD 渲染的表格与行内代码" width="49%">
 </p>
 
-<p align="center"><em>内置语法速查、交互式待办列表、代码块、引用、表格与智能换行。</em></p>
+<p align="center"><em>交互式待办列表，以及边写边渲染的标题、链接、表格与行内代码。</em></p>
 
 ## 主题
 
@@ -135,6 +135,8 @@ ColaMD 会继续把「免费、优雅、专注」这件事做好：
 * v2.0.1: macOS Universal 版本，同时支持 Apple silicon 与 Intel，并修复自定义主题恢复、Mermaid 渲染恢复和 Windows 更新下载问题
 
 * v2.0.2: 文件面板可调宽（180–420px，记住选择），大纲新增阅读进度高亮与跳转落点闪烁反馈
+
+* v2.1.2：标签栏更安静，第一个标签贴住窗口左边缘，去掉选中标签上那根主题色细线；编辑器是画布，外壳不抢戏
 
 * v2.1.1：标签栏右端加回加号；标签上支持右键菜单（关闭 / 关闭其他 / 关闭右侧 / 复制路径 / 在文件管理器中显示）；悬停提示改为一秒后才出现、且只显示 `⌘W`
 
