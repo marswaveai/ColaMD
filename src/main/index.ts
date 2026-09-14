@@ -612,6 +612,11 @@ ipcMain.on('open-external', (_event, url: string) => {
 
 ipcMain.handle('get-file-manager-name', () => fileManagerName())
 
+// Renderer clipboard reads have no transient user activation when the request
+// comes from a menu accelerator, so the link command reads it in the main
+// process (review on #87).
+ipcMain.handle('read-clipboard-text', () => clipboard.readText())
+
 function fileManagerName(): 'finder' | 'explorer' | 'file-manager' {
   if (process.platform === 'darwin') return 'finder'
   if (process.platform === 'win32') return 'explorer'

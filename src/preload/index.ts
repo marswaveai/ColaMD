@@ -69,6 +69,7 @@ export interface ElectronAPI {
   onSearch: (callback: () => void) => void
   onMathModal: (callback: () => void) => void
   onFormatCommand: (callback: (id: string) => void) => void
+  readClipboardText: () => Promise<string>
   onSiblingsChanged: (callback: (files: SiblingFile[]) => void) => void
   onToggleFilePanel: (callback: () => void) => void
   onToggleSourceMode: (callback: () => void) => void
@@ -184,6 +185,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onFormatCommand: (callback: (id: string) => void) => {
     ipcRenderer.on('editor:format', (_event, id: string) => callback(id))
   },
+  readClipboardText: () => ipcRenderer.invoke('read-clipboard-text') as Promise<string>,
   onSiblingsChanged: (callback: (files: SiblingFile[]) => void) => {
     ipcRenderer.on('siblings-changed', (_event, files) => callback(files))
   },
