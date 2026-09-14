@@ -20,11 +20,11 @@ Whatever writes the file (an AI agent such as Claude Code or Codex, a script, or
 ## Screenshots
 
 <p align="center">
-  <img src="docs/images/markdown-cheatsheet.png" alt="ColaMD Markdown cheatsheet and interactive task list" width="49%">
-  <img src="docs/images/markdown-rendering.png" alt="ColaMD Markdown rendering with code blocks, quotes, tables, and smart line breaks" width="49%">
+  <img src="docs/images/tasks-en.png" alt="ColaMD showing an interactive task list" width="49%">
+  <img src="docs/images/rendering-en.png" alt="ColaMD rendering a table and inline code" width="49%">
 </p>
 
-<p align="center"><em>Built-in syntax reference, interactive task lists, code blocks, quotes, tables, and smart line breaks.</em></p>
+<p align="center"><em>Interactive task lists, and Markdown rendered as you type: headings, links, tables and inline code.</em></p>
 
 ## Themes
 
@@ -95,6 +95,7 @@ ColaMD will keep growing as a focused, free Markdown editor:
 - v2.0.0: 1000-star release: Mermaid diagrams return with luminance-aware colors, recent files & session restore, editor font settings, heading anchors, multiple windows, and a save status hint
 - v2.0.1: Universal macOS build for Apple silicon and Intel Macs, plus custom-theme restoration, Mermaid render recovery, and Windows updater fixes
 - v2.0.2: Resizable file panel (180–420px, remembered) and an outline progress view that highlights the current heading and flashes the landing point after a jump
+- v2.1.2: A quieter tab strip: the first tab sits flush with the window edge, and the theme colour line on the active tab is gone. The editor is a canvas, the shell stays out of the way
 - v2.1.1: Tabs get their plus back, at the end of the tab strip; a right-click menu on tabs (close, close others, close to the right, copy path, reveal); and a quieter hover hint that waits a second and shows only the shortcut
 - v2.1.0: Tabs: keep several documents open in one window, each with its own content, undo history, unsaved state and scroll position. Open one with ⌘T, from the File menu, or with ⌘-click in the file list; with a single document the tab strip does not appear at all
 - v2.0.7: Per-architecture macOS downloads (216 MB down to about 82 MB), a Windows zip build that runs without installing, a context menu in the file panel, and a document title that stays centred

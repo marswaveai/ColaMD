@@ -9,3 +9,4 @@ mobile/ios/build/
 mobile/ios/ColaMDReader.xcodeproj/project.xcworkspace/
 mobile/ios/ColaMDReader.xcodeproj/xcuserdata/
 vscode-extension/*.vsix
+dist-web/

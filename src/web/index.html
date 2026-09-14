@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ColaMD 主题体验</title>
+  <meta name="description" content="在网页里直接体验 ColaMD 的 12 个主题：能打字，换主题，看排版。">
+  <script>
+    // The homepage embeds this page with ?embed=1. Mark it before any style is
+    // applied so the small layout never flashes the full one.
+    if (new URLSearchParams(location.search).has('embed')) {
+      document.documentElement.classList.add('try-embed')
+    }
+  </script>
+</head>
+<body>
+  <div class="try-shell">
+  <header id="try-bar">
+    <div class="try-brand">
+      <strong>ColaMD</strong>
+      <span data-i18n="subtitle">主题体验</span>
+    </div>
+    <span id="try-hint" data-i18n="hint">这是真的编辑器，直接改这里的字试试。</span>
+    <nav id="theme-switch" aria-label="主题"></nav>
+    <button id="lang-toggle" type="button">EN</button>
+    <button id="try-max" type="button">
+      <span data-i18n="maximize">全屏</span>
+    </button>
+  </header>
+
+  <main id="try-main">
+    <div id="editor"></div>
+  </main>
+  </div>
+
+  <p id="try-note">
+    <span data-i18n="note">这是网页预览：写的字不会保存，也不会联网。真正的 ColaMD 把文件放在你自己的电脑上。</span>
+    <a href="../#download" data-i18n="cta">下载桌面版</a>
+  </p>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

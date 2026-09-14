@@ -1,0 +1,276 @@
+/* The web playground's own chrome. It borrows the app's theme variables, so the
+   bar around the editor restyles itself whenever the theme changes. */
+
+html, body {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The standalone page and the full screen view put everything inside one centred
+   window: backdrop outside, the window scrolls its own content. The homepage
+   block skips this, because the site's window is already the frame there. */
+.try-shell {
+  display: contents;
+}
+
+html.try-window {
+  height: 100%;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-color) 92%, var(--text-color) 8%);
+}
+
+html.try-window body {
+  height: 100%;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+html.try-window .try-shell {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: min(920px, calc(100% - 48px));
+  height: min(720px, calc(100% - 96px));
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-color);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+}
+
+html.try-window #try-bar {
+  position: static;
+  /* 两行：第一行品牌在左，语言和退出全屏在右；第二行整行放主题。
+     这样退出全屏永远不会被拆到单独一行去。 */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 6px;
+  padding: 10px 18px;
+}
+
+html.try-window .try-brand {
+  flex: 1 1 auto;
+}
+
+html.try-window #lang-toggle,
+html.try-window #try-max {
+  order: 2;
+}
+
+html.try-window #theme-switch {
+  order: 3;
+  flex: 1 1 100%;
+  margin-left: 0;
+}
+
+html.try-window #try-main {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+html.try-window #editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 说明写在窗口外面，窗口里只留工具栏和正文。 */
+html.try-window #try-note {
+  flex: none;
+  margin: 14px 0 0;
+  padding: 0;
+  text-align: center;
+  font-size: 12.5px;
+}
+
+#try-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  background: var(--chrome-bg, var(--bg-color));
+  border-bottom: 1px solid var(--border-color);
+}
+
+.try-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.try-brand strong {
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+
+.try-brand span {
+  color: var(--text-muted);
+}
+
+#try-hint {
+  display: none;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+#theme-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+#theme-switch button,
+#lang-toggle,
+#try-max {
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+#theme-switch button:hover,
+#lang-toggle:hover,
+#try-max:hover {
+  background: var(--chrome-bg-hover, var(--bg-color));
+  color: var(--text-color);
+}
+
+#theme-switch button[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--text-color) 22%, transparent);
+  color: var(--text-color);
+}
+
+#try-max {
+  display: none;
+  align-items: center;
+  gap: 6px;
+}
+
+#try-max::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border: 1.3px solid currentColor;
+  border-radius: 2px;
+  box-shadow: 2px 2px 0 -1px var(--bg-color), 2.5px 2.5px 0 -1px currentColor;
+}
+
+#try-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#try-note {
+  margin: 0;
+  padding: 18px 40px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+#try-note a {
+  margin-left: 6px;
+  color: var(--link-color);
+}
+
+/* The app's editor is a fixed-height scroller inside a window; on the web the page
+   itself scrolls, so the editor just grows with the text. */
+#editor {
+  height: auto;
+  min-height: 40vh;
+  overflow: visible;
+  padding: 12px 40px 120px;
+}
+
+/* Embedded in the homepage: a small block that scrolls on its own, with the
+   full screen button on the right. Everything here only applies while the block
+   is small, so growing to full screen restores the standalone layout. */
+html.try-embed:not(.try-full),
+html.try-embed:not(.try-full) body {
+  height: 100%;
+  overflow: hidden;
+}
+
+html.try-embed:not(.try-full) #try-bar {
+  position: static;
+  padding: 8px 14px;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+html.try-embed:not(.try-full) .try-brand {
+  display: none;
+}
+
+html.try-embed:not(.try-full) #try-hint {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+html.try-embed:not(.try-full) #theme-switch,
+html.try-embed:not(.try-full) #lang-toggle,
+html.try-embed:not(.try-full) #try-note {
+  display: none;
+}
+
+html.try-embed #try-max {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+html.try-embed:not(.try-full) #try-main {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+html.try-embed:not(.try-full) #editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 20px 48px;
+}
+
+@media (max-width: 650px) {
+  html.try-window .try-shell {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 860px) {
+  #try-bar { padding: 10px 14px; }
+  #theme-switch { margin-left: 0; }
+  #try-note { padding: 14px 18px 0; }
+  #editor { padding: 10px 18px 80px; }
+}
