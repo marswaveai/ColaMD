@@ -157,11 +157,13 @@ body {
   align-items: center;
   gap: 6px;
   flex: 0 1 auto;
-  /* A tab hugs its filename. The floor is the width of a tab holding `a.md`
-     (50px = 28px of text + 20px padding + 2px border): shorter names stop there
-     rather than collapsing to a bare square. */
-  min-width: 50px;
-  max-width: 190px;
+  /* A tab hugs its filename, inside a floor and a ceiling that are both read
+     off the row's height: twice it (80px) so a short name never collapses to a
+     bare square, four times it (160px) so a long one stops growing. In between
+     the name decides, and when the row runs out the tabs compress to the floor
+     before the strip starts scrolling. */
+  min-width: 80px;
+  max-width: 160px;
   /* Full row height: the active tab is a column of paper running from the
      window's top edge down into the document, not a chip inside the row. */
   height: 100%;
