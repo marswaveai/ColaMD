@@ -7,8 +7,8 @@
   <title>ColaMD</title>
   <!-- Keep the titlebar stable before the renderer CSS bundle loads. -->
   <style>
-    #titlebar { height: 40px; display: flex; align-items: center; padding: 0 6px 0 94px; position: relative; z-index: 30; -webkit-app-region: drag; }
-    #titlebar > button { flex: none; position: relative; margin-right: 8px; -webkit-app-region: no-drag; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; }
+    #titlebar { height: 40px; display: flex; align-items: center; padding: 0 6px 0 max(84px, calc(var(--file-panel-width, 220px) - 1px)); position: relative; z-index: 30; -webkit-app-region: drag; }
+    #titlebar > button { flex: none; position: relative; margin-left: 8px; -webkit-app-region: no-drag; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; }
     #word-count, #source-toggle-btn, #file-toggle-btn { width: 28px; height: 28px; }
     #save-status { flex: none; margin-right: 2px; white-space: nowrap; font-size: 11px; line-height: 1.3; opacity: 0; pointer-events: none; }
     .toolbar-tip { position: absolute; opacity: 0; pointer-events: none; }
@@ -19,6 +19,8 @@
 </head>
 <body>
   <div id="titlebar">
+    <div id="tab-bar" hidden></div>
+    <span id="save-status" aria-live="polite"></span>
     <button id="file-toggle-btn" aria-label="显示 / 隐藏文件列表">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
         <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
@@ -41,8 +43,6 @@
       </svg>
       <span class="toolbar-tip word-count-tip">0 字 · 0 词 · 0 段</span>
     </button>
-    <div id="tab-bar" hidden></div>
-    <span id="save-status" aria-live="polite"></span>
   </div>
   <div id="hover-tip" hidden></div>
   <aside id="file-panel" hidden>
