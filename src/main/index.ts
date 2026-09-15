@@ -766,6 +766,13 @@ ipcMain.handle('get-file-manager-name', () => fileManagerName())
 // process (review on #87).
 ipcMain.handle('read-clipboard-text', () => clipboard.readText())
 
+// Electron 44 rebuilt the clipboard on the W3C API, so writes return a promise.
+// A rejected write must not surface as an unhandled rejection: node terminates
+// the process on those.
+function copyToClipboard(text: string): void {
+  void clipboard.writeText(text).catch((err) => { console.error('clipboard write failed:', err) })
+}
+
 function fileManagerName(): 'finder' | 'explorer' | 'file-manager' {
   if (process.platform === 'darwin') return 'finder'
   if (process.platform === 'win32') return 'explorer'
@@ -807,7 +814,7 @@ ipcMain.handle('tab-context-menu', (event, payload: unknown) => {
         opened.focus()
       }
     })
-    items.push({ label: zh ? '复制路径' : 'Copy path', click: () => clipboard.writeText(filePath) })
+    items.push({ label: zh ? '复制路径' : 'Copy path', click: () => copyToClipboard(filePath) })
     items.push({ label: revealLabel(zh), click: () => shell.showItemInFolder(filePath) })
   }
   Menu.buildFromTemplate(items).popup({ window: win })
@@ -834,7 +841,7 @@ ipcMain.handle('entry-context-menu', (event, targetPath: unknown, kind: unknown)
     })
     items.push({ type: 'separator' })
   }
-  items.push({ label: zh ? '复制路径' : 'Copy path', click: () => clipboard.writeText(targetPath) })
+  items.push({ label: zh ? '复制路径' : 'Copy path', click: () => copyToClipboard(targetPath) })
   if (kind !== 'directory') {
     items.push({ label: zh ? '用默认应用打开' : 'Open in default app', click: () => { void shell.openPath(targetPath) } })
   }
