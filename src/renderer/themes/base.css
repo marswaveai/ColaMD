@@ -212,6 +212,14 @@ body {
   color: var(--text-color);
 }
 
+/* Between two tabs the same line reads heavier than it does at the strip's start:
+   the row's top edge and its baseline enclose it on the other two sides, so the
+   boundary looks like a closed box. Interior dividers are a step lighter — the
+   strip's own edge stays at full strength. */
+.tab-entry:not(:first-child) {
+  border-left-color: color-mix(in srgb, var(--text-color) 5%, transparent);
+}
+
 /* The active tab already lays a full-height edge against its right neighbour,
    so the neighbour gives up its own mark there instead of doubling up. */
 .tab-entry.active + .tab-entry {
