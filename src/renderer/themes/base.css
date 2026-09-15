@@ -167,8 +167,10 @@ body {
   /* Full row height: the active tab is a column of paper running from the
      window's top edge down into the document, not a chip inside the row. */
   height: 100%;
-  /* Symmetric, so the filename sits centred in a tab that hugs it. */
-  padding: 0 10px;
+  /* Symmetric, and roomier than the row's own breathing space: the name sits in
+     a 40px tall tab, so 10px either side read as cramped next to ~14px above and
+     below it. Air left and right, same as air above and below. */
+  padding: 0 16px;
   border: 1px solid transparent;
   /* No top edge and no bottom edge. The bottom stays open so the active tab
      runs into the document; the top would sit on the window's own top edge,
@@ -203,6 +205,21 @@ body {
   background: var(--bg-color);
   border-color: color-mix(in srgb, var(--text-color) 11%, transparent);
   color: var(--text-color);
+}
+
+/* A hairline between two resting tabs: a tab is wide enough now that the bare
+   boundary between two names is easy to lose. It is inset at both ends so it
+   never reads as the first column of a tab the way the active tab's own edges
+   do, and it is only drawn when BOTH neighbours are resting — the active tab
+   already brings its pair of edges, and a divider beside them would double up. */
+.tab-entry:not(.active) + .tab-entry:not(.active)::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: color-mix(in srgb, var(--text-color) 11%, transparent);
 }
 
 .tab-entry-name {
