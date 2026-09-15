@@ -369,7 +369,11 @@ body {
   position: relative; /* anchor for the absolutely-positioned code copy button */
   height: calc(100vh - 40px - var(--tab-bar-height, 0px));
   overflow-y: auto;
-  padding: var(--editor-top-gap, 0px) 40px 40px;
+  /* 40px of air above the first line, the same as below it and at the sides, and
+     the same as the source view's: a document that starts flush against the
+     chrome reads as if it were scrolled, and switching modes must not make the
+     text jump (2026-09-15). */
+  padding: calc(40px + var(--editor-top-gap, 0px)) 40px 40px;
 }
 
 #source-editor {
