@@ -103,15 +103,14 @@ body {
   -webkit-app-region: drag;
 }
 
-/* The strip starts on the panel's edge line (202px is where the controls and
-   their trailing gap end), and follows the controls when there is no panel to
-   align to. */
+/* The strip starts on the panel's edge line: 202px is where the controls and
+   their trailing gap end, and the panel may never be dragged narrower than
+   that (FILE_PANEL_MIN_WIDTH). The offset is a function of the panel width
+   ALONE, not of whether the panel is showing — hiding the panel must not move
+   a single tab (2026-09-15), and the width cannot change while it is hidden
+   because the handle goes with it. */
 #tab-bar {
   padding-left: max(0px, calc(var(--file-panel-width, 220px) - 1px - 202px));
-}
-
-body:not(.show-file-panel) #tab-bar {
-  padding-left: 0;
 }
 
 #tab-bar[hidden] {
