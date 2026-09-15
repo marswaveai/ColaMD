@@ -605,12 +605,35 @@ function restoreImagePaths(content: string, filePath: string): string {
   })
 }
 
+// A 'file-opened' that reaches the renderer before it has registered its
+// handlers is dropped, and the window stays empty. The window-creation path
+// already waits for that (see createWindow). Do it here as well, so a document
+// handed to a reused empty window cannot be lost the same way.
+function whenRendererReady(win: BrowserWindow): Promise<void> {
+  if (win.isDestroyed() || getState(win).rendererReady) return Promise.resolve()
+  return new Promise((resolve) => {
+    const poll = setInterval(() => {
+      if (win.isDestroyed() || getState(win).rendererReady) {
+        clearInterval(poll)
+        resolve()
+      }
+    }, 30)
+    // Same safety net as the creation path: never block delivery forever.
+    setTimeout(() => {
+      clearInterval(poll)
+      resolve()
+    }, 10_000)
+  })
+}
+
 function loadFileInWindow(win: BrowserWindow, filePath: string): Promise<void> {
   const state = getState(win)
   const operation = async (): Promise<void> => {
     try {
       const data = await readFile(filePath, 'utf-8')
       if (win.isDestroyed()) return
+      // Claim the window before waiting for the renderer, so it stops counting
+      // as empty while its document is still on the way (findEmptyWindow).
       state.filePath = filePath
       state.browsePath = dirname(filePath)
       watchFile(win, state)
@@ -618,6 +641,8 @@ function loadFileInWindow(win: BrowserWindow, filePath: string): Promise<void> {
       pushRecentFile(filePath, true)
       state.lastInternalSaveContent = data
       state.lastKnownMtime = fileMtimeMs(filePath)
+      await whenRendererReady(win)
+      if (win.isDestroyed()) return
       win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(data, filePath) })
     } catch {
       // Keep the current document when the selected file cannot be read.
