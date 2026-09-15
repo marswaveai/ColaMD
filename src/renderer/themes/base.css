@@ -51,7 +51,7 @@ body {
   position: relative;
   /* The row's one baseline; the active tab (opaque paper, flush with the
      bottom) cuts it out, so it opens into the document. */
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text-color) 11%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text-color) 8%, transparent);
   /* Tooltips inside the titlebar must paint above the editor. */
   z-index: 30;
 }
@@ -103,7 +103,7 @@ body {
    would start, so the strip steps past it. With the panel showing, the
    titlebar's own left padding already clears both. */
 body:not(.show-file-panel) #tab-bar {
-  padding-left: 92px;
+  padding-left: 108px;
 }
 
 #tab-bar[hidden] {
@@ -192,7 +192,7 @@ body:not(.show-file-panel) #tab-bar {
    strip shout for attention. */
 .tab-entry.active {
   background: var(--bg-color);
-  border-color: color-mix(in srgb, var(--text-color) 16%, transparent);
+  border-color: color-mix(in srgb, var(--text-color) 11%, transparent);
   color: var(--text-color);
 }
 
@@ -323,13 +323,22 @@ body:not(.show-file-panel) #tab-bar {
    strip can keep starting exactly on the panel's edge line. */
 #left-actions {
   position: absolute;
-  left: 84px;
+  /* Clear of the traffic lights by a comfortable margin rather than snug against
+     them, and inside the panel's column so the row above the panel reads as the
+     window's own band. */
+  left: 100px;
   top: 0;
   height: 100%;
   display: flex;
   align-items: center;
+  /* The traffic lights centre on 20.75px in this row, not on its middle: 2px of
+     padding puts the icons on the same line as the circles. */
+  padding-top: 2px;
   gap: 6px;
-  -webkit-app-region: drag;
+  /* Declared explicitly rather than left to inheritance: the titlebar is a drag
+     region, and a drag region nested inside it swallowed every click on these
+     buttons (2026-09-15). A control that has to receive pointer events says so. */
+  -webkit-app-region: no-drag;
 }
 
 #left-actions > button {
@@ -1006,7 +1015,7 @@ body.show-file-panel #source-editor {
   --text-color: #24292f;
   --text-secondary: #656d76;
   --text-muted: #656d76;
-  --border-color: #d0d7de;
+  --border-color: #dce1e6;
   --link-color: #0969da;
   --code-bg: rgba(175, 184, 193, 0.2);
   --code-block-bg: #f6f8fa;
@@ -1021,7 +1030,7 @@ body.theme-dark {
   --text-color: #e6edf3;
   --text-secondary: #aab3bd;
   --text-muted: #8b949e;
-  --border-color: #30363d;
+  --border-color: #272d34;
   --link-color: #58a6ff;
   --code-bg: rgba(110, 118, 129, 0.3);
   --code-block-bg: #161b22;
@@ -1036,7 +1045,7 @@ body.theme-elegant {
   --text-color: #2c2c2c;
   --text-secondary: #6c6c6c;
   --text-muted: #777;
-  --border-color: #d8d3ce;
+  --border-color: #dedad5;
   --link-color: #bc4424;
   --code-bg: #e8e4df;
   --code-block-bg: #2c2c2c;

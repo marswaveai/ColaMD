@@ -55,11 +55,13 @@ let outlineJumping = false
 let outlineJumpTimer: ReturnType<typeof setTimeout> | null = null
 let outlineJumpStartTop = 0
 
-// Resizable file panel: default 220px, drag range 180-420px, persisted
+// Resizable file panel: default 220px, drag range 200-420px, persisted
 // locally (design.md: light, no permanent handle, hover feedback only).
 // Applied at module load so the first paint already
-// uses the saved width.
-const FILE_PANEL_MIN_WIDTH = 180
+// uses the saved width. The floor is 200 rather than 180 because the window
+// controls sit in this column's top row, and at 180 the last of the three
+// would land on the pixel where the tab strip starts.
+const FILE_PANEL_MIN_WIDTH = 200
 const FILE_PANEL_MAX_WIDTH = 420
 const FILE_PANEL_DEFAULT_WIDTH = 220
 

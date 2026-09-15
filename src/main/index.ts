@@ -1725,7 +1725,7 @@ function buildMenu(): void {
         { type: 'separator' },
         {
           label: labels.filePanel,
-          accelerator: 'CmdOrCtrl+Shift+B',
+          accelerator: 'CmdOrCtrl+\\',
           click: () => sendToFocused('toggle-file-panel')
         },
         {

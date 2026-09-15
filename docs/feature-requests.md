@@ -92,7 +92,7 @@ All twelve built-in themes already ship as standalone, commented CSS files in [`
 
 **Sources:** [#64](https://github.com/marswaveai/ColaMD/issues/64)
 
-**Status:** The panel's right edge offers a lightweight drag hot zone (no permanent handle icon, hover stripe only, per design.md) to resize between 180px and 420px. The choice persists locally, the default stays 220px, and the hot zone hides with the panel.
+**Status:** The panel's right edge offers a lightweight drag hot zone (no permanent handle icon, hover stripe only, per design.md) to resize between 200px and 420px. The choice persists locally, the default stays 220px, and the hot zone hides with the panel. The floor is 200 because the window controls sit in this column's top row: at 180 the last button would land on the pixel where the tab strip starts.
 
 ### Windows startup performance
 
