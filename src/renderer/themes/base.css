@@ -177,6 +177,11 @@ body {
      where a hairline reads as a seam in the sky. */
   border-top: none;
   border-bottom: none;
+  /* Every tab marks its LEFT edge, full height: the line runs from the window's
+     top edge down to the row's baseline, so the tabs read as one connected row
+     of columns rather than as names floating over chrome. The first tab is
+     marked too, which is where the strip begins. */
+  border-left-color: color-mix(in srgb, var(--text-color) 11%, transparent);
   /* Square on purpose: a full-height tab meets the window's top edge, where a
      radius reads as a notch. */
   border-radius: 0;
@@ -207,19 +212,10 @@ body {
   color: var(--text-color);
 }
 
-/* A hairline between two resting tabs: a tab is wide enough now that the bare
-   boundary between two names is easy to lose. It is inset at both ends so it
-   never reads as the first column of a tab the way the active tab's own edges
-   do, and it is only drawn when BOTH neighbours are resting — the active tab
-   already brings its pair of edges, and a divider beside them would double up. */
-.tab-entry:not(.active) + .tab-entry:not(.active)::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 9px;
-  bottom: 9px;
-  width: 1px;
-  background: color-mix(in srgb, var(--text-color) 11%, transparent);
+/* The active tab already lays a full-height edge against its right neighbour,
+   so the neighbour gives up its own mark there instead of doubling up. */
+.tab-entry.active + .tab-entry {
+  border-left-color: transparent;
 }
 
 .tab-entry-name {
