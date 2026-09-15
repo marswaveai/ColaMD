@@ -46,7 +46,11 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: 0 6px 0 84px;
+  /* 94px clears the traffic lights, which end at 68px, by the same gap the strip
+     keeps from the last control: one rhythm across the row instead of a cluster
+     pinned to the lamps. The controls are the titlebar's own children, the shape
+     that has always been clickable here (#103 follow-up). */
+  padding: 0 6px 0 94px;
   background: var(--chrome-bg, transparent);
   position: relative;
   /* The row's one baseline; the active tab (opaque paper, flush with the
@@ -99,11 +103,15 @@ body {
   -webkit-app-region: drag;
 }
 
-/* With the panel hidden the cluster of window controls sits where the strip
-   would start, so the strip steps past it. With the panel showing, the
-   titlebar's own left padding already clears both. */
+/* The strip starts on the panel's edge line (202px is where the controls and
+   their trailing gap end), and follows the controls when there is no panel to
+   align to. */
+#tab-bar {
+  padding-left: max(0px, calc(var(--file-panel-width, 220px) - 1px - 202px));
+}
+
 body:not(.show-file-panel) #tab-bar {
-  padding-left: 108px;
+  padding-left: 0;
 }
 
 #tab-bar[hidden] {
@@ -317,33 +325,10 @@ body:not(.show-file-panel) #tab-bar {
    the pointer and vanishes again pulls the eye out of the document, so the
    icon just gains contrast on hover and the on-state is the strongest reading
    in the row. */
-/* The window's own controls. They sit with the traffic lights, on the window's
-   side of the row, the way a browser puts its controls there; the document's
-   side of the row is the strip and the save status. The cluster floats so the
-   strip can keep starting exactly on the panel's edge line. */
-#left-actions {
-  position: absolute;
-  /* Clear of the traffic lights by a comfortable margin rather than snug against
-     them, and inside the panel's column so the row above the panel reads as the
-     window's own band. */
-  left: 100px;
-  top: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  /* The traffic lights centre on 20.75px in this row, not on its middle: 2px of
-     padding puts the icons on the same line as the circles. */
-  padding-top: 2px;
-  gap: 6px;
-  /* Declared explicitly rather than left to inheritance: the titlebar is a drag
-     region, and a drag region nested inside it swallowed every click on these
-     buttons (2026-09-15). A control that has to receive pointer events says so. */
-  -webkit-app-region: no-drag;
-}
-
-#left-actions > button {
-  width: 24px;
-  height: 24px;
+#titlebar > button {
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
   border-radius: 6px;
   border: none;
   background: transparent;
@@ -366,13 +351,9 @@ body:not(.show-file-panel) #tab-bar {
   color: color-mix(in srgb, var(--text-color) 80%, transparent);
 }
 
-/* "On" — the file panel is showing, or the document is in source mode. */
-#file-toggle-btn.active,
-#source-toggle-btn.active,
-#source-toggle-btn.active:hover,
-#file-toggle-btn.active:hover {
-  color: var(--text-color);
-}
+/* No persistent on-state: the panel and the source mode are plain to see, and a
+   control that stays lit draws the eye off the document (2026-09-15). The
+   buttons keep their muted colour; hover is the only step. */
 
 .toolbar-tip {
   position: absolute;
@@ -397,7 +378,7 @@ body:not(.show-file-panel) #tab-bar {
   transition: transform 0.15s;
 }
 
-#left-actions > button:hover .toolbar-tip {
+#titlebar > button:hover .toolbar-tip {
   opacity: 1;
   transform: translateY(0);
 }
@@ -460,10 +441,6 @@ body:not(.show-file-panel) #tab-bar {
    sits exactly on the line the panel draws down the window, so the panel's right
    edge and the tab's left edge are one vertical. The band itself still spans the
    window — the panel starts below it, and nothing is cut. */
-body.show-file-panel #titlebar {
-  padding-left: calc(var(--file-panel-width, 220px) - 1px);
-}
-
 /* Edge hot zone for resizing the panel; deliberately handle-free — the divider
    itself is the whole affordance (design.md). The hit area is 7px wide and
    centred on the border's own column (the panel is border-box, so its 1px edge

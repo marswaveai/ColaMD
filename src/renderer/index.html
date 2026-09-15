@@ -7,10 +7,9 @@
   <title>ColaMD</title>
   <!-- Keep the titlebar stable before the renderer CSS bundle loads. -->
   <style>
-    #titlebar { height: 40px; display: flex; align-items: center; padding: 0 6px 0 84px; position: relative; z-index: 30; -webkit-app-region: drag; }
-    #left-actions { position: absolute; left: 100px; top: 0; height: 100%; display: flex; align-items: center; padding-top: 2px; gap: 6px; }
-    #left-actions > button { flex: none; position: relative; -webkit-app-region: no-drag; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; }
-    #word-count, #source-toggle-btn, #file-toggle-btn { width: 24px; height: 24px; }
+    #titlebar { height: 40px; display: flex; align-items: center; padding: 0 6px 0 94px; position: relative; z-index: 30; -webkit-app-region: drag; }
+    #titlebar > button { flex: none; position: relative; margin-right: 8px; -webkit-app-region: no-drag; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; }
+    #word-count, #source-toggle-btn, #file-toggle-btn { width: 28px; height: 28px; }
     #save-status { flex: none; margin-right: 2px; white-space: nowrap; font-size: 11px; line-height: 1.3; opacity: 0; pointer-events: none; }
     .toolbar-tip { position: absolute; opacity: 0; pointer-events: none; }
     #file-panel { width: var(--file-panel-width, 220px); }
@@ -20,30 +19,28 @@
 </head>
 <body>
   <div id="titlebar">
-    <div id="left-actions">
-      <button id="file-toggle-btn" aria-label="显示 / 隐藏文件列表">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
-          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
-          <line x1="5.3" y1="3" x2="5.3" y2="13"/>
-        </svg>
-        <span class="toolbar-tip">显示 / 隐藏文件列表 (⌘\)</span>
-      </button>
-      <button id="source-toggle-btn" aria-label="切换 Markdown 源码 / 所见即所得">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="5.5 4.5 2 8 5.5 11.5"/>
-          <polyline points="10.5 4.5 14 8 10.5 11.5"/>
-        </svg>
-        <span class="toolbar-tip">切换 Markdown 源码 / 所见即所得</span>
-      </button>
-      <button id="word-count" aria-label="文档统计">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
-          <line x1="4.5" y1="6" x2="11.5" y2="6"/>
-          <line x1="4.5" y1="9" x2="9.5" y2="9"/>
-        </svg>
-        <span class="toolbar-tip word-count-tip">0 字 · 0 词 · 0 段</span>
-      </button>
-    </div>
+    <button id="file-toggle-btn" aria-label="显示 / 隐藏文件列表">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
+        <line x1="5.3" y1="3" x2="5.3" y2="13"/>
+      </svg>
+      <span class="toolbar-tip">显示 / 隐藏文件列表 (⌘\)</span>
+    </button>
+    <button id="source-toggle-btn" aria-label="切换 Markdown 源码 / 所见即所得">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="5.5 4.5 2 8 5.5 11.5"/>
+        <polyline points="10.5 4.5 14 8 10.5 11.5"/>
+      </svg>
+      <span class="toolbar-tip">切换 Markdown 源码 / 所见即所得</span>
+    </button>
+    <button id="word-count" aria-label="文档统计">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
+        <line x1="4.5" y1="6" x2="11.5" y2="6"/>
+        <line x1="4.5" y1="9" x2="9.5" y2="9"/>
+      </svg>
+      <span class="toolbar-tip word-count-tip">0 字 · 0 词 · 0 段</span>
+    </button>
     <div id="tab-bar" hidden></div>
     <span id="save-status" aria-live="polite"></span>
   </div>

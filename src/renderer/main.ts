@@ -106,10 +106,12 @@ function showSaveStatus(state: 'dirty' | 'saved'): void {
     clearTimeout(saveStatusTimer)
     saveStatusTimer = null
   }
+  // The dirty hint is gone: the active tab shows a dot for it, and a label in
+  // the row was one signal too many. The element stays for the messages that
+  // need words, such as an external edit waiting on the user's choice.
   if (state === 'dirty') {
-    // Announce unsaved edits only; a successful save fades out silently.
-    el.textContent = isChinese() ? '已编辑' : 'Edited'
-    el.classList.add('pending')
+    el.classList.remove('pending')
+    el.textContent = ''
   } else {
     el.classList.remove('pending')
     saveStatusTimer = setTimeout(() => {
