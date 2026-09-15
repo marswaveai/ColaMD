@@ -73,31 +73,30 @@ body {
   z-index: 30;
 }
 
-/* The row's one baseline, drawn as its own element instead of an inset shadow so
-   its length can stop where the panel's column begins: that column runs through
-   the row the way the active tab does, and a line across its top would cut the
-   column in half. The active tab (opaque paper, flush with the bottom) still
-   covers the line, so it opens into the document. */
+/* The row's one baseline. It is its own element rather than an inset shadow
+   because the active tab has to be able to cover it: the tab is opaque paper
+   flush with the bottom of the row, so the line is cut where the tab opens into
+   the document. */
 #titlebar::before {
   content: '';
   position: absolute;
   left: 0;
-  right: var(--panel-column, 0px);
+  right: 0;
   bottom: 0;
   height: 1px;
   background: var(--shell-line);
 }
 
-/* The panel's own seam, carried through the row: the panel is a real element
-   behind the titlebar, so all this has to add is the 1px line where it starts.
-   Every seam in the shell is this same hairline. */
+/* The panel's seam, carried up through the row so the column reads as a column
+   from the window's top edge. The row keeps its OWN surface on both sides of it:
+   the paper does not climb into the row. */
 body.show-file-panel #titlebar {
   background: linear-gradient(
     to right,
     var(--chrome-bg) calc(100% - var(--panel-column)),
     var(--shell-line) calc(100% - var(--panel-column)),
     var(--shell-line) calc(100% - var(--panel-column) + 1px),
-    transparent calc(100% - var(--panel-column) + 1px)
+    var(--chrome-bg) calc(100% - var(--panel-column) + 1px)
   );
 }
 
@@ -413,12 +412,8 @@ body.show-file-panel #titlebar {
 
 /* Same-directory file panel */
 #file-panel {
-  /* Full height: the column starts at the window's top edge and the row's own
-     surface steps out of its way (see #titlebar), so the panel and the controls
-     that open it read as one column, like the active tab's paper. The 40px is
-     the row it passes under. */
   position: fixed;
-  top: 0;
+  top: calc(40px + var(--tab-bar-height, 0px));
   right: 0;
   bottom: 0;
   width: var(--file-panel-width, 220px);
@@ -431,7 +426,7 @@ body.show-file-panel #titlebar {
      (cards, modals, tables), where a quieter line would read as an accident. */
   border-left: 1px solid var(--shell-line);
   overflow-y: auto;
-  padding: 50px 8px 10px;
+  padding: 10px 8px;
 }
 
 #file-panel[hidden] {
@@ -450,7 +445,7 @@ body.show-file-panel #titlebar {
    this is shell furniture. */
 #panel-resizer {
   position: fixed;
-  top: 0;
+  top: calc(40px + var(--tab-bar-height, 0px));
   bottom: 0;
   right: calc(var(--file-panel-width, 220px) - 4px);
   width: 7px;
