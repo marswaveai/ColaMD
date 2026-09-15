@@ -41,6 +41,7 @@ CI 上的 mac job（universal 加签名、公证、dmg 压缩）实测 7 分 20 
 - **不要在软链 `node_modules` 的 worktree 里打包**：`git worktree` + 软链 `node_modules` 时，electron-builder 解析生产依赖会失败，日志里出现一串 `cannot find path for dependency dependencies=[katex@undefined, ...]`。产物可能缺失依赖，且依赖解析仍会走一遍。要在有真实 `node_modules` 的目录里打包
 - **跳过签名**：本地用 `CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --dir`，避免钥匙串报错。本地包未签名未公证，只用于自己测试，不要发给用户
 - **`files` 保持只装 `dist/**/*`**：渲染层与主进程已由 electron-vite 打包完整，不需要把 `node_modules` 装进 asar
+- **`electron` 包自 Electron 42 起不在 `postinstall` 下载二进制**（`ELECTRON_SKIP_BINARY_DOWNLOAD` 也不再支持）。本地要跑起来先 `npx install-electron`，或者直接 `npx electron .`，它会按需下载。CI 不受影响：`npm run build` 不需要二进制，`electron-builder` 打包时自己去取
 - **打包前先杀掉真机测试残留的应用实例**：曾经有一个测试实例（从 `release/mac-arm64/ColaMD.app` 启动、`--user-data-dir` 指向 `/tmp`）忘了关，`electron-builder` 卡在 `packaging platform=darwin` 不动，CPU 0%、日志无报错、八分钟不结束。原因是它要覆盖一个正在被使用的 app bundle。测试结束后用 `pgrep -fl 'user-data-dir=/tmp|/Applications/ColaMD'` 确认残留；只杀 `/tmp` 测试实例，不要动用户正在用的 `/Applications/ColaMD.app`
 - **同一个位置卡住过两次**：另一次没有残留实例，日志停在 `downloaded label=electron progress=100%` 之后的 `packaging`，同样 0% CPU、无报错。原因未确认（当时机器上有网络抖动，`git push` 也超时过）。处理办法是杀掉重跑，或者按上一条改用 `npx electron .` 验证
 
