@@ -364,14 +364,20 @@ function renderTabBar(): void {
     entry.append(name, close)
     bar.append(entry)
   }
-  // The plus belongs to the strip: it shows up with the strip and goes away with
-  // it, instead of appearing and vanishing in the title bar.
+  // The plus sits right after the strip, not inside it: inside, a full row of
+  // tabs scrolled it out of sight exactly when it was needed. It is one of the
+  // row's icon controls, so the shared rule styles it and it keeps its gutter
+  // from the last tab.
+  bar.parentElement?.querySelector('.tab-new-btn')?.remove()
   const add = document.createElement('button')
   add.type = 'button'
   add.className = 'tab-new-btn'
   add.setAttribute('aria-label', isChinese() ? '新建标签页' : 'New tab')
   add.append(plusGlyph())
-  bar.append(add)
+  add.addEventListener('click', () => void openNewTab())
+  add.addEventListener('mouseenter', () => scheduleTip(add, isChinese() ? '新建标签页 · ⌘T' : 'New tab · ⌘T', 'below', TAB_TIP_DELAY))
+  add.addEventListener('mouseleave', hideTip)
+  bar.after(add)
   const active = bar.querySelector('.tab-entry.active')
   active?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   // Let the main process know which files this window holds in tabs, so opening
@@ -634,7 +640,6 @@ function bindTabBar(api: import('../preload/index').ElectronAPI): void {
     const target = e.target as HTMLElement
     const entry = target.closest('.tab-entry') as HTMLElement | null
     if (entry) scheduleTip(entry, tabTipText(entry), 'below', TAB_TIP_DELAY)
-    else if (target.closest('.tab-new-btn')) scheduleTip(target.closest('.tab-new-btn') as HTMLElement, isChinese() ? '新建标签页 · ⌘T' : 'New tab · ⌘T', 'below', TAB_TIP_DELAY)
     else hideTabTip()
   })
   tabBarEl().addEventListener('mouseleave', () => {
@@ -662,10 +667,6 @@ function bindTabBar(api: import('../preload/index').ElectronAPI): void {
   })
   tabBarEl().addEventListener('click', (e) => {
     const target = e.target as HTMLElement
-    if (target.closest('.tab-new-btn')) {
-      void openNewTab()
-      return
-    }
     const entry = target.closest('.tab-entry') as HTMLElement | null
     const id = entry?.dataset.tabId
     if (!id) return
