@@ -294,37 +294,11 @@ body:not(.show-file-panel) #tab-bar {
   display: none;
 }
 
-#file-toggle-btn.active {
-  color: var(--text-color);
-}
-
-/* A wide, invisible hit area bridging the gap to the title, so the pointer
-   travelling from the filename to the icon does not make it blink. */
-/* Reveal on hovering the title itself or the button, never when the pointer is
-   over the right-hand actions: those are unrelated controls and the extra icon
-   appearing out there is noise (design.md). The button stays hit-testable while
-   hidden, otherwise it could never be reached or clicked. */
-/* Source (Markdown) / WYSIWYG toggle */
-#source-toggle-btn.active {
-  color: var(--text-color);
-}
-
-#source-toggle-btn.disabled {
-  color: color-mix(in srgb, var(--text-muted) 35%, transparent);
-  cursor: default;
-}
-
-#source-toggle-btn.disabled:hover {
-  color: color-mix(in srgb, var(--text-muted) 35%, transparent);
-}
-
 /* The three titlebar buttons share ONE box rule: same size, same radius, same
-   colours. Duplicating the box per button is how the word-count button lost
-   its border-radius while the other two kept theirs.
-   They report themselves by WEIGHT, never by a box: a chip that appears under
-   the pointer and vanishes again pulls the eye out of the document, so the
-   icon just gains contrast on hover and the on-state is the strongest reading
-   in the row. */
+   colour. They also share one weight, always: no hover step, no disabled step,
+   no on-state. A control that lights up — or dims — pulls the eye row-ward, and
+   both states it could report are plain to see by themselves (2026-09-15).
+   The .active class survives as the state marker; nothing styles it. */
 #titlebar > button {
   width: 28px;
   height: 28px;
@@ -338,23 +312,11 @@ body:not(.show-file-panel) #tab-bar {
   align-items: center;
   justify-content: center;
   -webkit-app-region: no-drag;
-  transition: color 0.15s;
 }
 
-/* Top-right controls. The icon hover tint and the tooltip positioning are
-   SEPARATE rules on purpose: 58f66f4 fused the hover selectors into the tip's
-   block, which teleported and hid the buttons on hover (the "flicker /
-   unclickable" bug). Keep them apart. */
-#word-count:hover,
-#source-toggle-btn:hover,
-#file-toggle-btn:hover {
-  color: color-mix(in srgb, var(--text-color) 80%, transparent);
-}
-
-/* No persistent on-state: the panel and the source mode are plain to see, and a
-   control that stays lit draws the eye off the document (2026-09-15). The
-   buttons keep their muted colour; hover is the only step. */
-
+/* The tooltip reveal is its own rule, apart from anything that changes colour:
+   58f66f4 fused the hover selectors into the tip's block, which teleported and
+   hid the buttons on hover (the "flicker / unclickable" bug). */
 .toolbar-tip {
   position: absolute;
   top: calc(100% + 6px);
