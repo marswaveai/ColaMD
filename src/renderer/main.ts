@@ -808,13 +808,17 @@ function countParagraphs(content: string): number {
   return normalized ? normalized.split(/\n\s*\n+/).filter((block) => block.trim()).length : 0
 }
 
+function setToolbarTip(el: HTMLElement, label: string): void {
+  el.setAttribute('aria-label', label)
+  const tip = el.querySelector('.toolbar-tip')
+  if (tip) tip.textContent = label
+}
+
 function updateWordCount(content?: string): void {
   const text = content ?? getContent()
-  const tip = wordCountEl().querySelector('.word-count-tip')
-  if (!tip) return
-  tip.textContent = isChinese()
+  setToolbarTip(wordCountEl(), isChinese()
     ? `${countCharacters(text)} 字 · ${countTokens(text)} 词 · ${countParagraphs(text)} 段`
-    : `${countCharacters(text)} chars · ${countTokens(text)} words · ${countParagraphs(text)} paragraphs`
+    : `${countCharacters(text)} chars · ${countTokens(text)} words · ${countParagraphs(text)} paragraphs`)
 }
 
 // --- Reveal the current file in the OS file manager ---
@@ -843,9 +847,7 @@ function updateSourceToggle(): void {
   const label = sourceModeActive
     ? (isChinese() ? '切换回所见即所得' : 'Switch to WYSIWYG')
     : (isChinese() ? '切换 Markdown 源码' : 'Switch to Markdown source')
-  btn.setAttribute('aria-label', label)
-  const tip = btn.querySelector('.toolbar-tip')
-  if (tip) tip.textContent = label
+  setToolbarTip(btn, label)
 }
 
 function updateUiLanguage(): void {
@@ -855,16 +857,9 @@ function updateUiLanguage(): void {
   untitledName = zh ? '未命名' : 'Untitled'
   fileTabEl().textContent = zh ? '文件' : 'Files'
   outlineTabEl().textContent = zh ? '大纲' : 'Outline'
-  fileToggleBtnEl().setAttribute('aria-label', zh ? '显示 / 隐藏文件列表' : 'Show / hide file list')
-  sourceToggleBtnEl().setAttribute('aria-label', zh ? '切换 Markdown 源码 / 所见即所得' : 'Toggle Markdown source / WYSIWYG')
-  const wordTip = wordCountEl().querySelector('.word-count-tip')
-  if (wordTip) wordTip.textContent = zh ? '0 字 · 0 词 · 0 段' : '0 chars · 0 words · 0 paragraphs'
+  setToolbarTip(fileToggleBtnEl(), zh ? '显示 / 隐藏文件列表 (⌘\\)' : 'Show / Hide File List (⌘\\)')
   const menuBtn = document.getElementById('app-menu-btn')
-  if (menuBtn) {
-    menuBtn.setAttribute('aria-label', zh ? '菜单' : 'Menu')
-    const menuTip = menuBtn.querySelector('.toolbar-tip')
-    if (menuTip) menuTip.textContent = zh ? '菜单' : 'Menu'
-  }
+  if (menuBtn) setToolbarTip(menuBtn, zh ? '菜单' : 'Menu')
   updateSourceToggle()
   updateWordCount()
 }
