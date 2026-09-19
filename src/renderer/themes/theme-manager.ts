@@ -15,6 +15,49 @@ const themes: Record<string, string> = {
 
 let customStyleEl: HTMLStyleElement | null = null
 
+// Which side of the appearance fence each built-in theme lives on. The twelve
+// skins are independent designs, not one theme's two modes, so "follow the
+// system" can only mean: remember the last picked light theme and the last
+// picked dark theme, and jump between those two when the OS switches appearance.
+const THEME_APPEARANCE: Record<string, 'light' | 'dark'> = {
+  light: 'light',
+  elegant: 'light',
+  sepia: 'light',
+  notion: 'light',
+  bear: 'light',
+  writer: 'light',
+  dark: 'dark',
+  'solarized-dark': 'dark',
+  nord: 'dark',
+  gruvbox: 'dark',
+  dracula: 'dark',
+  midnight: 'dark'
+}
+
+const SLOT_KEY: Record<'light' | 'dark', string> = {
+  light: 'colamd-theme-light',
+  dark: 'colamd-theme-dark'
+}
+
+export function themeAppearance(name: string): 'light' | 'dark' | null {
+  return THEME_APPEARANCE[name] ?? null
+}
+
+// Remember a picked theme for its own appearance side. Custom themes have no
+// fixed appearance, so they stay out of the slots.
+export function recordThemeSlot(name: string): void {
+  const appearance = themeAppearance(name)
+  if (appearance) localStorage.setItem(SLOT_KEY[appearance], name)
+}
+
+// The theme to wear on a given system appearance: the user's last pick on that
+// side, or the app's original default for it.
+export function themeForAppearance(appearance: 'light' | 'dark'): string {
+  const stored = localStorage.getItem(SLOT_KEY[appearance])
+  if (stored && themes[stored]) return stored
+  return appearance === 'dark' ? 'dark' : 'elegant'
+}
+
 export function applyTheme(name: string, customCSS?: string): void {
   const body = document.body
 

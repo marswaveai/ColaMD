@@ -1,7 +1,7 @@
 import { createEditor, flashHeadingOnArrival, focusEditor, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal, setMathModalLanguage, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, type FormatCommandId } from './editor/editor'
 import { detectMarkdownStyle } from './editor/markdown-style'
 import { SearchPanel } from './editor/search-panel'
-import { applyTheme, loadSavedTheme } from './themes/theme-manager'
+import { applyTheme, loadSavedTheme, recordThemeSlot, themeForAppearance } from './themes/theme-manager'
 import { setUiLanguage, isChinese, type UiLanguage } from './ui-language'
 import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
 import './themes/base.css'
@@ -1438,6 +1438,10 @@ async function init(): Promise<void> {
     applyTheme(css ? savedTheme : 'elegant', css ?? undefined)
   } else {
     applyTheme(savedTheme)
+    // The current theme is remembered on its own side of the appearance fence:
+    // when the OS later switches to the other mode and back, this is where the
+    // round trip should land.
+    recordThemeSlot(savedTheme)
   }
   applyEditorFont(loadSavedEditorFont())
 
@@ -1614,7 +1618,20 @@ async function init(): Promise<void> {
     scheduleOutlineUpdate()
   })
 
-  api.onSetTheme((theme) => applyTheme(theme))
+  // A pick from the Theme menu lands here. Apply it, and remember it on its own
+  // side of the appearance fence so a later system switch knows where to land.
+  api.onSetTheme((theme) => {
+    applyTheme(theme)
+    recordThemeSlot(theme)
+  })
+
+  // The system switching appearance is the one theme change that does not come
+  // from the menu: wear the user's last pick for the other side. applyTheme
+  // already reports the menu checkmarks and the Windows overlay colours, so
+  // every shell surface follows in the same hop as a manual pick.
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (event) => {
+    applyTheme(themeForAppearance(event.matches ? 'dark' : 'light'))
+  })
 
   // macOS takes the traffic lights away in full screen, so the row drops the 96px
   // they sit in. The main process owns the window state and reports it here, both
