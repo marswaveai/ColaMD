@@ -54,7 +54,7 @@ Twelve built-in themes, six light, six dark, inspired by Bear, Notion, iA Writer
 - **Heading Anchors**: Click intra-document anchor links to jump between headings, CJK included.
 - **Version Changelog**: The first launch after an update opens the built-in changelog once, so you can see what changed without repeated prompts.
 - **PDF, HTML & Word Export**: Turn your Markdown document into a themed PDF, self-contained HTML, or editable Word document.
-- **Reading-Page Image Export**: Share Markdown as desktop or mobile PNG pages; longer documents continue as numbered pages.
+- **Continuous Image Export**: Export each Markdown document as one continuous desktop or mobile PNG.
 - **Portable Image Paths**: Local images use safe `file://` URLs for display and return to relative paths when saved.
 - **VS Code Integration**: Open the current Markdown file in ColaMD directly from VS Code.
 - **Minimal by Design**: No toolbar, no permanent sidebar, no distractions.
