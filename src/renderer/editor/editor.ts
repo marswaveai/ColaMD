@@ -654,6 +654,38 @@ export async function createEditor(
       ctx.set(katexOptionsCtx.key, { throwOnError: false })
       // Teach remark-stringify how to emit our custom ==highlight== node
       const stringifyOptions = ctx.get(remarkStringifyOptionsCtx)
+      // An empty paragraph is a blank line, and Markdown writes a blank line by
+      // leaving one. Milkdown's `remark-preserve-empty-line` writes a synthetic
+      // `<br />` html node for every empty paragraph but the last instead, so
+      // each extra Enter a writer presses lands in the file as HTML (measured
+      // 2026-09-20). The empty paragraph is dropped from the tree these handlers
+      // are handed, so the file gets the blank line Markdown already has for the
+      // gap; two empty paragraphs in a row collapse into one blank line, which
+      // is all the vocabulary Markdown has for a gap. Write side only: a `<br />`
+      // an earlier version left behind still reads back as the empty line it
+      // stood for, and disappears the next time the file is saved.
+      const dropEmptyParagraphs = <T,>(handler: T): T => {
+        return ((node: Record<string, unknown>, parent: unknown, state: unknown, info: unknown) => {
+          const children = (node.children as Array<{ type: string; children?: unknown[] }> | undefined) ?? []
+          const call = handler as unknown as (n: unknown, p: unknown, s: unknown, i: unknown) => string
+          return call(
+            { ...node, children: children.filter((child) => !(child.type === 'paragraph' && (child.children ?? []).length === 0)) },
+            parent,
+            state,
+            info,
+          )
+        }) as unknown as T
+      }
+      // Only wrap the handlers the preset actually defines. Writing an
+      // `undefined` over one of them looks like a handler that does not exist,
+      // and the serializer then has nothing to write the document with: every
+      // save would come back empty and the source view would read `undefined`
+      // (measured 2026-09-20).
+      const dropEmptyParagraphHandlers: Record<string, unknown> = {}
+      for (const type of ['root', 'blockquote', 'listItem'] as const) {
+        const original = (stringifyOptions.handlers as unknown as Record<string, unknown> | undefined)?.[type]
+        if (typeof original === 'function') dropEmptyParagraphHandlers[type] = dropEmptyParagraphs(original)
+      }
       baseStringifyOptions = {
         ...stringifyOptions,
         // Keep the editor's smart line breaks as plain Markdown newlines.
@@ -661,7 +693,8 @@ export async function createEditor(
         handlers: {
           ...stringifyOptions.handlers,
           mark: highlightStringifyHandler,
-          break: () => '\n'
+          break: () => '\n',
+          ...dropEmptyParagraphHandlers
         } as typeof stringifyOptions.handlers
       }
       ctx.set(remarkStringifyOptionsCtx, { ...baseStringifyOptions, ...markdownStyleOptions })
