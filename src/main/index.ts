@@ -457,6 +457,7 @@ function createWindow(filePath?: string, initialContent?: string, initialBrowseP
   win.on('closed', () => {
     stopWatching(state)
     windowStates.delete(win.id)
+    fullScreenBeforeSlideshow.delete(win.id)
   })
 
   updateTitle(win)
@@ -825,6 +826,26 @@ ipcMain.handle('get-file-manager-name', () => fileManagerName())
 // comes from a menu accelerator, so the link command reads it in the main
 // process (review on #87).
 ipcMain.handle('read-clipboard-text', () => clipboard.readText())
+
+// 放映幻灯片 takes the whole screen. Which window was full screen before a deck
+// started is the main process's to remember: leaving the deck must give back a
+// full screen the user had chosen for their own reasons, and must not leave one
+// behind that the deck switched on.
+const fullScreenBeforeSlideshow = new Map<number, boolean>()
+
+ipcMain.handle('slideshow-fullscreen', (event, on: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win) return false
+  if (on) {
+    if (!fullScreenBeforeSlideshow.has(win.id)) fullScreenBeforeSlideshow.set(win.id, win.isFullScreen())
+    if (!win.isFullScreen()) win.setFullScreen(true)
+  } else {
+    const before = fullScreenBeforeSlideshow.get(win.id) ?? false
+    fullScreenBeforeSlideshow.delete(win.id)
+    if (!before && win.isFullScreen()) win.setFullScreen(false)
+  }
+  return true
+})
 
 // Electron 44 rebuilt the clipboard on the W3C API, so writes return a promise
 // at runtime, while the shipped types still declare void. A rejected write must
@@ -1663,7 +1684,7 @@ function buildMenu(): void {
         importTheme: '导入主题...', whatsNew: '新功能演示',
         cheatsheet: 'Markdown 语法', about: '关于 ColaMD', checkForUpdates: '检查更新...', updateAvailable: '发现新版本', close: '关闭窗口',
         undo: '撤销', redo: '重做', cut: '剪切', copy: '复制', paste: '粘贴', selectAll: '全选',
-        actualSize: '实际大小', zoomIn: '放大', zoomOut: '缩小', fullscreen: '切换全屏',
+        actualSize: '实际大小', zoomIn: '放大', zoomOut: '缩小', fullscreen: '切换全屏', playSlideshow: '放映幻灯片',
         fontSettings: '编辑器字体…',
         language: '界面语言', chinese: '中文', english: 'English',
         hide: '隐藏 ColaMD', hideOthers: '隐藏其他应用', showAll: '显示全部', quit: '退出 ColaMD',
@@ -1684,7 +1705,7 @@ function buildMenu(): void {
         importTheme: 'Import Theme...', whatsNew: "What's New",
         cheatsheet: 'Markdown Syntax', about: 'About ColaMD', checkForUpdates: 'Check for Updates...', updateAvailable: 'Update Available', close: 'Close Window',
         undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
-        actualSize: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
+        actualSize: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen', playSlideshow: 'Play Slideshow',
         fontSettings: 'Editor Font…',
         language: 'Language', chinese: '中文', english: 'English',
         hide: 'Hide ColaMD', hideOthers: 'Hide Others', showAll: 'Show All', quit: 'Quit ColaMD',
@@ -1900,6 +1921,13 @@ function buildMenu(): void {
           ]
         },
         { type: 'separator' },
+        // A deck is the document itself cut at its `---`, so this belongs with the
+        // ways of looking at the document, beside full screen.
+        {
+          label: labels.playSlideshow,
+          accelerator: 'CmdOrCtrl+Shift+P',
+          click: () => sendToFocused('menu-play-slideshow')
+        },
         { label: labels.fullscreen, role: 'togglefullscreen' }
       ]
     },

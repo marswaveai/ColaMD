@@ -67,6 +67,8 @@ export interface ElectronAPI {
   onMenuExportHTML: (callback: () => void) => void
   onMenuExportDOCX: (callback: () => void) => void
   onMenuExportImage: (callback: (preset: ImageExportPreset) => void) => void
+  onMenuPlaySlideshow: (callback: () => void) => void
+  setSlideshowFullscreen: (on: boolean) => Promise<boolean>
   onSetTheme: (callback: (theme: string) => void) => void
   onSetPanelSide: (callback: (side: string) => void) => void
   reportPanelSide: (side: string) => Promise<void>
@@ -180,6 +182,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       if (preset === 'desktop' || preset === 'mobile') callback(preset)
     })
   },
+  onMenuPlaySlideshow: (callback: () => void) => {
+    ipcRenderer.on('menu-play-slideshow', () => callback())
+  },
+  // The deck asks for the whole screen; the main process remembers what the
+  // window was before, so leaving the deck does not also leave a full screen the
+  // user had chosen for other reasons.
+  setSlideshowFullscreen: (on: boolean) => ipcRenderer.invoke('slideshow-fullscreen', on) as Promise<boolean>,
   onSetTheme: (callback: (theme: string) => void) => {
     ipcRenderer.on('set-theme', (_event, theme) => callback(theme))
   },

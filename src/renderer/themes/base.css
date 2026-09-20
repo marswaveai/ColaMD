@@ -1611,6 +1611,68 @@ body.has-custom-font #source-editor {
   gap: 10px;
 }
 
+/* ===== 放映幻灯片 (View → Play Slideshow) =====
+   `---` divides the document; the surface shows one division at a time and
+   nothing else. The page is made of the editor's own blocks (renderer/
+   slideshow.ts hides the stretches around it), so the theme's typography,
+   tables, formulas and diagrams come along unchanged. */
+body.presenting {
+  /* A pointer is noise over a slide, and every gesture the deck needs is either
+     a key or a plain click. */
+  cursor: none;
+}
+
+body.presenting #titlebar,
+body.presenting #file-panel,
+body.presenting #panel-resizer,
+body.presenting #source-editor,
+body.presenting #hover-tip,
+body.presenting #update-banner,
+body.presenting #editor > .code-copy-btn,
+body.presenting #editor > .footnote-preview {
+  display: none !important;
+}
+
+/* The editor becomes the surface: the whole window, the theme's paper, no
+   chrome and no 780px column. Fixed, so it covers the row rather than starting
+   below it. */
+body.presenting #editor {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  height: auto;
+  padding: 0;
+  background: var(--bg-color);
+}
+
+/* Centred by auto margins instead of justify-content: a page taller than the
+   window has to stay scrollable from its own first line, and centring inside a
+   flex container clips exactly that. */
+body.presenting #editor .ProseMirror {
+  flex: 0 0 auto;
+  margin: auto;
+  max-width: min(38em, 86vw);
+  padding: 4vh 0;
+  font-size: var(--slide-font-size, 24px);
+  line-height: 1.6;
+  caret-color: transparent;
+}
+
+/* Content that does not fit gives way to the surface: a table scrolls inside the
+   page, a diagram or a photo shrinks to fit it. */
+body.presenting #editor .ProseMirror > * {
+  max-width: 100%;
+}
+
+body.presenting #editor .ProseMirror pre {
+  overflow-x: auto;
+}
+
+body.presenting #editor .ProseMirror img,
+body.presenting #editor .ProseMirror svg {
+  max-height: 72vh;
+}
+
 /* Print only document content; app overlays can appear at any time. */
 @media print {
   body > :not(#editor),

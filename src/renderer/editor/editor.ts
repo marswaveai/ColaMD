@@ -817,6 +817,14 @@ export function focusEditor(): void {
   getEditorView()?.focus()
 }
 
+// 放映幻灯片 shows the editor's own blocks on a frozen surface. Keystrokes are
+// already stopped before they reach the editor (renderer/slideshow.ts); this is
+// the second lock, so a key that gets through anyway cannot land in a page
+// nobody can see.
+export function setEditorEditable(editable: boolean): void {
+  getEditorView()?.setProps({ editable: () => editable })
+}
+
 // Per-tab documents share one editor instance. The ProseMirror state carries the
 // document, the selection and the undo stack, so capturing it per tab is what
 // keeps each tab's own undo history instead of one shared stack.

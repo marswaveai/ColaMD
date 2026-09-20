@@ -1,4 +1,5 @@
-import { createEditor, flashHeadingOnArrival, focusEditor, getMarkdown, onEditorJumpPhase, setMarkdown, showMathModal, setMathModalLanguage, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, type FormatCommandId } from './editor/editor'
+import { createEditor, flashHeadingOnArrival, focusEditor, getMarkdown, onEditorJumpPhase, setMarkdown, setEditorEditable, showMathModal, setMathModalLanguage, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, type FormatCommandId } from './editor/editor'
+import { isPresenting, startSlideshow, stopSlideshow } from './slideshow'
 import { detectMarkdownStyle } from './editor/markdown-style'
 import { splitFrontmatter } from './editor/frontmatter'
 import { SearchPanel } from './editor/search-panel'
@@ -100,6 +101,10 @@ function applyPanelSide(side: string): void {
 applyPanelSide(localStorage.getItem(PANEL_SIDE_KEY) ?? 'right')
 
 function setMarkdownProgrammatically(content: string, flushHistory = false): void {
+  // Every way a document can be replaced at once ends up here (open, external
+  // write, new file). The deck's pages are positions in the document that is
+  // going away, so the presentation has to end with it.
+  if (isPresenting()) stopSlideshow()
   applyingProgrammaticChange = true
   try {
     setMarkdown(content, flushHistory)
@@ -415,6 +420,7 @@ function renderTabBar(): void {
 }
 
 function showBlankDocument(): void {
+  if (isPresenting()) stopSlideshow()
   releaseMermaidRenderer()
   exitSourceMode()
   // A blank document carries no properties block from the one before it.
@@ -502,6 +508,7 @@ async function openNewTab(): Promise<void> {
 
 async function activateTab(id: string): Promise<void> {
   if (switchingTab || id === activeTabId) return
+  if (isPresenting()) stopSlideshow()
   const target = tabs.find((tab) => tab.id === id)
   if (!target) return
   const previous = activeTab()
@@ -1465,6 +1472,43 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
   if (wasSourceMode) enterSourceMode(content, sourceScrollRatio)
 }
 
+// 放映幻灯片: the pages are the editor's own blocks, so the document has to be
+// rendered before the deck starts. In source mode the rich text tree still holds
+// whatever was there before the textarea was touched, and presenting that would
+// be presenting the wrong document.
+async function toggleSlideshow(): Promise<void> {
+  if (isPresenting()) {
+    stopSlideshow()
+    return
+  }
+  const wasSourceMode = sourceModeActive
+  const sourceScrollRatio = wasSourceMode ? scrollRatio(sourceEl()) : 0
+  const content = getContent()
+
+  if (wasSourceMode) {
+    exitSourceMode()
+    setMarkdownProgrammatically(content)
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+  }
+
+  const started = startSlideshow({
+    onStart: () => {
+      setEditorEditable(false)
+      void window.electronAPI.setSlideshowFullscreen(true)
+    },
+    onExit: () => {
+      setEditorEditable(true)
+      void window.electronAPI.setSlideshowFullscreen(false)
+      if (wasSourceMode) enterSourceMode(content, sourceScrollRatio)
+    }
+  })
+  // Nothing to present (an empty document has no page): put the user back where
+  // they were instead of leaving them in a mode that did not open.
+  if (!started && wasSourceMode) enterSourceMode(content, sourceScrollRatio)
+}
+
 async function init(): Promise<void> {
   const api = window.electronAPI
   // macOS keeps its own overlay scrollbars (drawn while you scroll, no layout
@@ -1611,6 +1655,7 @@ async function init(): Promise<void> {
   api.onMenuExportHTML(() => { void exportCurrentHTML() })
   api.onMenuExportDOCX(() => { void api.exportDOCX(getContent()) })
   api.onMenuExportImage((preset) => { void exportCurrentImage(preset) })
+  api.onMenuPlaySlideshow(() => { void toggleSlideshow() })
 
   api.onNewFile(() => {
     releaseMermaidRenderer()
