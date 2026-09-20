@@ -63,7 +63,7 @@ Source: wrap inline code in one backtick; use three backticks for a fenced code 
 
 ---
 
-Source: add `>` at the beginning of a quote. Put `---` on a line by itself for a horizontal rule.
+Source: add `>` at the beginning of a quote. Put `---` on a line by itself for a horizontal rule. When playing the slideshow, `---` is also a page break (View → Play Slideshow, ⌘⇧P).
 
 ## Tables
 
