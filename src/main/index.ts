@@ -338,8 +338,8 @@ function notifyExternalChange(win: BrowserWindow, filePath: string): void {
 
 function createWindow(filePath?: string, initialContent?: string, initialBrowsePath?: string): BrowserWindow {
   // Windows gets ONE row for its shell. A normal Windows frame stacks three
-  // bars: the system title bar, the in-window menu bar, and our own 40px row,
-  // which is what made the app read as heavy there (2026-09-15). So: no system
+  // bars: the system title bar, the in-window menu bar, and our own row, which
+  // is what made the app read as heavy there (2026-09-15). So: no system
   // title bar, no menu bar, and the OS draws the window controls as an overlay
   // inside our row instead (Chrome's arrangement). macOS keeps its traffic
   // lights inside the same row, and Linux keeps its frame and its menu bar.

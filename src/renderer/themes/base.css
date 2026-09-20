@@ -185,19 +185,21 @@ body.platform-win #titlebar {
   align-items: center;
   gap: 6px;
   flex: 0 1 auto;
-  /* A tab hugs its filename, inside a floor and a ceiling that are both read
-     off the row's height: twice it (80px) so a short name never collapses to a
-     bare square, four times it (160px) so a long one stops growing. In between
-     the name decides, and when the row runs out the tabs compress to the floor
-     before the strip starts scrolling. */
-  min-width: 80px;
-  max-width: 160px;
+  /* A tab hugs its filename, inside a floor and a ceiling that are both READ
+     OFF the row's height, so they follow it instead of a past one: twice it so
+     a short name never collapses to a bare square, four times it so a long one
+     stops growing. In between the name decides, and when the row runs out the
+     tabs compress to the floor before the strip starts scrolling. Written as
+     the row's multiples rather than as millimetres of a remembered row: these
+     two numbers used to be 80/160, which was 2x/4x of the 40px row and stayed
+     there when the row became 36px (2026-09-20). */
+  min-width: calc(var(--chrome-row-height) * 2);
+  max-width: calc(var(--chrome-row-height) * 4);
   /* Full row height: the active tab is a column of paper running from the
      window's top edge down into the document, not a chip inside the row. */
   height: 100%;
-  /* Symmetric, and roomier than the row's own breathing space: the name sits in
-     a 40px tall tab, so 10px either side read as cramped next to ~14px above and
-     below it. Air left and right, same as air above and below. */
+  /* Symmetric: 16px either side, roomier than the air the name gets above and
+     below, so a label reads as sitting in the tab rather than filling it. */
   padding: 0 16px;
   border: 1px solid transparent;
   /* No top edge and no bottom edge. The bottom stays open so the active tab
@@ -254,8 +256,8 @@ body.platform-win #titlebar {
   /* The label's box has to be TALLER than its glyphs, not exactly as tall. With
      line-height 1 the ink filled the box edge to edge, and a CJK font with a
      roomier em box (Windows) had the bottom of its strokes cut off by the
-     overflow clip below. 20px inside the 40px tab leaves 2px of air each side on
-     every platform's font (2026-09-15). */
+     overflow clip below. 20px of box around ~16px of ink leaves 2px of air each
+     side on every platform's font (2026-09-15). */
   line-height: 20px;
   overflow: hidden;
   text-overflow: ellipsis;
