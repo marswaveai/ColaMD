@@ -22,7 +22,10 @@ const RULE_LINE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
 export function detectMarkdownStyle(source: string): MarkdownStyle {
   const style: MarkdownStyle = {}
   const bullets: Partial<Record<'-' | '*' | '+', number>> = {}
-  let rule: MarkdownStyle['rule']
+  // Counted, not "the first one wins": a document that writes most of its rules
+  // one way keeps that way, instead of following whichever came first and
+  // rewriting the rest (2026-09-20).
+  const rules: Partial<Record<'-' | '*' | '_', number>> = {}
   let fence: MarkdownStyle['fence']
   let emphasisStar = 0
   let emphasisUnderscore = 0
@@ -47,7 +50,10 @@ export function detectMarkdownStyle(source: string): MarkdownStyle {
     }
 
     const lineRule = line.match(RULE_LINE)
-    if (lineRule) rule ??= lineRule[1] as MarkdownStyle['rule']
+    if (lineRule) {
+      const marker = lineRule[1] as '-' | '*' | '_'
+      rules[marker] = (rules[marker] ?? 0) + 1
+    }
 
     strongStar += (line.match(/\*\*[^*\s][^*]*\*\*/g) ?? []).length
     strongUnderscore += (line.match(/__[^_\s][^_]*__/g) ?? []).length
@@ -57,7 +63,8 @@ export function detectMarkdownStyle(source: string): MarkdownStyle {
 
   const ranked = Object.entries(bullets).sort((a, b) => b[1] - a[1])
   if (ranked.length > 0) style.bullet = ranked[0][0] as MarkdownStyle['bullet']
-  if (rule) style.rule = rule
+  const rankedRules = Object.entries(rules).sort((a, b) => b[1] - a[1])
+  if (rankedRules.length > 0) style.rule = rankedRules[0][0] as MarkdownStyle['rule']
   if (fence) style.fence = fence
   // Only switch away from the default when the file clearly prefers underscores.
   if (strongUnderscore > 0 && strongUnderscore > strongStar) style.strong = '_'
