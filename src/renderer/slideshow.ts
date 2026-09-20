@@ -13,7 +13,7 @@
 // in sync, and ProseMirror never sees a DOM change it did not make (clicking
 // through a deck must not look like an external edit).
 
-type Page = {
+export type Page = {
   /** Index of the page's first top-level block, in the editor's children. */
   start: number
   /** Index of its last one, inclusive. */
@@ -80,6 +80,14 @@ function collectPages(root: Element): Page[] {
   })
   close(children.length)
   return found
+}
+
+// The document's pages, cut the one way this app cuts them. The PDF export
+// reads them from here rather than deriving the rule a second time: a deck and
+// an exported deck that disagreed about where a page ends would be two bugs.
+export function deckPages(): Page[] {
+  const root = documentRoot()
+  return root ? collectPages(root) : []
 }
 
 // Open a deck where the writer is working, not always on page one: a 40 page

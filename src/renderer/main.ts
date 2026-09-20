@@ -1,5 +1,6 @@
 import { createEditor, flashHeadingOnArrival, focusEditor, getMarkdown, onEditorJumpPhase, setMarkdown, setEditorEditable, showMathModal, setMathModalLanguage, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, type FormatCommandId } from './editor/editor'
 import { isPresenting, startSlideshow, stopSlideshow } from './slideshow'
+import { enterPrintLayout, exitPrintLayout } from './slides-export'
 import { detectMarkdownStyle } from './editor/markdown-style'
 import { splitFrontmatter } from './editor/frontmatter'
 import { SearchPanel } from './editor/search-panel'
@@ -1470,6 +1471,25 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
   await window.electronAPI.exportImage(getExportSnapshot(content), preset)
 
   if (wasSourceMode) enterSourceMode(content, sourceScrollRatio)
+}
+
+// 导出幻灯片 PDF: the file and the dialog belong to the main process, so it
+// asks the window to become paper through this hook. The deck's rule holds here
+// too — pages come from the RENDERED document — so source mode is rendered
+// first, or the export would print whatever was on screen before it was typed.
+window.__colamdSlidesExport = {
+  enter: async () => {
+    if (sourceModeActive) {
+      const content = getContent()
+      exitSourceMode()
+      setMarkdownProgrammatically(content)
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      })
+    }
+    return enterPrintLayout()
+  },
+  exit: () => exitPrintLayout()
 }
 
 // 放映幻灯片: the pages are the editor's own blocks, so the document has to be

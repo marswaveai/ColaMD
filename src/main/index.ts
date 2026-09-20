@@ -1288,6 +1288,45 @@ ipcMain.handle('export-pdf', async (event) => {
   }
 })
 
+// 导出幻灯片 PDF (File → Export Slides PDF). One `---` is one sheet, 16:9, on the
+// theme's own paper: the deck, as something you can carry anywhere. The renderer
+// owns the page — it has the stylesheet and the measurement — and this side owns
+// the file and the dialog. The renderer is asked to become paper only once the
+// destination is chosen: a document laid out as sheets behind a save dialog
+// reads as the app having come apart.
+async function exportSlidesPDF(win: BrowserWindow | null): Promise<boolean> {
+  if (!win || win.isDestroyed()) return false
+  const base = suggestFileName(win)
+  const result = await dialog.showSaveDialog(win, {
+    title: uiText('导出幻灯片 PDF', 'Export Slides PDF'),
+    buttonLabel: uiText('导出', 'Export'),
+    nameFieldLabel: uiText('文件名：', 'File name:'),
+    defaultPath: suggestSavePath(win, base ? `${base}-slides` : 'slides'),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  })
+  if (result.canceled || !result.filePath) return false
+
+  const sheet = await win.webContents
+    .executeJavaScript('window.__colamdSlidesExport ? window.__colamdSlidesExport.enter() : false')
+    .catch(() => false) as { width: number; height: number } | false
+  if (!sheet) return false
+
+  try {
+    const pdfData = await win.webContents.printToPDF({
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      printBackground: true,
+      preferCSSPageSize: true,
+      pageSize: { width: sheet.width, height: sheet.height }
+    })
+    await writeFile(result.filePath, pdfData)
+    return true
+  } catch {
+    return false
+  } finally {
+    await win.webContents.executeJavaScript('window.__colamdSlidesExport?.exit()').catch(() => {})
+  }
+}
+
 function escapeHTML(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({
     '&': '&amp;',
@@ -1674,7 +1713,7 @@ function buildMenu(): void {
         newFile: '新建', open: '打开...', save: '保存', saveAs: '另存为...',
         newTab: '新建标签页', closeTab: '关闭标签页',
         recentOpen: '最近打开', restoreOnLaunch: '启动时打开上次文档', clearRecent: '清除最近记录', noRecent: '没有最近打开的文件',
-        exportPDF: '导出 PDF...', exportHTML: '导出 HTML...', exportWord: '导出 Word...', exportImageDesktop: '导出图片（电脑阅读）...', exportImageMobile: '导出图片（手机阅读）...', find: '查找',
+        exportPDF: '导出 PDF...', exportSlidesPDF: '导出幻灯片 PDF...', exportHTML: '导出 HTML...', exportWord: '导出 Word...', exportImageDesktop: '导出图片（电脑阅读）...', exportImageMobile: '导出图片（手机阅读）...', find: '查找',
         setDefault: '设置为默认应用...',
         insertFormula: '插入公式', filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
         panelSide: '文件列表位置', panelSideLeft: '在左侧', panelSideRight: '在右侧',
@@ -1695,7 +1734,7 @@ function buildMenu(): void {
         newFile: 'New', open: 'Open...', save: 'Save', saveAs: 'Save As...',
         newTab: 'New Tab', closeTab: 'Close Tab',
         recentOpen: 'Open Recent', restoreOnLaunch: 'Reopen last document at launch', clearRecent: 'Clear Recent', noRecent: 'No recent files',
-        exportPDF: 'Export PDF...', exportHTML: 'Export HTML...', exportWord: 'Export Word...', exportImageDesktop: 'Export Image (Desktop)...', exportImageMobile: 'Export Image (Mobile)...', find: 'Find',
+        exportPDF: 'Export PDF...', exportSlidesPDF: 'Export Slides PDF...', exportHTML: 'Export HTML...', exportWord: 'Export Word...', exportImageDesktop: 'Export Image (Desktop)...', exportImageMobile: 'Export Image (Mobile)...', find: 'Find',
         setDefault: 'Set as Default...',
         insertFormula: 'Insert Formula', filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
         panelSide: 'File List Position', panelSideLeft: 'On the Left', panelSideRight: 'On the Right',
@@ -1822,6 +1861,14 @@ function buildMenu(): void {
         {
           label: labels.exportPDF,
           click: () => sendToFocused('menu-export-pdf')
+        },
+        {
+          // The same pages the deck shows, one per sheet: a deck that leaves the
+          // app with you.
+          label: labels.exportSlidesPDF,
+          click: () => {
+            void exportSlidesPDF(getFocusedWindow() ?? BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed()) ?? null)
+          }
         },
         {
           label: labels.exportHTML,
