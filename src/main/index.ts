@@ -2151,6 +2151,29 @@ function updatePageWidthMenuChecks(): void {
 let manualUpdateCheck = false
 let updateDownloadRequested = false
 
+// Update checks run once a day. The stamp lives beside the other preferences so
+// a restart does not buy a second check, and a window left open gets its check
+// from the timer in setupAutoUpdater.
+const updateCheckStampPath = join(app.getPath('userData'), 'update-check.json')
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
+const UPDATE_CHECK_TICK_MS = 30 * 60 * 1000
+
+function lastUpdateCheckAt(): number {
+  try {
+    const parsed = JSON.parse(readFileSync(updateCheckStampPath, 'utf-8')) as { at?: unknown }
+    return typeof parsed.at === 'number' && Number.isFinite(parsed.at) ? parsed.at : 0
+  } catch {
+    return 0
+  }
+}
+
+function markUpdateChecked(): void {
+  const at = Date.now()
+  void mkdir(dirname(updateCheckStampPath), { recursive: true })
+    .then(() => writeFile(updateCheckStampPath, JSON.stringify({ at }), 'utf-8'))
+    .catch(() => { /* a stamp that cannot be written costs one extra check */ })
+}
+
 function showUpdateMessage(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
   const win = getFocusedWindow()
   return win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options)
@@ -2158,10 +2181,18 @@ function showUpdateMessage(options: Electron.MessageBoxOptions): Promise<Electro
 
 async function checkForUpdates(manual = false): Promise<void> {
   if (!app.isPackaged) return
+  // Once a day, not once a launch: the check is a request for a small manifest,
+  // and five launches in a day meant five identical requests for the same answer
+  // (2026-09-21). A manual check is the user asking now, and it restarts the day.
+  if (!manual && Date.now() - lastUpdateCheckAt() < UPDATE_CHECK_INTERVAL_MS) return
   manualUpdateCheck = manual
   try {
     await autoUpdater.checkForUpdates()
+    markUpdateChecked()
   } catch (error) {
+    // The day is not spent when the check could not happen at all: a launch
+    // without a network should not cost the next one its chance to see a
+    // release. Nothing is shown for a background check.
     if (!manualUpdateCheck) return
     manualUpdateCheck = false
     const chinese = getPreferredCheatsheetLanguage() === 'zh'
@@ -2224,6 +2255,14 @@ function setupAutoUpdater(): void {
   setTimeout(() => {
     void checkForUpdates()
   }, 8000)
+
+  // A window that stays open for days still hears about the next release the day
+  // it lands; the gate inside checkForUpdates keeps these ticks from turning into
+  // requests of their own.
+  const dailyTick = setInterval(() => {
+    void checkForUpdates()
+  }, UPDATE_CHECK_TICK_MS)
+  dailyTick.unref()
 }
 
 ipcMain.handle('download-update', async () => {
