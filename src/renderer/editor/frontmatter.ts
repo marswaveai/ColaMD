@@ -25,8 +25,20 @@ export interface SplitDocument {
 const OPENS = /^(?:\uFEFF)?---[ \t]*$/
 // YAML closes a document with `---` or, less often, with `...`.
 const CLOSES = /^(?:---|\.\.\.)[ \t]*$/
-const MAPPING_ENTRY = /^[A-Za-z_][A-Za-z0-9_.-]*[ \t]*:([ \t]|$)/
 const BLANK = /^[ \t]*$/
+// A YAML comment line. It carries no property on its own, but it proves the
+// block is metadata rather than prose, so finding one is enough to keep the
+// block out of the editor. A `#` line inside the block is never a Markdown
+// heading: headings cannot live inside a leading `---` properties block.
+const COMMENT = /^[ \t]*#[^\n]*$/
+// A `key: value` line. YAML keys are Unicode scalars, not ASCII words, so an
+// Obsidian note can use non-ASCII property names. Quoted keys (`"..."` /
+// `'...'`) are legal YAML as well. The value side is intentionally loose: an
+// empty value, a block scalar (`|` / `>`), or a flow value all count, because
+// recognition only decides whether the block stays out of the editor, never
+// whether the YAML itself is valid.
+const MAPPING_ENTRY =
+  /^[ \t]*(?:[\p{L}\p{N}_][\p{L}\p{N}_.-]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')[ \t]*:([ \t]|$)/u
 // A note's properties are a short header. Past this many lines the opening `---`
 // is a horizontal rule and the document simply starts with one.
 const MAX_LINES = 100
@@ -62,9 +74,12 @@ export function splitFrontmatter(markdown: string): SplitDocument {
         body: endsWithNewline ? lines.slice(last + 1).join('\n') : ''
       }
     }
-    // A heading means this is prose that happens to open with a rule, not a
-    // properties block.
-    if (text.startsWith('#')) return whole(markdown)
+    // A `#` line inside the block is a YAML comment, not prose: it keeps the
+    // block out of the editor but never counts as a property on its own.
+    // (A Markdown heading cannot live inside a leading `---` properties
+    // block, so the old early return treated comments as titles and handed
+    // the whole block to the editor, where it was rewritten.)
+    if (COMMENT.test(text)) continue
     if (MAPPING_ENTRY.test(text)) hasEntry = true
   }
 
