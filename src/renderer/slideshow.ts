@@ -1,25 +1,19 @@
 // 放映幻灯片 (View → Play Slideshow).
 //
-// A deck is the document cut at its thematic breaks. Pages are taken from the
-// RENDERED document, never from the Markdown text: every `---` is already an
-// <hr> in the editor's DOM, and a `---` inside a fenced code block is plain
-// text there, so nothing is re-parsed and nothing can be misread. The file's
-// frontmatter is not in the editor at all, so it cannot become a page either.
+// 一页就是一个 `---`。切法只有一处：装饰层按语法树里的 HorizontalRule 给每一行打上
+// 页码类（`cm-md-page-N`，见 editor/live-preview.ts 的 collectPages）。放映这里不再自己
+// 数 DOM 的第几个孩子：CM6 会往正文里插 gap 元素，序号对不上；而用类名判断，
+// `---` 在代码块里根本不是 HorizontalRule，也就不会被误当分页。
 //
-// A page is shown by hiding the blocks around it with one injected stylesheet
-// rule range — not by cloning, and not by touching the editor's DOM. That the
-// document keeps its own blocks is the whole point: theme typography, tables,
-// formulas, diagrams and images arrive intact with no second renderer to keep
-// in sync, and ProseMirror never sees a DOM change it did not make (clicking
-// through a deck must not look like an external edit).
+// 一页的显示方式是「只留这一页的行」：一条注入的样式把 `.cm-content` 下不属于当前页的
+// 行藏起来。不克隆、不动编辑器的 DOM，所以主题排版、表格、公式、图与图片都原样到场，
+// 也没有第二个渲染器要同步。
+
+import { PAGE_CLASS_PREFIX, PAGE_START_CLASS } from './editor/live-preview'
 
 export type Page = {
-  /** Index of the page's first top-level block, in the editor's children. */
-  start: number
-  /** Index of its last one, inclusive. */
-  end: number
-  /** That first block, kept so leaving the deck can show the page again. */
-  first: Element
+  /** 页码，就是行装饰里的那个 N。 */
+  number: number
 }
 
 type SlideshowOptions = {
@@ -36,7 +30,7 @@ const RULE_STYLE_ID = 'slideshow-rules'
 const DRAG_SLOP = 4
 
 let presenting = false
-let pages: Page[] = []
+let pages: number[] = []
 let index = 0
 let rules: HTMLStyleElement | null = null
 let options: SlideshowOptions = {}
@@ -51,77 +45,70 @@ function editorElement(): HTMLElement | null {
   return document.getElementById('editor')
 }
 
+/** 正文容器。CM6 的滚动发生在 `.cm-scroller` 上，`#editor` 自己不动。 */
 function documentRoot(): HTMLElement | null {
-  return document.querySelector('#editor .ProseMirror') as HTMLElement | null
+  return document.querySelector('#editor .cm-content') as HTMLElement | null
 }
 
-// Group the top-level blocks between thematic breaks. A group with no block of
-// its own is not a page: two separators in a row (a leading `---`, a stray one
-// at the end) should not become a blank slide nobody asked for.
-function collectPages(root: Element): Page[] {
-  const children = Array.from(root.children)
-  const found: Page[] = []
-  let start = -1
-  let blocks = 0
+function scroller(): HTMLElement | null {
+  return document.querySelector('#editor .cm-scroller') as HTMLElement | null
+}
 
-  const close = (end: number): void => {
-    if (start >= 0 && blocks > 0) found.push({ start, end: end - 1, first: children[start] })
-    start = -1
-    blocks = 0
+function pageOfLine(line: Element): number | null {
+  const match = new RegExp(`(?:^|\\s)${PAGE_CLASS_PREFIX}(\\d+)(?:\\s|$)`).exec(line.className ?? '')
+  return match ? Number(match[1]) : null
+}
+
+/**
+ * 文档里真正有内容的页码。
+ *
+ * 只有分隔线的那一页不算一页：开头一个 `---`、结尾一个 `---`、或者两个 `---` 挨着，
+ * 都不该变成一张没有人要的空白幻灯片。
+ */
+function pageNumbers(root: Element): number[] {
+  const found = new Set<number>()
+  for (const line of Array.from(root.children)) {
+    const page = pageOfLine(line)
+    if (page === null) continue
+    if (line.classList.contains('cm-md-hr')) continue
+    found.add(page)
   }
-
-  children.forEach((child, i) => {
-    if (child.tagName === 'HR') {
-      close(i)
-      return
-    }
-    if (start < 0) start = i
-    blocks += 1
-  })
-  close(children.length)
-  return found
+  return [...found].sort((a, b) => a - b)
 }
 
-// The document's pages, cut the one way this app cuts them. The PDF export
-// reads them from here rather than deriving the rule a second time: a deck and
-// an exported deck that disagreed about where a page ends would be two bugs.
-export function deckPages(): Page[] {
+/** 文档的分页。导出幻灯片 PDF 读这里，不自己再算一遍切法。 */
+export function deckPages(): number[] {
   const root = documentRoot()
-  return root ? collectPages(root) : []
+  return root ? pageNumbers(root) : []
+}
+
+function firstLineOf(page: number): Element | null {
+  const root = documentRoot()
+  if (!root) return null
+  return (
+    root.querySelector(`.${PAGE_CLASS_PREFIX}${page}.${PAGE_START_CLASS}`) ??
+    root.querySelector(`.${PAGE_CLASS_PREFIX}${page}`)
+  )
 }
 
 // Open a deck where the writer is working, not always on page one: a 40 page
 // document is not presented from the top every time it is checked.
-function pageAtCaret(root: Element, deck: Page[]): number {
+function pageAtCaret(root: Element): number {
   const anchor = window.getSelection()?.anchorNode ?? null
   if (!anchor || !root.contains(anchor)) return 0
   const inside = anchor.nodeType === Node.ELEMENT_NODE ? (anchor as Element) : anchor.parentElement
-  let block: Element | null = inside
-  while (block && block.parentElement !== root) block = block.parentElement
-  if (!block) return 0
-  const position = Array.prototype.indexOf.call(root.children, block)
-  const found = deck.findIndex((page) => position >= page.start && position <= page.end)
+  const line = inside?.closest?.('.cm-line')
+  const page = line ? pageOfLine(line) : null
+  if (page === null) return 0
+  const found = pages.indexOf(page)
   return found > 0 ? found : 0
 }
 
-// One rule range instead of a class per block: hiding the two stretches outside
-// the page leaves the page's own blocks untouched, so their styles, their image
-// sizes and their node views are exactly what the editor had.
 function applyPage(): void {
   if (!rules) return
   const page = pages[index]
-  const hidden: string[] = []
-  if (page.start > 0) {
-    hidden.push(`body.${PRESENTING_CLASS} #editor .ProseMirror > :nth-child(-n+${page.start})`)
-  }
-  // 1-based index of the first block past the page, so the separator that ends
-  // the page goes with the hidden stretch.
-  hidden.push(`body.${PRESENTING_CLASS} #editor .ProseMirror > :nth-child(n+${page.end + 2})`)
-  rules.textContent = `${hidden.join(',\n')} { display: none !important; }\n` +
-    // The page's own first block keeps the space it would have had in the
-    // document, which is space above nothing: flush, so the page centres on its
-    // text rather than on that gap.
-    `body.${PRESENTING_CLASS} #editor .ProseMirror > :nth-child(${page.start + 1}) { margin-top: 0 !important; }`
+  rules.textContent =
+    `body.${PRESENTING_CLASS} #editor .cm-content > :not(.${PAGE_CLASS_PREFIX}${page}) { display: none !important; }\n`
 }
 
 function show(next: number): void {
@@ -130,8 +117,8 @@ function show(next: number): void {
   index = clamped
   applyPage()
   // A new page starts at its own top, however far the last one was scrolled.
-  const editor = editorElement()
-  if (editor) editor.scrollTop = 0
+  const scroll = scroller()
+  if (scroll) scroll.scrollTop = 0
 }
 
 // The document is em-based, so one number scales headings, code, formulas and
@@ -226,21 +213,20 @@ export function startSlideshow(next: SlideshowOptions = {}): boolean {
   const editor = editorElement()
   const root = documentRoot()
   if (!editor || !root) return false
-  const deck = collectPages(root)
+  const deck = pageNumbers(root)
   if (deck.length === 0) return false
 
   pages = deck
   options = next
-  index = pageAtCaret(root, deck)
+  index = pageAtCaret(root)
 
   // A page is a position in the document. If the document is replaced under the
   // deck (an edit from another program, another window), those positions stop
   // meaning what they meant, and a presentation showing the wrong page is worse
-  // than no presentation: leave as soon as the blocks we measured are gone.
-  // The caller stops the deck on the paths it owns; this catches the rest.
-  const blocks = deck.length ? Array.from(root.children).slice(deck[0].start, deck[deck.length - 1].end + 1) : []
+  // than no presentation: leave as soon as the page we are showing is gone.
+  const shownLine = firstLineOf(pages[index])
   watch = new MutationObserver(() => {
-    if (blocks.some((block) => !block.isConnected)) stopSlideshow()
+    if (shownLine && !shownLine.isConnected) stopSlideshow()
   })
   watch.observe(root, { childList: true })
 
@@ -251,7 +237,8 @@ export function startSlideshow(next: SlideshowOptions = {}): boolean {
 
   document.body.classList.add(PRESENTING_CLASS)
   layout()
-  editor.scrollTop = 0
+  const scroll = scroller()
+  if (scroll) scroll.scrollTop = 0
   presenting = true
 
   window.addEventListener('keydown', onKeyDown, true)
@@ -295,5 +282,8 @@ export function stopSlideshow(): void {
   // whose other pages were hidden while the deck was up, and the caret is not a
   // guide either: presenting pages 1 to 5 and landing back at the top reads as
   // having lost your place.
-  if (lastShown?.first.isConnected) claimPage(lastShown.first)
+  if (lastShown !== undefined) {
+    const line = firstLineOf(lastShown)
+    if (line) claimPage(line)
+  }
 }

@@ -6,7 +6,7 @@ export interface SiblingFile {
   kind: 'file' | 'directory' | 'parent'
 }
 
-type FileOpenedData = { path: string | null; content: string }
+type FileOpenedData = { path: string | null; content: string; fileUrl: string | null }
 type ImageExportPreset = 'desktop' | 'mobile'
 type ImageExportSnapshot = { html: string; styles: string; bodyClass: string; background: string }
 export type FileManagerName = 'finder' | 'explorer' | 'file-manager'
@@ -35,14 +35,15 @@ export interface ElectronAPI {
   listSiblings: () => Promise<SiblingFile[] | null>
   listDirectory: (path: string) => Promise<SiblingFile[] | null>
   openSibling: (path: string) => Promise<boolean>
-  activateFile: (path: string | null) => Promise<{ content: string; mtime: number } | null>
+  activateFile: (path: string | null) => Promise<{ content: string; fileUrl: string; mtime: number } | null>
   setTabFiles: (paths: string[]) => void
+  fileUrl: (path: string) => Promise<string | null>
   onFocusFile: (callback: (path: string) => void) => void
   onOpenInNewTab: (callback: (path: string) => void) => void
   saveFile: (content: string, expectedPath?: string, rebuildMenu?: boolean, autosave?: boolean) => Promise<string | null>
   saveFileAs: (content: string, expectedPath?: string) => Promise<string | null>
   exportPDF: () => Promise<boolean>
-  exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => Promise<boolean>
+  exportHTML: (snapshot: { content: string; document: string; html: string; styles: string; bodyClass: string }) => Promise<boolean>
   exportDOCX: (payload: { content: string; images: Record<string, string> }) => Promise<boolean>
   exportImage: (snapshot: ImageExportSnapshot, preset: ImageExportPreset) => Promise<boolean>
   getLanguage: () => Promise<'zh' | 'en'>
@@ -77,7 +78,6 @@ export interface ElectronAPI {
   onSetCustomCSS: (callback: (css: string) => void) => void
   onMenuImportTheme: (callback: () => void) => void
   onSearch: (callback: () => void) => void
-  onMathModal: (callback: () => void) => void
   onFormatCommand: (callback: (id: string) => void) => void
   readClipboardText: () => Promise<string>
   onSiblingsChanged: (callback: (files: SiblingFile[]) => void) => void
@@ -115,8 +115,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listSiblings: () => ipcRenderer.invoke('list-siblings'),
   listDirectory: (path: string) => ipcRenderer.invoke('list-directory', path),
   openSibling: (path: string) => ipcRenderer.invoke('open-sibling', path),
-  activateFile: (path: string | null) => ipcRenderer.invoke('activate-file', path) as Promise<{ content: string; mtime: number } | null>,
+  activateFile: (path: string | null) => ipcRenderer.invoke('activate-file', path) as Promise<{ content: string; fileUrl: string; mtime: number } | null>,
   setTabFiles: (paths: string[]) => { ipcRenderer.send('set-tab-files', paths) },
+  fileUrl: (path: string) => ipcRenderer.invoke('file-url', path) as Promise<string | null>,
   onFocusFile: (callback: (path: string) => void) => {
     ipcRenderer.on('focus-file', (_event, path: string) => callback(path))
   },
@@ -126,7 +127,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (content: string, expectedPath?: string, rebuildMenu?: boolean, autosave?: boolean) => ipcRenderer.invoke('save-file', content, expectedPath, rebuildMenu, autosave),
   saveFileAs: (content: string, expectedPath?: string) => ipcRenderer.invoke('save-file-as', content, expectedPath),
   exportPDF: () => ipcRenderer.invoke('export-pdf'),
-  exportHTML: (snapshot: { content: string; html: string; styles: string; bodyClass: string }) => ipcRenderer.invoke('export-html', snapshot),
+  exportHTML: (snapshot: { content: string; document: string; html: string; styles: string; bodyClass: string }) => ipcRenderer.invoke('export-html', snapshot),
   exportDOCX: (payload: { content: string; images: Record<string, string> }) => ipcRenderer.invoke('export-docx', payload),
   exportImage: (snapshot: ImageExportSnapshot, preset: ImageExportPreset) => ipcRenderer.invoke('export-image', snapshot, preset),
   getLanguage: () => ipcRenderer.invoke('get-language') as Promise<'zh' | 'en'>,
@@ -210,9 +211,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onSearch: (callback: () => void) => {
     ipcRenderer.on('editor:search', () => callback())
-  },
-  onMathModal: (callback: () => void) => {
-    ipcRenderer.on('editor:math', () => callback())
   },
   onFormatCommand: (callback: (id: string) => void) => {
     ipcRenderer.on('editor:format', (_event, id: string) => callback(id))

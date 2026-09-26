@@ -19,11 +19,22 @@ const PRESETS: Record<ImageExportPreset, { width: number; height: number; paddin
   mobile: { width: 414, height: 896, padding: 28 },
 }
 
-// A captured surface can be at most 16384 device pixels on a side. Measured on
-// macOS: asking for 16384 comes back with an image, asking for 16800 comes back
-// empty. A document taller than that continues as numbered reading pages (the
-// behaviour before 2.5.0) instead of failing, so every document still exports.
+// A captured surface can be at most 16384 **device** pixels on a side. Measured
+// on macOS: asking for 16384 comes back with an image, asking for 16800 comes
+// back empty. A document taller than that continues as numbered reading pages
+// (the behaviour before 2.5.0) instead of failing, so every document still
+// exports.
 const MAX_CAPTURE_EDGE_PX = 16384
+
+/** 导出窗口的设备像素比。判据要用它换算，见 captureWholeDocument。 */
+async function devicePixelRatio(win: BrowserWindow): Promise<number> {
+  try {
+    const value = await win.webContents.executeJavaScript('window.devicePixelRatio')
+    return typeof value === 'number' && value > 0 ? value : 1
+  } catch {
+    return 1
+  }
+}
 
 // Every wait below used to be able to wait forever: a capture that never comes
 // back leaves the user with no window, no file and no message, which is exactly
@@ -55,10 +66,10 @@ function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): s
     *::-webkit-scrollbar { display: none !important; }
     #titlebar, #file-panel, #source-editor, #update-banner { display: none !important; }
     #editor { display: block !important; width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; margin: 0 !important; padding: ${padding}px !important; background: ${snapshot.background} !important; }
-    #editor .ProseMirror { width: auto !important; max-width: none !important; min-height: 0 !important; }
+    #editor .cm-content { width: auto !important; max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }
   </style>
 </head>
-<body class="${snapshot.bodyClass}"><div id="editor"><div class="ProseMirror">${snapshot.html}</div></div></body>
+<body class="${snapshot.bodyClass}"><div id="editor"><div class="cm-content">${snapshot.html}</div></div></body>
 </html>`
 }
 
@@ -72,7 +83,7 @@ interface PageDimensions {
 async function measureLayout(win: BrowserWindow): Promise<PageDimensions> {
   return win.webContents.executeJavaScript(`(() => {
     const editor = document.getElementById('editor')
-    const content = editor?.querySelector('.ProseMirror')
+    const content = editor?.querySelector('.cm-content')
     const editorBounds = editor?.getBoundingClientRect()
     const contentBounds = content?.getBoundingClientRect()
     const editorStyle = editor ? getComputedStyle(editor) : null
@@ -95,7 +106,7 @@ async function waitForLayout(win: BrowserWindow): Promise<PageDimensions> {
     })))
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     const editor = document.getElementById('editor')
-    const content = editor?.querySelector('.ProseMirror')
+    const content = editor?.querySelector('.cm-content')
     const editorBounds = editor?.getBoundingClientRect()
     const contentBounds = content?.getBoundingClientRect()
     const editorStyle = editor ? getComputedStyle(editor) : null
@@ -126,7 +137,11 @@ async function captureWholeDocument(
   dimensions: PageDimensions,
   viewportHeight: number
 ): Promise<Buffer | null> {
-  if (dimensions.height > MAX_CAPTURE_EDGE_PX) return null
+  // 判据必须换算成**设备像素**：同一个 CSS 高度在 2 倍屏上要的是两倍的表面。
+  // 这里原本拿 CSS 像素直接比 16384，等于在 2 倍屏上允许到 32768——超过真实上限的
+  // 文档会先报 UnknownVizError、再退回编号页，白等两次超时，而它本来就该直接走编号页。
+  const dpr = await devicePixelRatio(win)
+  if (dimensions.height * dpr > MAX_CAPTURE_EDGE_PX || dimensions.width * dpr > MAX_CAPTURE_EDGE_PX) return null
   try {
     await resizeAndSettle(win, dimensions.width, dimensions.height)
     const image = await withTimeout(

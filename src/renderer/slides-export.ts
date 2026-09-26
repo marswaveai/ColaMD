@@ -1,18 +1,19 @@
 // 导出幻灯片 PDF (File → Export Slides PDF).
 //
-// The same cut as the deck — the rendered document split at its thematic
-// breaks, so one `---` is one page — laid out as sheets instead of shown one at
-// a time. The main process owns the file and the dialog; this module owns the
-// page: it turns the editing surface into paper, measures where each page's
-// content sits on its sheet, and puts the editor back afterwards.
+// 一页就是一个 `---`，切法与放映共用一处：装饰层按语法树里的 HorizontalRule 给每一行
+// 打上页码类（`cm-md-page-N`，见 editor/live-preview.ts 的 collectPages）。这里不再自己
+// 数 DOM 的第几个孩子：CM6 会往正文里插 gap 元素，序号对不上。
 //
-// Nothing here touches the editor's DOM. A run of blocks after the first is
-// pushed onto its own sheet with `break-before`, and the empty space above it is
-// a `::before` spacer rather than a margin: a margin is exactly what print
-// layout is allowed to discard at a page break, and a padding would take the
-// block's own background with it.
+// 主进程负责文件和对话框；这个模块负责「把编辑面变成纸」：把窗口变成一张张 16:9 的纸，
+// 量出每页内容落在纸上的高度，然后还原。
+//
+// 它不动编辑器的 DOM。每页的第一行带 `break-before: page`，上方那片空白用 `::before`
+// 撑出来而不是 margin：margin 正是打印排版在分页处允许丢掉的东西，padding 又会把块自己
+// 的底色一起带走。
 
+import { PAGE_CLASS_PREFIX, PAGE_START_CLASS } from './editor/live-preview'
 import { deckPages } from './slideshow'
+import { renderWholeDocument, restoreViewport } from './print-layout'
 
 /** 16:9, the shape a projector expects and the shape the deck fills. */
 const PAGE_WIDTH_INCHES = 13.3333
@@ -43,6 +44,19 @@ declare global {
   }
 }
 
+function documentRoot(): HTMLElement | null {
+  return document.querySelector('#editor .cm-content') as HTMLElement | null
+}
+
+function scroller(): HTMLElement | null {
+  return document.querySelector('#editor .cm-scroller') as HTMLElement | null
+}
+
+function pageOfLine(line: Element): number | null {
+  const match = new RegExp(`(?:^|\\s)${PAGE_CLASS_PREFIX}(\\d+)(?:\\s|$)`).exec(line.className ?? '')
+  return match ? Number(match[1]) : null
+}
+
 function layoutRules(background: string): string {
   return `/* The sheet is the page: what margins exist in here are the document's own. */
 @page { size: ${PAGE_WIDTH_INCHES}in ${PAGE_HEIGHT_INCHES}in; margin: 0; background: ${background}; }
@@ -55,37 +69,36 @@ body.${PRINT_CLASS} #editor {
   padding: 0 !important;
   background: ${background} !important;
 }
-/* The wrapper is a flex column on screen; paper is a plain block, so that a
-   forced break between two blocks means what it says. */
-body.${PRINT_CLASS} #editor > .milkdown { display: block !important; min-height: 0 !important; }
-body.${PRINT_CLASS} #editor .ProseMirror {
-  width: min(${COLUMN_EM}em, ${Math.round(PAGE_WIDTH_PX * 0.86)}px);
+/* 纸是普通的块流：CM6 的编辑器/滚动容器都是 flex 或 auto 高度，强制断开的分页在
+   它们里面不会生效，所以这里把它们摊平成块。 */
+body.${PRINT_CLASS} #editor .cm-editor { height: auto !important; }
+body.${PRINT_CLASS} #editor .cm-scroller { display: block !important; height: auto !important; overflow: visible !important; }
+body.${PRINT_CLASS} #editor .cm-content {
+  display: block !important;
+  width: min(${COLUMN_EM}em, ${Math.round(PAGE_WIDTH_PX * 0.86)}px) !important;
   max-width: none !important;
   margin: 0 auto !important;
   padding: 0 !important;
   font-size: ${FONT_SIZE_PX}px !important;
   line-height: 1.6;
 }
-/* A separator is a page boundary, not a line of the document. */
-body.${PRINT_CLASS} #editor .ProseMirror > hr { display: none !important; }
+/* 分隔线是分页边界，不是正文里的一行。 */
+body.${PRINT_CLASS} #editor .cm-line.cm-md-hr { display: none !important; }
 /* Nothing may be cut off at the sheet's edge: code and cells wrap, a diagram or
    a photo shrinks to fit the page it landed on. */
-body.${PRINT_CLASS} #editor .ProseMirror pre { white-space: pre-wrap !important; overflow: visible !important; overflow-wrap: anywhere !important; }
-body.${PRINT_CLASS} #editor .ProseMirror th, body.${PRINT_CLASS} #editor .ProseMirror td { overflow-wrap: anywhere !important; word-break: break-word !important; }
-body.${PRINT_CLASS} #editor .ProseMirror img, body.${PRINT_CLASS} #editor .ProseMirror svg { max-height: ${Math.round(PAGE_HEIGHT_PX * 0.72)}px; }
+body.${PRINT_CLASS} #editor .cm-md-codeblock { white-space: pre-wrap !important; overflow-wrap: anywhere !important; }
+body.${PRINT_CLASS} #editor .cm-md-table-widget th, body.${PRINT_CLASS} #editor .cm-md-table-widget td { overflow-wrap: anywhere !important; word-break: break-word !important; }
+body.${PRINT_CLASS} #editor img, body.${PRINT_CLASS} #editor svg { max-height: ${Math.round(PAGE_HEIGHT_PX * 0.72)}px; }
 `
 }
 
 // Turn the window into sheets and remember the page size, or return false when
 // there is nothing to export (no editor, no document).
-export function enterPrintLayout(): SlidesSheet | false {
+export async function enterPrintLayout(): Promise<SlidesSheet | false> {
   if (sheetStyle) return { width: PAGE_WIDTH_INCHES, height: PAGE_HEIGHT_INCHES }
-  const root = document.querySelector('#editor .ProseMirror') as HTMLElement | null
+  const root = documentRoot()
   if (!root) return false
-  const deck = deckPages()
-  if (deck.length === 0) return false
 
-  const children = Array.from(root.children)
   const background = getComputedStyle(document.body).backgroundColor
   const sheet = document.createElement('style')
   sheet.id = STYLE_ID
@@ -93,28 +106,41 @@ export function enterPrintLayout(): SlidesSheet | false {
   document.head.appendChild(sheet)
   document.body.classList.add(PRINT_CLASS)
   sheetStyle = sheet
-  restoreScrollTop = (document.getElementById('editor') as HTMLElement | null)?.scrollTop ?? 0
+  restoreScrollTop = scroller()?.scrollTop ?? 0
 
-  // Measure on paper, never on screen: a run's height depends on the width and
+  // Measure on paper, never on screen: a page's height depends on the width and
   // the type size it is printed at, and this read is what makes the rules above
   // take effect before anything is measured.
   root.getBoundingClientRect()
 
+  // 摊平之后还要等 CodeMirror 把整篇渲染出来。页数和页高都要量在整篇上：
+  // 不等这一步，长文档只有视口里那几页，后面的页根本不在 DOM 里（2026-09-26 报的）。
+  await renderWholeDocument()
+
+  const deck = deckPages()
+  if (deck.length === 0) {
+    exitPrintLayout()
+    return false
+  }
+
   const rules: string[] = []
-  deck.forEach((entry, index) => {
-    const first = children[entry.start] as HTMLElement | undefined
-    const last = children[entry.end] as HTMLElement | undefined
+  deck.forEach((page, order) => {
+    const first = root.querySelector(`.${PAGE_CLASS_PREFIX}${page}.${PAGE_START_CLASS}`) as HTMLElement | null
+    const lines = Array.from(root.children).filter(
+      (line) => pageOfLine(line) === page && !line.classList.contains('cm-md-hr'),
+    ) as HTMLElement[]
+    const last = lines[lines.length - 1]
     if (!first || !last) return
-    // The first block is measured without its own margin (a border box has
-    // none), yet that margin is on the page as well.
+    // The first line is measured without its own margin (a border box has none),
+    // yet that margin is on the page as well.
     const ownMargin = parseFloat(getComputedStyle(first).marginTop)
     const owned = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top
     const used = owned + (Number.isFinite(ownMargin) ? ownMargin : 0)
     const above = Math.max(0, Math.floor((PAGE_HEIGHT_PX - SAFETY_PX - used) / 2))
-    const target = `body.${PRINT_CLASS} #editor .ProseMirror > :nth-child(${entry.start + 1})`
-    if (index > 0) rules.push(`${target} { break-before: page; }`)
+    const target = `.cm-content > .${PAGE_CLASS_PREFIX}${page}.${PAGE_START_CLASS}`
+    if (order > 0) rules.push(`body.${PRINT_CLASS} #editor ${target} { break-before: page; }`)
     if (above > 0) {
-      rules.push(`${target}::before { content: ''; display: block; height: ${above}px; }`)
+      rules.push(`body.${PRINT_CLASS} #editor ${target}::before { content: ''; display: block; height: ${above}px; }`)
     }
   })
 
@@ -123,10 +149,11 @@ export function enterPrintLayout(): SlidesSheet | false {
 }
 
 export function exitPrintLayout(): void {
+  restoreViewport()
   if (!sheetStyle) return
   sheetStyle.remove()
   sheetStyle = null
   document.body.classList.remove(PRINT_CLASS)
-  const editor = document.getElementById('editor') as HTMLElement | null
-  if (editor) editor.scrollTop = restoreScrollTop
+  const scroll = scroller()
+  if (scroll) scroll.scrollTop = restoreScrollTop
 }

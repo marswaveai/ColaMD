@@ -1,18 +1,22 @@
-import { createEditor, flashHeadingOnArrival, focusEditor, getMarkdown, onEditorJumpPhase, setMarkdown, setEditorEditable, showMathModal, setMathModalLanguage, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, type FormatCommandId } from './editor/editor'
+import { createEditor, focusEditor, getMarkdown, getEditorView, getEditorScroller, onEditorJumpPhase, setMarkdown, setEditorEditable, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, jumpToLine, setCleanExport, setDocumentFileUrl, type FormatCommandId } from './editor/editor'
 import { markdownForWord } from './editor/mermaid-export'
+import { documentHTMLFrom } from './editor/clean-html'
 import { isPresenting, startSlideshow, stopSlideshow } from './slideshow'
 import { enterPrintLayout, exitPrintLayout } from './slides-export'
-import { detectMarkdownStyle } from './editor/markdown-style'
-import { splitFrontmatter } from './editor/frontmatter'
+import { enterPaperLayout, exitPaperLayout } from './print-layout'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { setUiLanguage, isChinese, type UiLanguage } from './ui-language'
 import { applyEditorFont, loadSavedEditorFont, showFontSettingsModal } from './editor/font-settings'
 import './themes/base.css'
 import './themes/premium.css'
+import './themes/editor-preview.css'
+import './themes/document.css'
 
 let sourceModeActive = false
 const editorEl = () => document.getElementById('editor') as HTMLElement
+// 正文的滚动在 .cm-scroller 上，不在 #editor 上；见 editor.ts 的 getEditorScroller。
+const editorScroller = () => getEditorScroller() ?? editorEl()
 const sourceEl = () => document.getElementById('source-editor') as HTMLTextAreaElement
 const filePanelEl = () => document.getElementById('file-panel') as HTMLElement
 const fileListEl = () => document.getElementById('file-list') as HTMLElement
@@ -29,6 +33,8 @@ const updateBannerActionEl = () => document.getElementById('update-banner-action
 
 // --- Same-directory file panel ---
 let currentFilePath: string | null = null
+// 当前文档的 file:// URL：图片的相对路径按它解析（文件里存的那串路径不动）。
+let currentFileUrl: string | null = null
 let fileManagerName: import('../preload/index').FileManagerName = 'file-manager'
 let dirty = false
 // The active document's YAML frontmatter. It is carried here instead of inside
@@ -256,7 +262,7 @@ interface DocumentTab {
   content: string
   frontmatter: string
   lineEnding: string
-  editorState: import('@milkdown/kit/prose/state').EditorState | null
+  editorState: import('@codemirror/state').EditorState | null
   diskContent: string | null
   scrollTop: number
 }
@@ -308,7 +314,7 @@ function captureActiveTab(): void {
     tab.scrollTop = sourceEl().scrollTop
   } else {
     tab.editorState = getEditorState()
-    tab.scrollTop = editorEl().scrollTop
+    tab.scrollTop = editorScroller().scrollTop
   }
 }
 
@@ -494,7 +500,7 @@ function showBlankDocument(): void {
   updatePanelVisibility()
   void refreshSiblings()
   scheduleOutlineUpdate()
-  editorEl().scrollTop = 0
+  editorScroller().scrollTop = 0
   sourceEl().scrollTop = 0
 }
 
@@ -553,6 +559,7 @@ async function openNewTab(): Promise<void> {
   tabs.push(tab)
   activeTabId = tab.id
   currentFilePath = null
+  applyDocumentFileUrl(null)
   // Tell the main process the window is now on an untitled document, otherwise
   // its notion of the active file still points at the previous tab's file.
   await window.electronAPI.activateFile(null)
@@ -560,6 +567,24 @@ async function openNewTab(): Promise<void> {
   renderTabBar()
   // The new tab exists to be typed in, so the caret goes there without a click.
   focusEditor()
+}
+
+/**
+ * 换文档时告诉编辑器新的图片基准 URL。
+ *
+ * 文件里写的是相对路径，浏览器要的是绝对地址；解析在画图那一刻做，
+ * 这样保存时写回去的还是用户原本写的那串字符。
+ */
+function applyDocumentFileUrl(url: string | null): void {
+  if (url === currentFileUrl) return
+  currentFileUrl = url
+  setDocumentFileUrl(url)
+}
+
+/** 路径刚变过（另存为、自动保存落盘）时，问主进程要一次 URL。 */
+async function refreshDocumentFileUrl(): Promise<void> {
+  const url = currentFilePath ? await window.electronAPI.fileUrl(currentFilePath) : null
+  applyDocumentFileUrl(url)
 }
 
 async function activateTab(id: string): Promise<void> {
@@ -577,13 +602,12 @@ async function activateTab(id: string): Promise<void> {
     // changed while this tab sat in the background. An untitled tab passes null
     // so the window stops pointing at the tab we are leaving.
     const disk = await window.electronAPI.activateFile(target.filePath)
+    applyDocumentFileUrl(disk?.fileUrl ?? null)
     // This document may have been written in a different style than the one we
-    // are leaving; restore its own serialiser style with its content.
-    // The tab's own properties block comes back with it, and the style probe
-    // reads the document without it: a line of YAML is not Markdown emphasis.
+    // are leaving; its content comes back with it, and the style lives in the
+    // content itself, so there is nothing to restore separately.
     activeFrontmatter = target.frontmatter
     activeLineEnding = target.lineEnding
-    applyMarkdownStyle(detectMarkdownStyle(splitFrontmatter(target.content).body))
     activeTabId = target.id
     currentFilePath = target.filePath
     documentRevision = target.revision
@@ -625,7 +649,7 @@ async function activateTab(id: string): Promise<void> {
     scheduleOutlineUpdate()
     const restoreScroll = (): void => {
       if (target.sourceMode) sourceEl().scrollTop = target.scrollTop
-      else editorEl().scrollTop = target.scrollTop
+      else editorScroller().scrollTop = target.scrollTop
     }
     restoreScroll()
     requestAnimationFrame(restoreScroll)
@@ -858,6 +882,7 @@ async function runAutosave(): Promise<void> {
   // on disk since our last read or write, and ask the user instead.
   const path = await enqueueSave(() => window.electronAPI.saveFile(content, filePath, false, true))
   if (path && revision === documentRevision && currentFilePath === filePath) {
+    if (path !== filePath) void refreshDocumentFileUrl()
     currentFilePath = path
     clearDirty()
     noteTabSaved(content)
@@ -876,6 +901,7 @@ async function saveCurrent(saveAs = false): Promise<boolean> {
     : window.electronAPI.saveFile(content, expectedPath ?? '', true))
   if (!path || currentFilePath !== expectedPath) return false
 
+  if (path !== expectedPath) void refreshDocumentFileUrl()
   currentFilePath = path
   updateFileTitle()
   refreshSiblings()
@@ -984,10 +1010,10 @@ function toggleSourceMode(): void {
     // Source → WYSIWYG: re-parse the textarea content back into the editor
     exitSourceMode()
     setMarkdownProgrammatically(sourceEl().value)
-    restoreScrollRatio(editorEl(), ratio)
+    restoreScrollRatio(editorScroller(), ratio)
   } else {
     // WYSIWYG → Source: serialize the current editor content into the textarea
-    enterSourceMode(getMarkdown(), scrollRatio(editorEl()))
+    enterSourceMode(getMarkdown(), scrollRatio(editorScroller()))
   }
   updateWordCount()
   scheduleOutlineUpdate()
@@ -1015,7 +1041,6 @@ function setPanelMode(mode: 'files' | 'outline'): void {
 interface OutlineItem {
   level: number
   title: string
-  element?: HTMLElement
   line?: number
 }
 
@@ -1028,10 +1053,13 @@ function sourceOutline(content: string): OutlineItem[] {
   })
 }
 
+// 大纲从源码文本里读，不从渲染后的 DOM 里找。
+//
+// 旧实现是查 `#editor .ProseMirror h1…h6`，因为 ProseMirror 会把标题渲成真的 <h1> 标签。
+// CodeMirror 不这样做：标题只是带上装饰的一行文本。从文本解析本来就更该是对的做法，
+// 它跟「怎么画」无关，读源码模式与视觉模式能用同一份逻辑。
 function visualOutline(): OutlineItem[] {
-  return Array.from(document.querySelectorAll<HTMLElement>('#editor .ProseMirror h1, #editor .ProseMirror h2, #editor .ProseMirror h3, #editor .ProseMirror h4, #editor .ProseMirror h5, #editor .ProseMirror h6'))
-    .map((element) => ({ level: Number(element.tagName.slice(1)), title: element.textContent?.trim() ?? '', element }))
-    .filter((item) => item.title)
+  return sourceOutline(getMarkdown())
 }
 
 function outlineVisible(): boolean {
@@ -1061,22 +1089,22 @@ function renderOutline(): void {
     button.title = item.title
     button.style.paddingLeft = `${8 + (item.level - 1) * 12}px`
     button.addEventListener('click', () => {
-      // Re-resolve the entry against the live DOM: cached element references
-      // die when the editor content is re-set (#64).
+      // Re-resolve the entry against the live text: cached references die when
+      // the editor content is re-set (#64).
       const current = (sourceModeActive ? sourceOutline(sourceEl().value) : visualOutline())[index]
       if (!current) return
-      if (current.element) {
-        // flashHeadingOnArrival signals the jump phase, which engages the
-        // outline jump lock for visual-mode jumps.
-        current.element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        flashHeadingOnArrival(current.element)
-      } else if (current.line !== undefined) {
+      if (sourceModeActive) {
         beginOutlineJump()
         const source = sourceEl()
         const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight) || 24
-        source.scrollTop = Math.max(0, current.line * lineHeight - lineHeight)
+        source.scrollTop = Math.max(0, (current.line ?? 0) * lineHeight - lineHeight)
         source.focus()
-        revealSourceHeading(source, current.line)
+        revealSourceHeading(source, current.line ?? 0)
+      } else if (current.line !== undefined) {
+        // 视觉模式：交给编辑器自己跳，它会同时把光标放过去。
+        // flashHeadingOnArrival 的信号靠编辑器内部的落点装饰发出，这里只管跳。
+        beginOutlineJump()
+        jumpToLine(current.line)
       }
       setActiveOutlineIndex(index)
     })
@@ -1116,7 +1144,7 @@ function revealOutlineEntry(button: HTMLButtonElement): void {
 function beginOutlineJump(): void {
   outlineJumping = true
   if (outlineJumpTimer) clearTimeout(outlineJumpTimer)
-  outlineJumpStartTop = (sourceModeActive ? sourceEl() : editorEl()).scrollTop
+  outlineJumpStartTop = (sourceModeActive ? sourceEl() : editorScroller()).scrollTop
   // scrollend releases the lock earlier; this fallback exists for the
   // no-scroll case. Re-arming while the position keeps changing keeps long
   // smooth jumps locked for their whole duration (review on #68).
@@ -1125,7 +1153,7 @@ function beginOutlineJump(): void {
 
 function releaseOutlineJumpIfSettled(): void {
   if (!outlineJumping) return
-  const top = (sourceModeActive ? sourceEl() : editorEl()).scrollTop
+  const top = (sourceModeActive ? sourceEl() : editorScroller()).scrollTop
   if (top !== outlineJumpStartTop) {
     outlineJumpStartTop = top
     outlineJumpTimer = setTimeout(releaseOutlineJumpIfSettled, 400)
@@ -1168,22 +1196,24 @@ function syncOutlineActive(): void {
   setActiveOutlineIndex(sourceModeActive ? sourceActiveIndex() : visualActiveIndex())
 }
 
+// 视觉模式下的阅读进度：拿每一条标题所在行在正文坐标系里的位置，跟视口顶部比。
+//
+// 旧实现找的是 DOM 里的 <h1>…<h6> 元素（ProseMirror 会把标题渲成真标签）。CodeMirror 不产
+// 生这些元素，标题只是带装饰的一行文字，所以改成用编辑器自己的行位置来算：
+// lineBlockAt 给出行在正文坐标系里的 top，减去滚动量就是它相对视口的位置。
 function visualActiveIndex(): number {
-  const container = editorEl()
+  const view = getEditorView()
+  if (!view) return -1
+  const container = editorScroller()
   const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 2
   if (atBottom) return outlineItems.length - 1
-  const threshold = container.getBoundingClientRect().top + Math.min(96, container.clientHeight * 0.2)
-  // Cached references are refreshed by renderOutline; the loop stops at the
-  // first heading below the viewport top, so steady-state scrolling only
-  // touches the entries it activates. Fall back to a live query when a cached
-  // node went missing (content re-set mid-frame) — a detached node must never
-  // win the race (#64).
-  const items = outlineItems.some((item) => !item.element?.isConnected) ? visualOutline() : outlineItems
+  const threshold = Math.min(96, container.clientHeight * 0.2)
   let index = -1
-  for (let i = 0; i < items.length; i += 1) {
-    const element = items[i].element
-    if (!element || !element.isConnected) continue
-    if (element.getBoundingClientRect().top > threshold) break
+  for (let i = 0; i < outlineItems.length; i += 1) {
+    const line = outlineItems[i].line
+    if (line === undefined || line >= view.state.doc.lines) continue
+    const top = view.lineBlockAt(view.state.doc.line(line + 1).from).top
+    if (top - container.scrollTop > threshold) break
     index = i
   }
   return index
@@ -1425,24 +1455,22 @@ function exitSourceMode(): void {
 
 const LARGE_DOCUMENT_SOURCE_THRESHOLD = 512 * 1024
 
-// A whole file arrives from disk: an open, or a reload after an external write.
-// Keep its properties block beside the document and hand the editor the rest.
+// 一份完整的文件从磁盘到达：打开，或外部改写之后的重载。
+//
+// 文本优先之后属性区不再需要拆出来单独保管：它本来就是正文开头的几行，编辑器原样
+// 拿着它，保存时原样写回去。这个函数现在只做一件事：记下行尾。
 function takeFrontmatter(fileText: string): string {
-  const split = splitFrontmatter(fileText)
-  activeFrontmatter = split.frontmatter
+  activeFrontmatter = ''
   activeLineEnding = fileText.includes('\r\n') ? '\r\n' : '\n'
-  return split.body
+  return fileText
 }
 
 function setContent(content: string, flushHistory = false): void {
   const body = takeFrontmatter(content)
-  // Follow the incoming document's Markdown style before it is parsed, so a
-  // save writes the same markers the file already used.
-  const detectedStyle = detectMarkdownStyle(body)
-  applyMarkdownStyle(detectedStyle)
   if (body.length >= LARGE_DOCUMENT_SOURCE_THRESHOLD) {
-    // ProseMirror renders the whole document eagerly. Keep very large files in
-    // the existing source editor so opening them stays responsive on Windows.
+    // 装饰层是**整篇**重算的（live-preview 的 StateField），半兆以上的文档每次敲键都要
+    // 重算一遍全篇，打字会卡。所以超大文件仍然进源码模式——渲染不参与，编辑就快。
+    // （旧核心的理由是「ProseMirror 会把整篇渲染出来」，那条早就不成立了。）
     enterSourceMode(body)
     updateWordCount(body)
     return
@@ -1464,9 +1492,48 @@ function getFileContent(): string {
   return activeFrontmatter + (activeLineEnding === '\r\n' ? body.replace(/\r?\n/g, '\r\n') : body)
 }
 
+/**
+ * 导出前把编辑器的痕迹收起来，导出后放回去。
+ *
+ * 「痕迹」有两样：光标所在那一行会显形源码（光标停在标题上，导出的就是 `# 标题`），
+ * 以及光标与选区本身。两样都不是文档的内容。
+ */
+async function withCleanExport<T>(run: () => Promise<T>): Promise<T> {
+  setCleanExport(true)
+  document.body.classList.add('exporting')
+  try {
+    return await run()
+  } finally {
+    setCleanExport(false)
+    document.body.classList.remove('exporting')
+  }
+}
+
+/**
+ * 导出前把窗口摆成「纸」，导完收回去。
+ *
+ * 两件事：
+ * ① 藏起编辑器的痕迹：当前行不再显形源码（状态层开关），光标、选区、属性区由
+ *    `body.exporting` 交给 CSS。导出的是一篇文档，不是编辑器此刻的样子。
+ * ② 摊平成块流，等 CodeMirror 把整篇渲染出来。不做这一步，快照里只有当前视口那一屏。
+ */
+async function withExportLayout<T>(run: () => Promise<T>): Promise<T> {
+  setCleanExport(true)
+  document.body.classList.add('exporting')
+  try {
+    await enterPaperLayout()
+    return await run()
+  } finally {
+    exitPaperLayout()
+    setCleanExport(false)
+    document.body.classList.remove('exporting')
+  }
+}
+
 function getExportSnapshot(content: string): {
   content: string
   html: string
+  document: string
   styles: string
   bodyClass: string
   background: string
@@ -1479,11 +1546,17 @@ function getExportSnapshot(content: string): {
       // Ignore stylesheets that the browser marks as inaccessible.
     }
   }
+  const editorRoot = document.querySelector<HTMLElement>('#editor .cm-content')
   return {
     content,
-    html: document.querySelector('#editor .ProseMirror')?.innerHTML ?? '',
+    // 图片与 PDF 导出要的是「和屏幕上一模一样」，所以仍旧交编辑器那份 DOM；
+    // HTML 导出交的是**一篇文档**：语义标签，没有编辑器自己的类名和行结构。
+    html: editorRoot?.innerHTML ?? '',
+    document: editorRoot ? documentHTMLFrom(editorRoot) : '',
     styles,
-    bodyClass: Array.from(document.body.classList).filter((name) => name !== 'show-file-panel').join(' '),
+    bodyClass: Array.from(document.body.classList)
+      .filter((name) => name !== 'show-file-panel' && name !== 'paper')
+      .join(' '),
     background: getComputedStyle(document.body).backgroundColor,
   }
 }
@@ -1505,7 +1578,7 @@ async function exportCurrentHTML(): Promise<void> {
     })
   }
 
-  await window.electronAPI.exportHTML(getExportSnapshot(content))
+  await withExportLayout(() => window.electronAPI.exportHTML(getExportSnapshot(content)))
 
   if (wasSourceMode) {
     enterSourceMode(content, sourceScrollRatio)
@@ -1525,7 +1598,7 @@ async function exportCurrentImage(preset: 'desktop' | 'mobile'): Promise<void> {
     })
   }
 
-  await window.electronAPI.exportImage(getExportSnapshot(content), preset)
+  await withExportLayout(() => window.electronAPI.exportImage(getExportSnapshot(content), preset))
 
   if (wasSourceMode) enterSourceMode(content, sourceScrollRatio)
 }
@@ -1547,6 +1620,31 @@ window.__colamdSlidesExport = {
     return enterPrintLayout()
   },
   exit: () => exitPrintLayout()
+}
+
+// 导出 PDF 打印的是**这个窗口本身**（主进程直接 printToPDF），所以两件事都得在
+// 打印前做完：当前行的源码、光标、选区不该上纸；而且必须先把整篇渲染出来，
+// 否则纸上只有当前视口那一屏（长文档导出截断的根因）。主进程 await 这个钩子。
+/**
+ * 导出 HTML 的那份内容。
+ *
+ * 导出要弹系统保存框，无头环境点不了，所以把「会被写进文件的那段 HTML」单独露出来：
+ * 验收脚本（scripts/verify-features.mjs）拿它检查语义标签。只读，不改任何状态。
+ */
+window.__colamdExportDocumentHTML = (): string => {
+  const root = document.querySelector<HTMLElement>('#editor .cm-content')
+  return root ? documentHTMLFrom(root) : ''
+}
+
+window.__colamdPrintExport = {
+  enter: async () => {
+    setCleanExport(true)
+    await enterPaperLayout()
+  },
+  exit: () => {
+    exitPaperLayout()
+    setCleanExport(false)
+  }
 }
 
 // 放映幻灯片: the pages are the editor's own blocks, so the document has to be
@@ -1616,9 +1714,16 @@ async function init(): Promise<void> {
 
   const searchPanel = new SearchPanel()
   searchPanel.setLanguage(language)
-  setMathModalLanguage(language)
   api.onSearch(() => searchPanel.show())
-  api.onMathModal(() => showMathModal())
+  // Cmd/Ctrl+F 在页面这一层也接一次：菜单的快捷键是主路径（macOS 上由菜单先接走），
+  // 但菜单被隐藏或平台不转发快捷键时，这个兜底能保证打开的仍是**我们自己的**面板，
+  // 而不是 CodeMirror 自带那块只有英文的（它已经从编辑器扩展里摘掉了）。
+  document.addEventListener('keydown', (event) => {
+    if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return
+    if (event.key.toLowerCase() !== 'f') return
+    event.preventDefault()
+    searchPanel.show()
+  })
   api.onFormatCommand((id) => runFormatCommand(id as FormatCommandId))
   updateUiLanguage()
 
@@ -1754,6 +1859,7 @@ async function init(): Promise<void> {
     // lands in the first tab rather than creating a second one.
     ensureTab()
     currentFilePath = data.path
+    applyDocumentFileUrl(data.fileUrl ?? null)
     dirty = false
     const tab = activeTab()
     if (tab) {
@@ -1765,7 +1871,7 @@ async function init(): Promise<void> {
     resetDirty()
     setContent(data.content, true)
     const resetScroll = () => {
-      editorEl().scrollTop = 0
+      editorScroller().scrollTop = 0
       sourceEl().scrollTop = 0
     }
     resetScroll()
@@ -1816,7 +1922,6 @@ async function init(): Promise<void> {
   api.onLanguageChanged((language: UiLanguage) => {
     setUiLanguage(language)
     searchPanel.setLanguage(language)
-    setMathModalLanguage(language)
     updateUiLanguage()
     // Tab labels and the close tooltip are built in the current language.
     renderTabBar()

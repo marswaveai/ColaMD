@@ -22,31 +22,6 @@ body.theme-sepia {
   --selection-bg: rgba(160, 98, 45, 0.15);
   --highlight-bg: #f2dfa8;
 }
-
-body.theme-sepia #editor .ProseMirror {
-  font-family: Georgia, 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', serif;
-  line-height: 1.85;
-}
-
-body.theme-sepia #editor .ProseMirror h1 {
-  text-align: center;
-  border-bottom: none;
-  letter-spacing: 0.02em;
-}
-
-body.theme-sepia #editor .ProseMirror h2 {
-  border-bottom-style: dashed;
-}
-
-body.theme-sepia #editor .ProseMirror blockquote {
-  background: var(--blockquote-bg);
-  padding: 14px 20px 14px 24px;
-}
-
-body.theme-sepia #editor .ProseMirror code {
-  color: #7a5a33;
-}
-
 /* ---------- 简白 Notion ----------
    Clean minimal workspace. Warm off-black text on white,
    restrained borders, nothing decorative. */
@@ -64,35 +39,6 @@ body.theme-notion {
   --selection-bg: rgba(35, 131, 226, 0.14);
   --highlight-bg: #fdecc8;
 }
-
-body.theme-notion #editor .ProseMirror a {
-  text-decoration: underline;
-  text-decoration-color: #9b9a97;
-  text-underline-offset: 2px;
-}
-
-body.theme-notion #editor .ProseMirror a:hover {
-  text-decoration-color: #37352f;
-}
-
-body.theme-notion #editor .ProseMirror h1,
-body.theme-notion #editor .ProseMirror h2 {
-  border-bottom: none;
-  padding-bottom: 0;
-  font-weight: 700;
-}
-
-body.theme-notion #editor .ProseMirror code {
-  color: #eb5757;
-  background: #f7f6f3;
-}
-
-body.theme-notion #editor .ProseMirror table th,
-body.theme-notion #editor .ProseMirror table td {
-  border-left: none;
-  border-right: none;
-}
-
 /* ---------- 熊红 Bear ----------
    Bear's signature warmth: crisp white, near-black ink,
    confident red accent threading through links and marks. */
@@ -111,24 +57,6 @@ body.theme-bear {
   --selection-bg: rgba(212, 61, 42, 0.12);
   --highlight-bg: #ffe9a8;
 }
-
-body.theme-bear #editor .ProseMirror strong {
-  color: #d43d2a;
-}
-
-body.theme-bear #editor .ProseMirror code {
-  color: #d43d2a;
-}
-
-body.theme-bear #editor .ProseMirror h1 {
-  letter-spacing: -0.01em;
-}
-
-body.theme-bear #editor .ProseMirror hr {
-  border-top-color: #d43d2a;
-  opacity: 0.35;
-}
-
 /* ---------- 作家 Writer ----------
    iA Writer homage: monospace body, zero decoration,
    the text itself is the interface. */
@@ -146,31 +74,6 @@ body.theme-writer {
   --selection-bg: rgba(59, 110, 196, 0.15);
   --highlight-bg: #fff3a3;
 }
-
-body.theme-writer #editor .ProseMirror {
-  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, 'PingFang SC', 'Noto Sans SC', monospace;
-  font-size: 15px;
-  line-height: 1.8;
-}
-
-body.theme-writer #editor .ProseMirror h1,
-body.theme-writer #editor .ProseMirror h2,
-body.theme-writer #editor .ProseMirror h3 {
-  font-weight: 700;
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-body.theme-writer #editor .ProseMirror blockquote {
-  border-left-width: 3px;
-  font-style: normal;
-}
-
-body.theme-writer #editor .ProseMirror table th,
-body.theme-writer #editor .ProseMirror table td {
-  font-size: 0.9em;
-}
-
 /* ---------- 夜航 Solarized Dark ----------
    The dark half of Solarized: deep teal-black sea,
    muted cyan text, stars of orange and blue. */
@@ -188,22 +91,6 @@ body.theme-solarized-dark {
   --selection-bg: rgba(38, 139, 210, 0.25);
   --highlight-bg: rgba(181, 137, 0, 0.3);
 }
-
-body.theme-solarized-dark #editor .ProseMirror h1,
-body.theme-solarized-dark #editor .ProseMirror h2,
-body.theme-solarized-dark #editor .ProseMirror h3,
-body.theme-solarized-dark #editor .ProseMirror h4 {
-  color: #93a1a1;
-}
-
-body.theme-solarized-dark #editor .ProseMirror strong {
-  color: #cb4b16;
-}
-
-body.theme-solarized-dark #editor .ProseMirror code {
-  color: #2aa198;
-}
-
 /* ---------- 极地 Nord ----------
    Arctic night. Cool blue-grays, frost-cyan links,
    calm and focused like a Scandinavian winter. */
@@ -221,25 +108,6 @@ body.theme-nord {
   --selection-bg: rgba(136, 192, 208, 0.2);
   --highlight-bg: rgba(235, 203, 139, 0.25);
 }
-
-body.theme-nord #editor .ProseMirror h1,
-body.theme-nord #editor .ProseMirror h2,
-body.theme-nord #editor .ProseMirror h3 {
-  color: #eceff4;
-}
-
-body.theme-nord #editor .ProseMirror strong {
-  color: #8fbcbb;
-}
-
-body.theme-nord #editor .ProseMirror code {
-  color: #88c0d0;
-}
-
-body.theme-nord #editor .ProseMirror blockquote {
-  color: #aeb9c9;
-}
-
 /* ---------- 暖木 Gruvbox ----------
    Retro groove: warm walnut dark, cream text,
    orange ember accents. A cabin desk lamp at night. */
@@ -257,29 +125,6 @@ body.theme-gruvbox {
   --selection-bg: rgba(254, 128, 25, 0.2);
   --highlight-bg: rgba(250, 189, 47, 0.22);
 }
-
-body.theme-gruvbox #editor .ProseMirror h1,
-body.theme-gruvbox #editor .ProseMirror h2,
-body.theme-gruvbox #editor .ProseMirror h3 {
-  color: #fbf1c7;
-}
-
-body.theme-gruvbox #editor .ProseMirror strong {
-  color: #fe8019;
-}
-
-body.theme-gruvbox #editor .ProseMirror code {
-  color: #b8bb26;
-}
-
-body.theme-gruvbox #editor .ProseMirror blockquote {
-  color: #bdae93;
-}
-
-body.theme-gruvbox #editor .ProseMirror hr {
-  border-top-color: #504945;
-}
-
 /* ---------- 德古拉 Dracula ----------
    Gothic neon: dark castle walls with pink, purple,
    and cyan candlelight. Playful but disciplined. */
@@ -297,25 +142,6 @@ body.theme-dracula {
   --selection-bg: rgba(189, 147, 249, 0.25);
   --highlight-bg: rgba(241, 250, 140, 0.22);
 }
-
-body.theme-dracula #editor .ProseMirror h1,
-body.theme-dracula #editor .ProseMirror h2,
-body.theme-dracula #editor .ProseMirror h3 {
-  color: #ffffff;
-}
-
-body.theme-dracula #editor .ProseMirror strong {
-  color: #ff79c6;
-}
-
-body.theme-dracula #editor .ProseMirror code {
-  color: #8be9fd;
-}
-
-body.theme-dracula #editor .ProseMirror blockquote {
-  color: #c3c8e0;
-}
-
 /* ---------- 午夜 Midnight ----------
    Pure OLED black. Apple-style dark-mode blue links,
    hairline borders, maximum contrast for late nights. */
@@ -332,18 +158,4 @@ body.theme-midnight {
   --table-header-bg: #111111;
   --selection-bg: rgba(10, 132, 255, 0.28);
   --highlight-bg: rgba(255, 214, 10, 0.25);
-}
-
-body.theme-midnight #editor .ProseMirror h1,
-body.theme-midnight #editor .ProseMirror h2,
-body.theme-midnight #editor .ProseMirror h3 {
-  color: #f5f5f5;
-}
-
-body.theme-midnight #editor .ProseMirror blockquote {
-  color: #9a9a9a;
-}
-
-body.theme-midnight #editor .ProseMirror hr {
-  border-top-width: 1px;
 }

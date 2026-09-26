@@ -39,6 +39,8 @@ export function applyTheme(name: string, customCSS?: string): void {
     body.classList.add(themes[name])
   }
 
+  applyCodePalette()
+
   // Persist theme choice
   localStorage.setItem('colamd-theme', name)
 
@@ -92,6 +94,36 @@ function painted(color: string, background: string): string {
     // window controls invisible.
     return color
   }
+}
+
+/**
+ * 代码块里的语法着色用哪一套配色。
+ *
+ * 判据是**代码块底色的明暗**，不是主题的明暗：elegant 和 bear 是浅色主题却配深色
+ * 代码块，跟着主题走会得到浅底浅字。这跟 Mermaid 图挑配色是同一条规则
+ * （见 editor/mermaid-bridge.ts），所以两处看起来才是一致的。
+ *
+ * 只在 body 上换一个类，颜色本身留在 base.css 里：颜色属于主题，判断属于这里。
+ */
+function applyCodePalette(): void {
+  const bg = getComputedStyle(document.body).getPropertyValue('--code-block-bg').trim()
+  document.body.classList.toggle('code-palette-light', !isDarkSurface(bg))
+}
+
+/** 底色算亮还是暗（sRGB 亮度）。认不出来时按深色算：内置主题里深色代码块是多数。 */
+function isDarkSurface(color: string): boolean {
+  const hex = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  let channels: number[] | null = null
+  if (hex) {
+    const digits = hex[1].length === 3 ? hex[1].replace(/./g, (c) => c + c) : hex[1]
+    channels = [0, 2, 4].map((i) => parseInt(digits.slice(i, i + 2), 16))
+  } else {
+    const rgb = color.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i)
+    if (rgb) channels = [rgb[1], rgb[2], rgb[3]].map(Number)
+  }
+  if (!channels) return true
+  const [r, g, b] = channels
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5
 }
 
 export function loadSavedTheme(): string {

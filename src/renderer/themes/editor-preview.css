@@ -1,0 +1,640 @@
+/* 编辑器渲染层（CodeMirror 6 live preview）的样式。
+ *
+ * 这一层把 markdown 源码画成所见即所得的样子。它只画，不改文本，所以这里的样式
+ * 无论好不好看，都不会影响文件里存了什么。
+ *
+ * 两条规矩（design.md）：
+ *   1. 颜色一律用主题已有的变量（--text-color、--border-color、--code-bg、
+ *      --code-block-bg、--blockquote-border、--table-header-bg、--link-color、
+ *      --highlight-bg、--selection-bg），不新造一层颜色变量。主题之间剩下的差别
+ *      用 `body.theme-x .cm-content ...` 直接写，跟旧版一样，一眼能看全。
+ *   2. 交给源码模式的颜色与这里共用同一批变量，两种视图看起来才是一套东西。
+ *
+ * 选择器的写法有讲究，不是风格问题：
+ *   CodeMirror 自己的 baseTheme 给每一行钉了 `padding: 0 2px 0 6px`，而它的主题选择器
+ *   是 `.ͼX .cm-line`（两个类），比单类选择器优先。所以这里所有行级规则都写成
+ *   `.cm-content .cm-line` / `.cm-content .cm-md-*` 两个类的形式，先归零再逐条给值，
+ *   靠同一文件内的顺序决胜。若写成单类，引用块、列表、代码块的内边距会被整片吃掉
+ *   （实测全为 0px，就是「界面错乱」的一部分）。
+ *
+ * 字号、行高这类块级排版写在这里的行类上，不写在 source-theme.ts 的 HighlightStyle 里：
+ * HighlightStyle 作用在行内的 span 上，两边都设 fontSize 会各放大一次（标题曾变成
+ * 1.75em × 1.75em，大得离谱）。那边只管字重、斜体、删除线。
+ */
+
+:root {
+  --font-mono: 'SF Mono', 'Fira Code', Menlo, Consolas, monospace;
+}
+
+/* ======= 容器与阅读列宽 ======= */
+
+.cm-editor {
+  height: 100%;
+}
+
+/* 正文容器。字体与字号在这里，主题在下面各自覆盖。
+ *
+ * 列宽、内边距、flex 不在这里，而在下面的 `#editor .cm-content` 里：
+ * CodeMirror 的 baseTheme 是**运行时注入**到 <head> 末尾的，同为单类选择器时它总排在
+ * 我们后面，所以 `.cm-content` 上写的 `flex: 0 0 auto` 会被它的 `flex-grow: 2` 压掉，
+ * 正文就会左对齐（实测窗口 1623px、正文 640px 贴左边）。一个 id 就能压过它，
+ * 而应用和导出都把编辑器包在 `#editor` 里。 */
+.cm-content {
+  font-family: var(--font-body, inherit);
+  font-size: var(--editor-font-size, 16px);
+  line-height: 1.75;
+  color: var(--text-color);
+}
+
+/* 阅读列宽与呼吸留白。
+ *
+ * 列宽说的是「文字」的宽度，所以外层再加左右各 40px。这 40px 必须留在这里、不能留给
+ * `#editor`：CodeMirror 的滚动容器 `.cm-scroller` 在 `#editor` 的内边距之内，留在外层
+ * 会把滚动条从窗口右缘推进去 40px。
+ *
+ * `flex: 0 0 auto` 也不是风格问题：baseTheme 的 `flex-grow: 2` 会先把剩余空间吃掉，
+ * `margin: 0 auto` 就吸不到任何空间，居中就不成立。基准尺寸要是列宽本身，居中才成立。 */
+#editor .cm-content {
+  flex: 0 0 auto;
+  width: min(100%, calc(var(--editor-column-width) + 80px));
+  margin: 0 auto;
+  padding: calc(40px + var(--editor-top-gap, 0px)) 40px 40px;
+  box-sizing: border-box;
+}
+
+/* 行的归零。必须用两个类才压得住 CodeMirror baseTheme 的 `0 2px 0 6px`。
+ * 下面所有行级内边距都写在这条之后，靠顺序覆盖它。 */
+.cm-content .cm-line {
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ======= 标题 ======= */
+
+.cm-content .cm-md-atxheading1 {
+  font-size: 2em;
+  font-weight: 700;
+  line-height: 1.25;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.cm-content .cm-md-atxheading2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.cm-content .cm-md-atxheading3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cm-content .cm-md-atxheading4,
+.cm-content .cm-md-atxheading5,
+.cm-content .cm-md-atxheading6 {
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* 标记字符（#、>、-、围栏、*）：光标不在这一行时压淡。 */
+.cm-content .cm-md-marker,
+.cm-content .cm-md-quotemark,
+.cm-content .cm-md-listmark {
+  color: var(--text-muted);
+}
+
+/* ======= 行内格式 ======= */
+
+.cm-content .cm-md-strong {
+  font-weight: 700;
+}
+
+.cm-content .cm-md-em {
+  font-style: italic;
+}
+
+.cm-content .cm-md-strike {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* 行内代码：底色与圆角，跟旧版一致（2px 6px、圆角 3px、0.875em）。 */
+.cm-content .cm-md-inlinecode {
+  background: var(--code-bg);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 0.875em;
+  font-family: var(--font-mono);
+}
+
+/* 链接地址压暗，让正文里的链接文字更突出。 */
+.cm-content .cm-md-url {
+  color: var(--text-muted);
+}
+
+/* `==高亮==`：底色跟主题走。 */
+.cm-content .cm-md-highlight {
+  background: var(--highlight-bg, #fff3bf);
+  border-radius: 3px;
+  padding: 0 0.15em;
+}
+
+/* 大纲跳转的落点：整行闪一下（#64）。关键帧在 base.css。 */
+.cm-content .cm-md-jump-flash {
+  animation: heading-flash 1.6s ease-out;
+  border-radius: 4px;
+}
+
+/* ======= 引用块 ======= */
+
+.cm-content .cm-md-blockquote {
+  color: var(--text-secondary, var(--text-muted));
+  border-left: 4px solid var(--blockquote-border);
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+/* ======= 列表 ======= */
+
+/* CM6 里没有 ul/ol/li 元素，整行就是一个 div，所以缩进与标记全靠行装饰。
+ * 层级由代码算出来写在类名里（cm-md-li-0 … cm-md-li-6）。
+ * 嵌套时同一行会同时带外层与内层的类，所以这里按层级从小到大排列，
+ * 靠顺序让最内层的那个值生效。第 1 层缩进 1.5em（旧版是 ul 的 24px），每深一层加 1.5em。 */
+.cm-content .cm-md-li-0 { padding-left: 1.5em; }
+.cm-content .cm-md-li-1 { padding-left: 3em; }
+.cm-content .cm-md-li-2 { padding-left: 4.5em; }
+.cm-content .cm-md-li-3 { padding-left: 6em; }
+.cm-content .cm-md-li-4 { padding-left: 7.5em; }
+.cm-content .cm-md-li-5 { padding-left: 9em; }
+.cm-content .cm-md-li-6 { padding-left: 10.5em; }
+
+/* 无序列表的圆点。宽度与 `- ` 接近，避免换掉标记时行内文字抖动。 */
+.cm-content .cm-md-li-bullet {
+  color: var(--text-muted);
+  display: inline-block;
+  width: 0.8em;
+}
+
+/* ======= 代码块 ======= */
+
+/* 逐行加底色，首末行加圆角，拼出整块的外形（旧版 pre 是 16px 内边距、圆角 6px）。
+ * 不用真 <pre> 是因为 CM6 的行是一个个 div，插不了包住多行的元素。 */
+.cm-content .cm-md-codeblock {
+  background: var(--code-block-bg);
+  color: var(--code-block-text, var(--text-color));
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  line-height: 1.6;
+  padding-left: 1em;
+  padding-right: 1em;
+}
+
+.cm-content .cm-md-codeblock-first {
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  padding-top: 0.8em;
+}
+
+.cm-content .cm-md-codeblock-last {
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  padding-bottom: 0.8em;
+}
+
+/* 围栏上的语言名。压淡到与底色同族的灰，别抢代码正文的注意力。 */
+.cm-content .cm-md-codeinfo {
+  color: color-mix(in srgb, var(--code-block-text, var(--text-color)) 45%, transparent);
+}
+
+/* 块级 widget 两边的光标缓冲块。
+ *
+ * CodeMirror 在每个替换 widget 两边各插一个 `.cm-widgetBuffer`：1em 高的行内 img，
+ * 作用是给光标留一个能落的位置。行内 widget（图片）无所谓，但表格、图表、块公式、
+ * HTML 块是**块级**的，缓冲块会把所在行再撑高——实测每个块多出 55 到 73px 的空档
+ * （HTML 块：widget 81px，所在行 154px）。
+ *
+ * 只把它的 height 设成 0 不够：行内元素会按**所在块的行高**产生一个 strut，两个缓冲块
+ * 夹着一个块级 widget，就成了两个各 30.4px 高的匿名块，照样多出 61px。所以要让它们
+ * **脱离行内流**（absolute）。不能用 display:none：缓冲块是 CodeMirror 用来给光标定位
+ * 的，没有 rect 时光标会跳到别处。 */
+.cm-content .cm-line:has(> .cm-md-table-widget) > .cm-widgetBuffer,
+.cm-content .cm-line:has(> .cm-md-mermaid) > .cm-widgetBuffer,
+.cm-content .cm-line:has(> .cm-md-math-block) > .cm-widgetBuffer,
+.cm-content .cm-line:has(> .cm-md-html-block) > .cm-widgetBuffer {
+  position: absolute;
+  height: 0;
+  line-height: 0;
+}
+
+/* ======= 表格 ======= */
+
+/* 表格画成真表格（live-preview 的 TableWidget）。光标进表格时退回源码，
+ * 这时每一行是一段等宽文字，底色让它读起来还是一块。 */
+.cm-content .cm-md-table {
+  background: color-mix(in srgb, var(--table-header-bg, transparent) 45%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+.cm-content .cm-md-table-widget {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.25em 0;
+}
+
+.cm-content .cm-md-table-widget th,
+.cm-content .cm-md-table-widget td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.cm-content .cm-md-table-widget th {
+  background: var(--table-header-bg);
+  font-weight: 600;
+}
+
+/* ======= 分隔线 ======= */
+
+/* 分隔线。
+ * 只画一条上边框，不把字号钉成 0：钉成 0 的话光标落进这一行时 `---` 是看不见的，
+ * 用户会以为这里空了。上下空白由前后那两个空行给。 */
+.cm-content .cm-md-hr {
+  border-top: 1px solid var(--border-color);
+}
+
+/* ======= 代码块的复制按钮 ======= */
+
+/*
+ * 按钮是代码块第一行里的一个 widget，绝对定位在右上角：
+ * 它不占正文的位置，鼠标悬停代码块时才显形。
+ */
+.cm-content .cm-md-codeblock-first {
+  position: relative;
+}
+
+.cm-content .code-copy-btn {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 1;
+  padding: 2px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-color);
+  color: var(--text-secondary, var(--text-muted));
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.cm-content .cm-md-codeblock-first:hover .code-copy-btn,
+.cm-content .code-copy-btn:focus-visible,
+.cm-content .code-copy-btn.copied {
+  opacity: 1;
+}
+
+.cm-content .code-copy-btn:hover,
+.cm-content .code-copy-btn.copied {
+  background: color-mix(in srgb, var(--text-color) 14%, transparent);
+  color: var(--text-color);
+}
+
+/* ======= 链接 ======= */
+
+/*
+ * 链接文字是链接的样子，地址在非编辑行藏起来（Obsidian 的做法）。
+ * 点击行为认 `data-href`，不依赖真 `<a>`：换成 `<a>` 就得把文字整个换成 widget，
+ * 文字里的加粗、行内代码会跟着没掉。
+ */
+.cm-content .cm-md-link {
+  color: var(--link-color);
+  cursor: pointer;
+}
+
+.cm-content .cm-md-link:hover {
+  text-decoration: underline;
+}
+
+/* ======= 脚注 ======= */
+
+.cm-content .cm-md-footnote-ref {
+  color: var(--link-color);
+  cursor: help;
+  font-size: 0.75em;
+  vertical-align: super;
+  padding: 0 1px;
+}
+
+/* 定义行照原样显示，只压淡：隐藏了用户就看不到自己写了什么 */
+.cm-content .cm-md-footnote-def {
+  color: var(--text-muted);
+}
+
+/* ======= HTML ======= */
+
+/*
+ * 文件里的 HTML 照原样画出来（先过 html-sanitize 的闸）。
+ * 自己的外观交给元素自身的属性，这里只给块级留一点呼吸。
+ */
+.cm-content .cm-md-html-block {
+  margin: 0.4em 0;
+}
+
+.cm-content .cm-md-html-inline {
+  white-space: normal;
+}
+
+/* ======= 图片 ======= */
+
+/*
+ * 图片按文件里写的位置就地画出来。地址在画图那一刻按文档自己的 file:// URL 解析，
+ * 文件里那串相对路径一个字符都不改（改了就等于保存时动用户的文件）。
+ */
+.cm-content .cm-md-image {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.cm-content .cm-md-image img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  vertical-align: bottom;
+}
+
+/* 加载不出来就把源码放回去：宁可难看，不吞用户的字 */
+.cm-content .cm-md-image-failed {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--text-muted);
+}
+
+/* ======= 任务列表 ======= */
+
+.cm-content .cm-md-task {
+  color: var(--text-muted);
+  cursor: pointer;
+  padding-right: 0.2em;
+  user-select: none;
+}
+
+.cm-content .cm-md-task-checked {
+  color: var(--link-color);
+}
+
+/* ======= 公式 ======= */
+
+.cm-content .cm-md-math-inline {
+  padding: 0 2px;
+  border-radius: 3px;
+  cursor: text;
+}
+
+.cm-content .cm-md-math-inline:hover {
+  background: var(--code-bg);
+}
+
+.cm-content .cm-md-math-block {
+  display: block;
+  text-align: center;
+  padding: 8px;
+  margin: 0.25em 0;
+  border-radius: 6px;
+  cursor: text;
+}
+
+.cm-content .cm-md-math-block:hover {
+  background: var(--code-bg);
+}
+
+/* 渲不出来时退回源码，用一个淡底色提示「这里没能渲染」，但文字照旧可读。 */
+.cm-content .cm-md-math-error {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--text-muted);
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+
+/* ======= 属性区 ======= */
+
+/*
+ * 文件开头的 YAML 属性区。它照原样显示，只是压淡、不参与 markdown 排版：
+ * 里面的 `- ` 不画圆点、`---` 不画横线、`**` 不加粗（装饰层里已把它们排出）。
+ *
+ * 不再用一个「属性区（N 行）」的胶囊按钮把它收起来：那个控件在文件里并不存在。
+ */
+.cm-content .cm-md-frontmatter {
+  color: var(--text-muted);
+}
+
+/*
+ * 导出时把编辑器自身的痕迹收起来。
+ *
+ * 导出的是一篇文档，不是编辑器此刻的样子：光标、选区、以及文件开头那段 YAML 元数据
+ * 都不该跟着上纸（Typora 导出时同样不含属性区）。
+ * 主进程打印前给 body 加 `exporting`，导出完成后去掉。
+ */
+body.exporting .cm-cursor,
+body.exporting .cm-cursorLayer,
+body.exporting .cm-selectionLayer,
+body.exporting .cm-selectionBackground,
+body.exporting .cm-content .cm-md-frontmatter {
+  display: none !important;
+}
+
+@media print {
+  .cm-cursor,
+  .cm-cursorLayer,
+  .cm-selectionLayer,
+  .cm-selectionBackground,
+  .cm-content .cm-md-frontmatter {
+    display: none !important;
+  }
+}
+
+/* ======= mermaid ======= */
+
+.cm-content .cm-md-mermaid {
+  display: block;
+  text-align: center;
+  padding: 0.8em 0;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.cm-content .cm-md-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.cm-content .cm-md-mermaid-failed {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--text-muted);
+  background: var(--code-block-bg);
+  border-radius: 6px;
+  padding: 0.8em 1em;
+  white-space: pre-wrap;
+}
+
+/* ======= 各主题的差别 ======= */
+
+/* 正文字体与行高 */
+body.theme-elegant .cm-content {
+  font-family: 'LXGW WenKai', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif;
+  line-height: 1.9;
+}
+
+body.theme-sepia .cm-content {
+  font-family: Georgia, 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', serif;
+  line-height: 1.85;
+}
+
+body.theme-writer .cm-content {
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, 'PingFang SC', 'Noto Sans SC', monospace;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+/* 加粗的颜色 */
+body.theme-elegant .cm-content .cm-md-strong { color: #c44b2b; }
+body.theme-bear .cm-content .cm-md-strong { color: #d43d2a; }
+body.theme-solarized-dark .cm-content .cm-md-strong { color: #cb4b16; }
+body.theme-nord .cm-content .cm-md-strong { color: #8fbcbb; }
+body.theme-gruvbox .cm-content .cm-md-strong { color: #fe8019; }
+body.theme-dracula .cm-content .cm-md-strong { color: #ff79c6; }
+body.theme-sepia .cm-content .cm-md-strong { color: #7a5a33; }
+body.theme-dark .cm-content .cm-md-strong { color: #e6edf3; }
+body.theme-notion .cm-content .cm-md-strong { color: #37352f; }
+body.theme-midnight .cm-content .cm-md-strong { color: #e8e8e8; }
+body.theme-writer .cm-content .cm-md-strong { color: #2f2f2c; }
+
+/* 行内代码的字色 */
+body.theme-elegant .cm-content .cm-md-inlinecode { color: #c44b2b; }
+body.theme-sepia .cm-content .cm-md-inlinecode { color: #7a5a33; }
+body.theme-notion .cm-content .cm-md-inlinecode { color: #eb5757; background: #f7f6f3; }
+body.theme-bear .cm-content .cm-md-inlinecode { color: #d43d2a; }
+body.theme-solarized-dark .cm-content .cm-md-inlinecode { color: #2aa198; }
+body.theme-nord .cm-content .cm-md-inlinecode { color: #88c0d0; }
+body.theme-gruvbox .cm-content .cm-md-inlinecode { color: #b8bb26; }
+body.theme-dracula .cm-content .cm-md-inlinecode { color: #8be9fd; }
+body.theme-dark .cm-content .cm-md-inlinecode { color: #ff7b72; }
+body.theme-midnight .cm-content .cm-md-inlinecode { color: #e5786d; }
+body.theme-writer .cm-content .cm-md-inlinecode { color: #3b6ec4; }
+
+/* 标题的颜色 */
+body.theme-solarized-dark .cm-content .cm-md-atxheading1,
+body.theme-solarized-dark .cm-content .cm-md-atxheading2,
+body.theme-solarized-dark .cm-content .cm-md-atxheading3,
+body.theme-solarized-dark .cm-content .cm-md-atxheading4 { color: #93a1a1; }
+
+body.theme-nord .cm-content .cm-md-atxheading1,
+body.theme-nord .cm-content .cm-md-atxheading2,
+body.theme-nord .cm-content .cm-md-atxheading3 { color: #eceff4; }
+
+body.theme-gruvbox .cm-content .cm-md-atxheading1,
+body.theme-gruvbox .cm-content .cm-md-atxheading2,
+body.theme-gruvbox .cm-content .cm-md-atxheading3 { color: #fbf1c7; }
+
+body.theme-dracula .cm-content .cm-md-atxheading1,
+body.theme-dracula .cm-content .cm-md-atxheading2,
+body.theme-dracula .cm-content .cm-md-atxheading3 { color: #ffffff; }
+
+body.theme-midnight .cm-content .cm-md-atxheading1,
+body.theme-midnight .cm-content .cm-md-atxheading2,
+body.theme-midnight .cm-content .cm-md-atxheading3 { color: #f5f5f5; }
+
+/* 标题的下划线：Notion 与 Writer 不要，羊皮纸 h1 居中、h2 虚线。 */
+body.theme-notion .cm-content .cm-md-atxheading1,
+body.theme-notion .cm-content .cm-md-atxheading2,
+body.theme-writer .cm-content .cm-md-atxheading1,
+body.theme-writer .cm-content .cm-md-atxheading2,
+body.theme-writer .cm-content .cm-md-atxheading3 {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+body.theme-notion .cm-content .cm-md-atxheading1,
+body.theme-notion .cm-content .cm-md-atxheading2,
+body.theme-writer .cm-content .cm-md-atxheading1,
+body.theme-writer .cm-content .cm-md-atxheading2,
+body.theme-writer .cm-content .cm-md-atxheading3 {
+  font-weight: 700;
+}
+
+body.theme-sepia .cm-content .cm-md-atxheading1 {
+  text-align: center;
+  border-bottom: none;
+  letter-spacing: 0.02em;
+}
+
+body.theme-sepia .cm-content .cm-md-atxheading2 {
+  border-bottom-style: dashed;
+}
+
+body.theme-bear .cm-content .cm-md-atxheading1 {
+  letter-spacing: -0.01em;
+}
+
+/* 引用块 */
+body.theme-elegant .cm-content .cm-md-blockquote {
+  background: var(--blockquote-bg);
+}
+
+body.theme-sepia .cm-content .cm-md-blockquote {
+  background: var(--blockquote-bg);
+}
+
+body.theme-writer .cm-content .cm-md-blockquote {
+  border-left-width: 3px;
+  font-style: normal;
+}
+
+body.theme-nord .cm-content .cm-md-blockquote { color: #aeb9c9; }
+body.theme-gruvbox .cm-content .cm-md-blockquote { color: #bdae93; }
+body.theme-dracula .cm-content .cm-md-blockquote { color: #c3c8e0; }
+body.theme-midnight .cm-content .cm-md-blockquote { color: #9a9a9a; }
+
+/* 表格 */
+body.theme-elegant .cm-content .cm-md-table-widget th,
+body.theme-elegant .cm-content .cm-md-table-widget td,
+body.theme-notion .cm-content .cm-md-table-widget th,
+body.theme-notion .cm-content .cm-md-table-widget td {
+  border-left: none;
+  border-right: none;
+}
+
+body.theme-elegant .cm-content .cm-md-table-widget th {
+  border-bottom: 2px solid #c44b2b;
+}
+
+body.theme-writer .cm-content .cm-md-table-widget th,
+body.theme-writer .cm-content .cm-md-table-widget td {
+  font-size: 0.9em;
+}
+
+/* 分隔线 */
+body.theme-bear .cm-content .cm-md-hr {
+  border-top-color: #d43d2a;
+  opacity: 0.35;
+}
+
+body.theme-gruvbox .cm-content .cm-md-hr {
+  border-top-color: #504945;
+}
+
+/* 链接 */
+body.theme-notion .cm-content .cm-md-url {
+  color: #9b9a97;
+}

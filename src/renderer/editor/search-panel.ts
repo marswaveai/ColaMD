@@ -1,5 +1,17 @@
-import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
-import { getEditorView, searchPluginKey } from './editor'
+// 检索面板：编辑器侧的高亮与滚动。
+//
+// 核心换成 CodeMirror 之后，这里的两件事跟着换：
+//   1. 高亮从 ProseMirror 的 DecorationSet 换成 CM6 的 Decoration
+//   2. 改写从 transaction 换成 changes
+// 源码模式那条路仍走 textarea，不受影响。
+//
+// 高亮的 StateField 在 search-highlight.ts：它要装进编辑器扩展，从这里定义会绕成
+// core → search-panel → editor → core 的循环依赖。
+
+import { Decoration, EditorView, type DecorationSet } from '@codemirror/view'
+import { RangeSetBuilder } from '@codemirror/state'
+import { getEditorView } from './editor'
+import { setSearchHighlight } from './search-highlight'
 import { getUiLanguage, type UiLanguage } from '../ui-language'
 
 export class SearchPanel {
@@ -147,7 +159,7 @@ export class SearchPanel {
     const view = getEditorView()
     if (!view) return
     const match = this.matches[this.currentIndex]
-    view.dispatch(view.state.tr.insertText(replacement, match.from, match.to))
+    view.dispatch({ changes: { from: match.from, to: match.to, insert: replacement } })
     this.search()
   }
 
@@ -164,12 +176,12 @@ export class SearchPanel {
     }
     const view = getEditorView()
     if (!view) return
-    let tr = view.state.tr
-    for (let index = this.matches.length - 1; index >= 0; index--) {
-      const match = this.matches[index]
-      tr = tr.insertText(replacement, match.from, match.to)
-    }
-    view.dispatch(tr)
+    // 从后往前替，前面的改动就不会挪动后面匹配项的偏移量
+    const changes = this.matches
+      .slice()
+      .sort((a, b) => b.from - a.from)
+      .map((match) => ({ from: match.from, to: match.to, insert: replacement }))
+    view.dispatch({ changes })
     this.search()
   }
 
@@ -206,15 +218,12 @@ export class SearchPanel {
     }
 
     const lowerQuery = query.toLowerCase()
-    view.state.doc.descendants((node, pos) => {
-      if (!node.isText || !node.text) return
-      const text = node.text.toLowerCase()
-      let idx = 0
-      while ((idx = text.indexOf(lowerQuery, idx)) !== -1) {
-        this.matches.push({ from: pos + idx, to: pos + idx + query.length })
-        idx += 1
-      }
-    })
+    const text = view.state.doc.toString().toLowerCase()
+    let idx = 0
+    while ((idx = text.indexOf(lowerQuery, idx)) !== -1) {
+      this.matches.push({ from: idx, to: idx + query.length })
+      idx += 1
+    }
 
     if (this.matches.length > 0) {
       this.currentIndex = 0
@@ -257,23 +266,25 @@ export class SearchPanel {
   }
 
   private highlight(view: NonNullable<ReturnType<typeof getEditorView>>): void {
-    const decorations = this.matches.map((match, index) => {
+    const builder = new RangeSetBuilder<Decoration>()
+    this.matches.forEach((match, index) => {
       const className = index === this.currentIndex ? 'search-match-current' : 'search-match'
-      return Decoration.inline(match.from, match.to, { class: className })
+      builder.add(match.from, match.to, Decoration.mark({ class: className }))
     })
-    view.dispatch(view.state.tr.setMeta(searchPluginKey, DecorationSet.create(view.state.doc, decorations)))
+    view.dispatch({ effects: setSearchHighlight.of(builder.finish()) })
   }
 
   private clearDecorations(): void {
     const view = getEditorView()
     if (!view) return
-    view.dispatch(view.state.tr.setMeta(searchPluginKey, DecorationSet.empty))
+    view.dispatch({ effects: setSearchHighlight.of(Decoration.none) })
   }
 
   private scrollToCurrent(view: NonNullable<ReturnType<typeof getEditorView>>): void {
     if (this.currentIndex < 0 || this.currentIndex >= this.matches.length) return
     const match = this.matches[this.currentIndex]
     const coords = view.coordsAtPos(match.from)
+    if (!coords) return
     const editorEl = document.getElementById('editor')
     if (!editorEl) return
 

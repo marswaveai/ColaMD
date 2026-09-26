@@ -187,7 +187,7 @@ async function boot(): Promise<void> {
     // Tell the homepage we are here and ready for language updates.
     window.parent.postMessage({ type: 'colamd-try:ready' }, location.origin)
   } else {
-    document.querySelector<HTMLElement>('.ProseMirror')?.focus()
+    document.querySelector<HTMLElement>('#editor .cm-content')?.focus()
   }
 }
 

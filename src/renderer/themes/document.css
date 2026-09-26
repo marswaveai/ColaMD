@@ -1,0 +1,144 @@
+/*
+ * 导出的 HTML 里那份「文档样式」。
+ *
+ * 应用自己的排版是挂在 `.cm-md-*` 这些装饰类上的（编辑器需要按行、按标记来画），
+ * 导出的 HTML 交出去的是**语义标签**（h1/p/ul/pre/table…），两者不能共用一套规则。
+ * 所以这里只做一件事：用主题变量给语义标签一份正常的文档排版。
+ *
+ * 作用域是 `.colamd-document`，应用界面里不存在这个类，所以这份规则只对导出的文件生效。
+ * 颜色一律取主题变量，导出时这些变量的值会跟着 CSS 一起被内联进去。
+ */
+
+.colamd-document {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  color: var(--text-color);
+  font-family: var(--font-body, inherit);
+  font-size: 16px;
+  line-height: 1.75;
+  word-wrap: break-word;
+}
+
+.colamd-document h1,
+.colamd-document h2,
+.colamd-document h3,
+.colamd-document h4,
+.colamd-document h5,
+.colamd-document h6 {
+  margin: 1.4em 0 0.6em;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.colamd-document h1 { font-size: 1.9em; }
+.colamd-document h2 { font-size: 1.55em; }
+.colamd-document h3 { font-size: 1.3em; }
+.colamd-document h4 { font-size: 1.12em; }
+.colamd-document h5,
+.colamd-document h6 { font-size: 1em; }
+
+.colamd-document h1:first-child,
+.colamd-document h2:first-child { margin-top: 0; }
+
+.colamd-document p {
+  margin: 0.75em 0;
+}
+
+.colamd-document a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.colamd-document a:hover {
+  text-decoration: underline;
+}
+
+.colamd-document strong { font-weight: 700; }
+.colamd-document em { font-style: italic; }
+.colamd-document s { text-decoration: line-through; }
+
+.colamd-document mark {
+  background: color-mix(in srgb, var(--link-color) 22%, transparent);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.colamd-document code {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--code-bg);
+  font-family: var(--font-mono, Menlo, Monaco, monospace);
+  font-size: 0.875em;
+}
+
+.colamd-document pre {
+  margin: 1em 0;
+  padding: 14px 16px;
+  border-radius: 6px;
+  background: var(--code-block-bg);
+  overflow-x: auto;
+}
+
+.colamd-document pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.875em;
+  line-height: 1.6;
+}
+
+.colamd-document blockquote {
+  margin: 1em 0;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 4px solid var(--blockquote-border);
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.colamd-document blockquote p {
+  margin: 0.4em 0;
+}
+
+.colamd-document ul,
+.colamd-document ol {
+  margin: 0.75em 0;
+  padding-left: 1.6em;
+}
+
+.colamd-document li {
+  margin: 0.3em 0;
+}
+
+.colamd-document hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--border-color);
+}
+
+.colamd-document table {
+  margin: 1em 0;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.colamd-document th,
+.colamd-document td {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+}
+
+.colamd-document th {
+  background: var(--table-header-bg);
+  font-weight: 600;
+  text-align: left;
+}
+
+.colamd-document img {
+  max-width: 100%;
+  height: auto;
+}
+
+.colamd-document sup {
+  font-size: 0.75em;
+  vertical-align: super;
+}

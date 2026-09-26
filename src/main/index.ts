@@ -332,12 +332,19 @@ function fileChangedExternally(filePath: string, state: WindowState): boolean {
 function notifyExternalChange(win: BrowserWindow, filePath: string): void {
   void readFile(filePath, 'utf-8')
     .then((data) => {
-      if (!win.isDestroyed()) win.webContents.send('file-changed', resolveImagePaths(data, filePath))
+      if (!win.isDestroyed()) win.webContents.send('file-changed', data)
     })
     .catch(() => { /* the watcher picks it up on the next event */ })
 }
 
-function createWindow(filePath?: string, initialContent?: string, initialBrowsePath?: string): BrowserWindow {
+function createWindow(
+  filePath?: string,
+  initialContent?: string,
+  initialBrowsePath?: string,
+  // 没有路径的文档（语法速查）也要有一个「所在位置」：文件里的相对图片地址要相对它
+  // 解析。传的是那份文档**本该在**的地址，所以文档直接打开和从菜单打开，图片都能出来。
+  initialFileUrl?: string,
+): BrowserWindow {
   // Windows gets ONE row for its shell. A normal Windows frame stacks three
   // bars: the system title bar, the in-window menu bar, and our own row, which
   // is what made the app read as heavy there (2026-09-15). So: no system
@@ -407,7 +414,7 @@ function createWindow(filePath?: string, initialContent?: string, initialBrowseP
         })
       } else if (initialContent) {
         // In-memory content (e.g. the Markdown cheatsheet) — no file, no watcher
-        win.webContents.send('file-opened', { path: null, content: initialContent })
+        win.webContents.send('file-opened', { path: null, content: initialContent, fileUrl: initialFileUrl })
         getState(win).initialDocDelivered = true
         flushPendingTabFiles(win)
       } else {
@@ -523,7 +530,7 @@ function watchFile(win: BrowserWindow, state: WindowState): void {
           if (state.lastInternalSaveContent !== null && data === state.lastInternalSaveContent) return
           state.lastInternalSaveContent = null
           state.lastKnownMtime = fileMtimeMs(filePath)
-          if (!win.isDestroyed()) win.webContents.send('file-changed', resolveImagePaths(data, filePath))
+          if (!win.isDestroyed()) win.webContents.send('file-changed', data)
         })
         .catch(() => { /* file mid-replace; a follow-up event will re-trigger */ })
     }, 100)
@@ -602,56 +609,12 @@ function watchFile(win: BrowserWindow, state: WindowState): void {
   establish()
 }
 
-// Rewrite local image paths to encoded file:// URLs. This handles both
-// standard Markdown images and the raw <img src="..."> HTML that Milkdown
-// accepts, including Windows drive letters, backslashes, spaces and Unicode.
-function localImageUrl(src: string, dir: string): string {
-  const value = src.trim().replace(/^<|>$/g, '')
-  if (/^(?:https?:|file:|data:|blob:)/i.test(value)) return src
-  return pathToFileURL(isAbsolute(value) ? value : resolve(dir, value)).href
-}
-
-function resolveImagePaths(content: string, filePath: string): string {
-  const dir = dirname(filePath)
-  const markdown = content.replace(/!\[([^\]]*)\]\((?!https?:\/\/|file:\/\/|data:|blob:)([^)]+)\)/g, (_match, alt, src) => {
-    return `![${alt}](${localImageUrl(src, dir)})`
-  })
-
-  return markdown.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (_match, prefix, quote, src) => {
-    return `${prefix}${quote}${localImageUrl(src, dir)}${quote}`
-  })
-}
-
-// Keep the editor's display URLs out of the Markdown source. Image paths are
-// rewritten to file:// URLs for rendering, then converted back to paths that
-// are portable relative to the file being saved.
-function sourceImageUrl(src: string, dir: string): string {
-  const value = src.trim()
-  if (!/^file:/i.test(value)) return src
-
-  try {
-    const target = fileURLToPath(value)
-    const portable = relative(dir, target).replaceAll('\\', '/')
-    return portable || './'
-  } catch {
-    return src
-  }
-}
-
-function markdownImagePath(value: string): string {
-  return /[\s()]/.test(value) ? `<${value}>` : value
-}
-
-function restoreImagePaths(content: string, filePath: string): string {
-  const dir = dirname(filePath)
-  const markdown = content.replace(/!\[([^\]]*)\]\((file:[^)]+)\)/gi, (_match, alt, src) => {
-    return `![${alt}](${markdownImagePath(sourceImageUrl(src, dir))})`
-  })
-
-  return markdown.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])(file:[^"']+)\2/gi, (_match, prefix, quote, src) => {
-    return `${prefix}${quote}${sourceImageUrl(src, dir)}${quote}`
-  })
-}
+// 图片路径不在主进程改写。
+//
+// 曾经的做法是：打开时把 `![](img/a.png)` 改写成 `file:///...` 交给编辑器显示，保存时再改回
+// 相对路径。文本优先之后这条路走不通了——缓冲区里存的就是文件的字节，任何改写都等于让
+// 「打开一份文件、一个字都不改、保存」把文件改掉（`./img/a.png` 会被写成 `img/a.png`）。
+// 现在渲染层拿着文档自己的 file:// URL 在画图时解析，文件里始终是用户写的那串路径。
 
 function loadFileInWindow(win: BrowserWindow, filePath: string): Promise<void> {
   const state = getState(win)
@@ -666,7 +629,7 @@ function loadFileInWindow(win: BrowserWindow, filePath: string): Promise<void> {
       pushRecentFile(filePath, true)
       state.lastInternalSaveContent = data
       state.lastKnownMtime = fileMtimeMs(filePath)
-      win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(data, filePath) })
+      win.webContents.send('file-opened', { path: filePath, content: data, fileUrl: pathToFileURL(filePath).href })
     } catch {
       // Keep the current document when the selected file cannot be read.
     }
@@ -788,9 +751,8 @@ function saveToPath(win: BrowserWindow, filePath: string, content: string, sourc
     try {
       state.internalSaveCount += 1
       state.isInternalSave = true
-      const dataToWrite = restoreImagePaths(content, filePath)
-      await writeFile(filePath, dataToWrite, 'utf-8')
-      state.lastInternalSaveContent = dataToWrite
+      await writeFile(filePath, content, 'utf-8')
+      state.lastInternalSaveContent = content
       state.lastKnownMtime = fileMtimeMs(filePath)
       if (win.isDestroyed() || state.filePath !== sourcePath) return false
       state.filePath = filePath
@@ -827,6 +789,11 @@ ipcMain.handle('get-file-manager-name', () => fileManagerName())
 // comes from a menu accelerator, so the link command reads it in the main
 // process (review on #87).
 ipcMain.handle('read-clipboard-text', () => clipboard.readText())
+
+// 渲染层没有 path/url 模块，图片相对路径的基准由这里给：文档自己的 file:// URL。
+ipcMain.handle('file-url', (_event, filePath: unknown) => {
+  return typeof filePath === 'string' && filePath ? pathToFileURL(filePath).href : null
+})
 
 // 放映幻灯片 takes the whole screen. Which window was full screen before a deck
 // started is the main process's to remember: leaving the deck must give back a
@@ -974,7 +941,7 @@ ipcMain.handle('open-file', async (event) => {
       updateTitle(win)
       pushRecentFile(filePath, true)
       state.lastInternalSaveContent = content
-      win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(content, filePath) })
+      win.webContents.send('file-opened', { path: filePath, content, fileUrl: pathToFileURL(filePath).href })
       return { path: filePath, content }
     } catch {
       return null
@@ -1000,7 +967,7 @@ ipcMain.handle('open-file-path', async (event, filePath: string) => {
       updateTitle(win)
       pushRecentFile(filePath, true)
       state.lastInternalSaveContent = content
-      win.webContents.send('file-opened', { path: filePath, content: resolveImagePaths(content, filePath) })
+      win.webContents.send('file-opened', { path: filePath, content, fileUrl: pathToFileURL(filePath).href })
       return { path: filePath, content }
     } catch {
       return null
@@ -1024,7 +991,7 @@ ipcMain.handle('activate-file', async (event, filePath: unknown) => {
   if (filePath !== null && filePath !== '' && typeof filePath !== 'string') return null
   const target = typeof filePath === 'string' && filePath.length > 0 ? filePath : null
   const state = getState(win)
-  const operation = async (): Promise<{ content: string; mtime: number } | null> => {
+  const operation = async (): Promise<{ content: string; fileUrl: string; mtime: number } | null> => {
     if (!target) {
       stopWatching(state)
       state.filePath = null
@@ -1043,7 +1010,7 @@ ipcMain.handle('activate-file', async (event, filePath: unknown) => {
       watchFile(win, state)
       updateTitle(win)
       pushRecentFile(target, true)
-      return { content: resolveImagePaths(data, target), mtime: state.lastKnownMtime }
+      return { content: data, fileUrl: pathToFileURL(target).href, mtime: state.lastKnownMtime }
     } catch {
       return null
     }
@@ -1262,6 +1229,9 @@ ipcMain.handle('export-pdf', async (event) => {
 
   try {
     const background = await win.webContents.executeJavaScript('getComputedStyle(document.body).backgroundColor') as string
+    // 打印的是这个窗口本身，所以先把编辑器的痕迹收起来：光标、选区、以及当前行
+    // 因为「正在编辑」而显形的源码都不该上纸。
+    await win.webContents.executeJavaScript('window.__colamdPrintExport?.enter()').catch(() => {})
     const cssKey = await win.webContents.insertCSS(
       `@media print {
         /* The margins are the page's, so they repeat, and the page carries the
@@ -1270,12 +1240,14 @@ ipcMain.handle('export-pdf', async (event) => {
         @page { margin: 20mm 18mm; background: ${background}; }
         html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; }
         #editor { margin: 0 !important; padding: 0 !important; }
+        /* 光标与选区是编辑器的东西，不是文档的内容。 */
+        .cm-cursor, .cm-cursorLayer, .cm-selectionLayer, .cm-selectionBackground { display: none !important; }
         /* A cell has to break a long token (JSON, a URL) instead of forcing the
            table wider than the page: one unbreakable string sets a minimum width
            the table cannot go below, and the last column ends up cut off at the
            paper's edge (#108). The table already carries width: 100% in the
            theme; this is what lets it actually shrink to that width. */
-        #editor .ProseMirror th, #editor .ProseMirror td { overflow-wrap: anywhere !important; word-break: break-word !important; }
+        #editor .cm-content th, #editor .cm-content td { overflow-wrap: anywhere !important; word-break: break-word !important; }
       }`
     )
     try {
@@ -1291,6 +1263,8 @@ ipcMain.handle('export-pdf', async (event) => {
     }
   } catch {
     return false
+  } finally {
+    await win.webContents.executeJavaScript('window.__colamdPrintExport?.exit()').catch(() => {})
   }
 })
 
@@ -1317,6 +1291,9 @@ async function exportSlidesPDF(win: BrowserWindow | null): Promise<boolean> {
     .catch(() => false) as { width: number; height: number } | false
   if (!sheet) return false
 
+  // 幻灯片也是文档：光标、选区、当前行显形的源码都不该上纸。
+  await win.webContents.executeJavaScript('window.__colamdPrintExport?.enter()').catch(() => {})
+
   try {
     const pdfData = await win.webContents.printToPDF({
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
@@ -1329,9 +1306,13 @@ async function exportSlidesPDF(win: BrowserWindow | null): Promise<boolean> {
   } catch {
     return false
   } finally {
+    await win.webContents.executeJavaScript('window.__colamdPrintExport?.exit()').catch(() => {})
     await win.webContents.executeJavaScript('window.__colamdSlidesExport?.exit()').catch(() => {})
   }
 }
+
+// 导出 HTML 与图片走的是另一条路：渲染进程把当前文档的快照（内容 + 样式）交给主进程，
+// 主进程在隐藏窗口里重新排版，不碰用户眼前的这个窗口。
 
 function escapeHTML(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({
@@ -1346,6 +1327,7 @@ function escapeHTML(value: string): string {
 ipcMain.handle('export-html', async (event, snapshot: {
   content: string
   html: string
+  document: string
   styles: string
   bodyClass: string
 }) => {
@@ -1363,7 +1345,8 @@ ipcMain.handle('export-html', async (event, snapshot: {
 
   const title = escapeHTML(baseName)
   const bodyClass = escapeHTML(snapshot.bodyClass)
-  const renderedContent = snapshot.html || `<pre>${escapeHTML(snapshot.content)}</pre>`
+  // 优先用语义化那一份：导出的是**一篇文档**，不该带上编辑器自己的行结构和类名
+  const renderedContent = snapshot.document || snapshot.html || `<pre>${escapeHTML(snapshot.content)}</pre>`
   const exportStyles = snapshot.styles || ''
   const documentHTML = `<!doctype html>
 <html lang="zh-CN">
@@ -1375,11 +1358,11 @@ ipcMain.handle('export-html', async (event, snapshot: {
     html, body { height: auto; overflow: visible; }
     body { min-width: 320px; }
     #titlebar, #file-panel, #source-editor { display: none !important; }
-    #editor { height: auto !important; min-height: 100vh; overflow: visible !important; padding: 40px !important; }
+    #editor { height: auto !important; min-height: 100vh; overflow: visible !important; padding: 0 !important; }
   </style>
 </head>
 <body class="${bodyClass}">
-  <div id="editor"><div class="ProseMirror">${renderedContent}</div></div>
+  <article class="colamd-document">${renderedContent}</article>
 </body>
 </html>
 `
@@ -1427,7 +1410,7 @@ async function openCheatsheet(language: 'zh' | 'en' = 'zh'): Promise<void> {
   try {
     const fileName = language === 'en' ? 'cheatsheet-en.md' : 'cheatsheet.md'
     const content = await readFile(join(cheatsheetDir, fileName), 'utf-8')
-    createWindow(undefined, content, demoDir)
+    createWindow(undefined, content, demoDir, pathToFileURL(join(cheatsheetDir, fileName)).href)
   } catch {
     createWindow(undefined, undefined, demoDir)
   }
@@ -1561,7 +1544,7 @@ ipcMain.handle('report-external-conflict', async (event, localContent: unknown) 
       state.lastInternalSaveContent = data
       event.sender.send('external-conflict-result', {
         action: 'load',
-        content: resolveImagePaths(data, filePath),
+        content: data,
         recoveryPath
       })
       return
@@ -1770,7 +1753,7 @@ function buildMenu(): void {
         recentOpen: '最近打开', restoreOnLaunch: '启动时打开上次文档', clearRecent: '清除最近记录', noRecent: '没有最近打开的文件',
         exportPDF: '导出 PDF...', exportSlidesPDF: '导出幻灯片 PDF...', exportHTML: '导出 HTML...', exportWord: '导出 Word...', exportImageDesktop: '导出图片（电脑阅读）...', exportImageMobile: '导出图片（手机阅读）...', find: '查找',
         setDefault: '设置为默认应用...',
-        insertFormula: '插入公式', filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
+        filePanel: '显示 / 隐藏文件列表', sourceMode: '切换 Markdown 源码',
         panelSide: '文件列表位置', panelSideLeft: '在左侧', panelSideRight: '在右侧',
         pageWidth: '正文宽度', pageWidthNarrow: '窄', pageWidthStandard: '标准', pageWidthWide: '宽',
         light: '浅色', dark: '深色', elegant: '雅致',
@@ -1792,7 +1775,7 @@ function buildMenu(): void {
         recentOpen: 'Open Recent', restoreOnLaunch: 'Reopen last document at launch', clearRecent: 'Clear Recent', noRecent: 'No recent files',
         exportPDF: 'Export PDF...', exportSlidesPDF: 'Export Slides PDF...', exportHTML: 'Export HTML...', exportWord: 'Export Word...', exportImageDesktop: 'Export Image (Desktop)...', exportImageMobile: 'Export Image (Mobile)...', find: 'Find',
         setDefault: 'Set as Default...',
-        insertFormula: 'Insert Formula', filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
+        filePanel: 'Show / Hide File List', sourceMode: 'Toggle Markdown Source',
         panelSide: 'File List Position', panelSideLeft: 'On the Left', panelSideRight: 'On the Right',
         pageWidth: 'Text Width', pageWidthNarrow: 'Narrow', pageWidthStandard: 'Standard', pageWidthWide: 'Wide',
         light: 'Light', dark: 'Dark', elegant: 'Elegant',
@@ -1967,11 +1950,6 @@ function buildMenu(): void {
           label: labels.find,
           accelerator: 'CmdOrCtrl+F',
           click: () => sendToFocused('editor:search')
-        },
-        {
-          label: labels.insertFormula,
-          accelerator: 'CmdOrCtrl+Shift+E',
-          click: () => sendToFocused('editor:math')
         },
         {
           // #58: discoverable format shortcuts; the menu is the documentation.
@@ -2485,7 +2463,7 @@ async function handleWindowClose(win: BrowserWindow, state: WindowState): Promis
   const untitledTabs = (snapshot.tabs ?? []).filter((tab) => !tab.path)
   for (const tab of backgroundTabs) {
     try {
-      await writeFile(tab.path as string, restoreImagePaths(tab.content, tab.path as string), 'utf-8')
+      await writeFile(tab.path as string, tab.content, 'utf-8')
     } catch {
       await dialog.showMessageBox(win, {
         type: 'error',

@@ -63,6 +63,34 @@ body {
   --editor-column-width: 780px;
 }
 
+/* 代码块里的 token 配色（语法高亮）。
+   两套：深色代码底一套、浅色代码底一套。用哪一套由 theme-manager 按 --code-block-bg
+   的明暗决定（和 Mermaid 图同一个判据——elegant、bear 是浅色主题却配深色代码块），
+   在 body 上加 .code-palette-light 切换。
+   为什么不逐主题写进 12 个主题文件：自定义主题只有一份 :root 变量，逐主题写会漏掉它们。 */
+body {
+  --code-keyword: #c678dd;
+  --code-string: #98c379;
+  --code-comment: #7f848e;
+  --code-number: #d19a66;
+  --code-function: #61afef;
+  --code-type: #e5c07b;
+  --code-property: #e06c75;
+  --code-meta: #56b6c2;
+}
+
+/* 浅色代码底的那几个主题（light、sepia、notion、writer） */
+body.code-palette-light {
+  --code-keyword: #cf222e;
+  --code-string: #0a3069;
+  --code-comment: #6e7781;
+  --code-number: #0550ae;
+  --code-function: #8250df;
+  --code-type: #953800;
+  --code-property: #116329;
+  --code-meta: #6639ba;
+}
+
 /* Text Width, from the View menu. `standard` needs no class: it is the value
    body already carries. 640 is a comfortable measure on a narrow window, 1080
    answers the wide displays where the default leaves two large margins. */
@@ -460,22 +488,29 @@ body.platform-win #titlebar {
   position: relative; /* anchor for the absolutely-positioned code copy button */
   height: calc(100vh - var(--chrome-row-height) - var(--tab-bar-height, 0px));
   overflow-y: auto;
-  /* 40px of air above the first line, the same as below it and at the sides, and
-     the same as the source view's: a document that starts flush against the
-     chrome reads as if it were scrolled, and switching modes must not make the
-     text jump (2026-09-15). This 40 is the document's breathing room, NOT the
-     top row's height, and the two must not be changed as one. */
-  padding: calc(40px + var(--editor-top-gap, 0px)) 40px 40px;
+  /* 这里不再有内边距。正文那 40px 呼吸留白搬到 .cm-content 上（见 themes/editor-preview.css），
+     两个理由都是看得见的：
+       1. CodeMirror 的滚动容器是 .cm-scroller，它在 #editor 的内边距之内。旧版（Milkdown）
+          滚动发生在 #editor 自己身上，滚动条贴窗口右缘；留着这 40px，滚动条就会缩进 40px，
+          浮在留白中间。
+       2. 内边距留在外层，限宽就只能靠 max-width，而 .cm-content 是 flex 子项、
+          baseTheme 给了它 flex-grow: 2，剩余空间被它先吃掉，自动外边距吸不到东西，
+          正文会左对齐（实测窗口 1623px、正文 640px 贴左边）。 */
+  padding: 0;
 }
 
 #source-editor {
   display: none;
   height: calc(100vh - var(--chrome-row-height) - var(--tab-bar-height, 0px));
   width: 100%;
-  /* Center a column matching the visual editor (--editor-column-width) so
-     switching modes keeps the text in the same place (#48). Falls back to 40px
-     on narrow windows. */
-  padding: calc(40px + var(--editor-top-gap, 0px)) max(40px, calc((100% - var(--editor-column-width)) / 2));
+  /* 跟视觉模式同一个阅读列宽，切模式时文字不会跳位置（#48）。
+     用 max-width + 自动外边距居中，**不用内边距算**：内边距里的百分比是按
+     **父容器**宽度解析的，不是元素自己的宽度。面板打开时元素是 `100% - 220px`，
+     父容器仍是整窗，公式会多算出 110px 的内边距，正文只剩 420 宽（实测），
+     跟视觉模式的 640 对不上。max-width 没有这个歧义。 */
+  max-width: calc(var(--editor-column-width) + 80px);
+  margin: 0 auto;
+  padding: calc(40px + var(--editor-top-gap, 0px)) 40px;
   box-sizing: border-box;
   border: none;
   outline: none;
@@ -786,7 +821,7 @@ body.panel-resizing {
   }
 }
 
-.heading-flash {
+.cm-md-jump-flash {
   animation: heading-flash 1.6s ease-out;
   border-radius: 4px;
 }
@@ -825,275 +860,14 @@ body.show-file-panel #source-editor {
   display: none;
 }
 
-/* Milkdown's wrapper holds the editable. It has to reach the bottom of the visible
-   area for two reasons: the editable above it must cover the empty space (clicking
-   under the last line has to place the caret), and a short document must not leave
-   a scrollable sliver behind. min-height: 100% resolves against the editor's own
-   height, so no viewport arithmetic to go stale. */
-#editor > .milkdown {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
+/* CodeMirror 的根节点。旧版这里是 Milkdown 的包装层 `.milkdown`，结构换成 CM6 之后
+   不需要了：`.cm-content` 自己撑满 `.cm-scroller`，点击正文下方空白仍能落光标。
+   编辑器的高度、阅读列宽与正文排版都在 themes/editor-preview.css 里。 */
 
-#editor .ProseMirror {
-  outline: none;
-  max-width: var(--editor-column-width);
-  margin: 0 auto;
-  /* Fills the wrapper, grows with the text. */
-  flex: 1 0 auto;
-  width: 100%;
-  font-size: 16px;
-  line-height: 1.75;
-  color: var(--text-color);
-}
-
-#editor .ProseMirror > * + * {
-  margin-top: 0.75em;
-}
-
-/* Typography */
-#editor .ProseMirror h1 {
-  font-size: 2em;
-  font-weight: 700;
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
-  line-height: 1.25;
-  padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--border-color);
-}
-
-#editor .ProseMirror h2 {
-  font-size: 1.5em;
-  font-weight: 600;
-  margin-top: 1.25em;
-  margin-bottom: 0.5em;
-  line-height: 1.3;
-  padding-bottom: 0.25em;
-  border-bottom: 1px solid var(--border-color);
-}
-
-#editor .ProseMirror h3 {
-  font-size: 1.25em;
-  font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0.5em;
-}
-
-#editor .ProseMirror h4,
-#editor .ProseMirror h5,
-#editor .ProseMirror h6 {
-  font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0.5em;
-}
-
-#editor .ProseMirror p {
-  margin: 0.5em 0;
-}
-
-#editor .ProseMirror a {
-  color: var(--link-color);
-  text-decoration: none;
-}
-
-#editor .ProseMirror a:hover {
-  text-decoration: underline;
-}
-
-#editor .ProseMirror strong {
-  font-weight: 600;
-}
-
-/* Code */
-#editor .ProseMirror code {
-  background: var(--code-bg);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 0.875em;
-  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
-}
-
-#editor .ProseMirror pre {
-  position: relative;
-  background: var(--code-block-bg);
-  color: var(--code-block-text, var(--text-color));
-  padding: 16px;
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 1em 0;
-}
-
-#editor .ProseMirror pre code {
-  background: none;
-  padding: 0;
-  font-size: 0.875em;
-  line-height: 1.6;
-}
-
-#editor .ProseMirror .mermaid-diagram {
-  overflow-x: auto;
-  padding: 12px 8px;
-  text-align: center;
-  background: var(--code-block-bg);
-  border-radius: 6px;
-}
-
-#editor .ProseMirror .mermaid-diagram svg {
-  max-width: 100%;
-  height: auto;
-}
-
-#editor .ProseMirror .mermaid-error {
-  padding: 8px 12px;
-  border: 1px solid var(--blockquote-border);
-  border-radius: 4px;
-  color: var(--text-muted);
-  font-size: 0.8em;
-  background: var(--blockquote-bg);
-}
-
-/* Copy buttons live OUTSIDE the ProseMirror DOM (overlay widgets in the
-   editor root), so they are styled from the root, never inside .ProseMirror. */
-#editor > .code-copy-btn {
-  position: absolute;
-  z-index: 10;
-  padding: 3px 7px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--bg-color);
-  color: var(--text-secondary, var(--text-muted));
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.4;
-  cursor: pointer;
-  opacity: 0;
-  transform: translate(-100%, 0);
-  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
-
-#editor > .code-copy-btn.hovering,
-#editor > .code-copy-btn:focus-visible,
-#editor > .code-copy-btn.copied {
-  opacity: 1;
-}
-
-#editor > .code-copy-btn:hover,
-#editor > .code-copy-btn.copied {
-  background: color-mix(in srgb, var(--text-color) 14%, transparent);
-  color: var(--text-color);
-}
-
-#editor .ProseMirror .milkdown-html-inline img {
-  max-width: 100%;
-  height: auto;
-  vertical-align: middle;
-}
-
-/* Blockquote */
-#editor .ProseMirror blockquote {
-  border-left: 4px solid var(--blockquote-border);
-  padding-left: 16px;
-  margin: 1em 0;
-  color: var(--text-secondary, var(--text-muted));
-}
-
-/* Lists */
-#editor .ProseMirror ul,
-#editor .ProseMirror ol {
-  padding-left: 24px;
-  margin: 0.5em 0;
-}
-
-#editor .ProseMirror li {
-  margin: 0.25em 0;
-}
-
-#editor .ProseMirror li > p {
-  margin: 0;
-}
-
-/* Task lists (GFM checkboxes) */
-#editor .ProseMirror li[data-item-type="task"] {
-  position: relative;
-  list-style: none;
-  padding-left: 1.6em;
-}
-
-#editor .ProseMirror li[data-item-type="task"]::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.3em;
-  width: 0.95em;
-  height: 0.95em;
-  border: 1.5px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--bg-color);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-#editor .ProseMirror li[data-item-type="task"]:hover::before {
-  border-color: var(--text-muted);
-}
-
-#editor .ProseMirror li[data-item-type="task"][data-checked="true"]::before {
-  background: var(--link-color) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8l3 3 6-6.5' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 80% no-repeat;
-  border-color: var(--link-color);
-}
-
-#editor .ProseMirror li[data-item-type="task"][data-checked="true"] > p {
-  color: var(--text-secondary, var(--text-muted));
-  text-decoration: line-through;
-}
-
-/* Highlight (==text==) */
-#editor .ProseMirror mark {
-  background: var(--highlight-bg, #fff3bf);
-  color: inherit;
-  padding: 0 0.15em;
-  border-radius: 3px;
-}
-
-/* Table */
-#editor .ProseMirror table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1em 0;
-}
-
-#editor .ProseMirror th,
-#editor .ProseMirror td {
-  border: 1px solid var(--border-color);
-  padding: 8px 12px;
-  text-align: left;
-}
-
-#editor .ProseMirror th {
-  background: var(--table-header-bg);
-  font-weight: 600;
-}
-
-/* HR */
-/* A rule in the document is the same hairline as a heading's underline. It used
-   to be 2px, which is the one line in the document that was visibly heavier than
-   its neighbours (2026-09-15). */
-#editor .ProseMirror hr {
-  border: none;
-  border-top: 1px solid var(--border-color);
-  margin: 2em 0;
-}
-
-/* Image */
-#editor .ProseMirror img {
-  max-width: 100%;
-  border-radius: 4px;
-}
-
-#editor .ProseMirror ::selection {
-  background: var(--selection-bg);
-}
+/* 旧版的正文排版（h1..h6、p、a、strong、code、pre、blockquote、ul/ol/li、任务列表、
+   mark、table、hr、img、::selection、mermaid 图）写在这里，选择器全部指向 `.ProseMirror`。
+   CodeMirror 不产出这些元素，规则已整片搬到 themes/editor-preview.css 的 `.cm-md-*`
+   行类与 mark 类上。删掉而不是留着：留着的死选择器会让下一个人照它改样式，改不动又找不到原因。 */
 
 /* ======= THEMES ======= */
 
@@ -1145,40 +919,9 @@ body.theme-elegant {
   --highlight-bg: #f0d9a8;
 }
 
-body.theme-elegant #editor .ProseMirror {
-  font-family: 'LXGW WenKai', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif;
-  line-height: 1.9;
-}
-
-body.theme-elegant #editor .ProseMirror strong {
-  color: #c44b2b;
-}
-
-body.theme-elegant #editor .ProseMirror code {
-  color: #c44b2b;
-}
-
-body.theme-elegant #editor .ProseMirror pre {
-  color: var(--code-block-text);
-}
-
-body.theme-elegant #editor .ProseMirror pre code {
-  color: inherit;
-}
-
-body.theme-elegant #editor .ProseMirror blockquote {
-  background: var(--blockquote-bg);
-  padding: 15px 20px 15px 25px;
-}
-
-body.theme-elegant #editor .ProseMirror table th {
-  border-bottom: 2px solid #c44b2b;
-}
-
-body.theme-elegant #editor .ProseMirror table td {
-  border-left: none;
-  border-right: none;
-}
+/* elegant 的正文排版（字体、加粗色、行内代码色、代码块字色、引用底色、表格线）
+   已搬到 themes/editor-preview.css：主题在那边只用覆盖 --md-* 变量和几条表格规则，
+   一处写完，不用每个主题在 base 里再分一段。 */
 
 /* Scrollbar: macOS keeps its native overlay bars, which are drawn while you
    scroll, take no layout space and are absent the rest of the time. Only Windows
@@ -1327,30 +1070,6 @@ body.web-playground *::-webkit-scrollbar-corner {
 }
 
 /* ======= MATH ======= */
-
-#editor .ProseMirror .math-inline {
-  padding: 0 2px;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-#editor .ProseMirror .math-inline:hover {
-  background: var(--code-bg);
-}
-
-#editor .ProseMirror .math-block {
-  margin: 1em 0;
-  padding: 8px;
-  border-radius: 6px;
-  text-align: center;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-#editor .ProseMirror .math-block:hover {
-  background: var(--code-bg);
-}
 
 .math-modal-overlay {
   position: fixed;
@@ -1533,7 +1252,7 @@ body.web-playground *::-webkit-scrollbar-corner {
 /* ===== Editor font preferences (#7752855) =====
    User preference > theme > built-in defaults. Only the editor prose and the
    source editor are overridden; code blocks keep the theme's code font. */
-body.has-custom-font #editor .ProseMirror {
+body.has-custom-font #editor .cm-content {
   font-family: var(--editor-font) !important;
   font-size: var(--editor-font-size, 16px) !important;
 }
@@ -1653,7 +1372,7 @@ body.presenting #panel-resizer,
 body.presenting #source-editor,
 body.presenting #hover-tip,
 body.presenting #update-banner,
-body.presenting #editor > .code-copy-btn,
+body.presenting #editor .code-copy-btn,
 body.presenting #editor > .footnote-preview {
   display: none !important;
 }
@@ -1670,12 +1389,21 @@ body.presenting #editor {
   background: var(--bg-color);
 }
 
+/* 放映时滚动发生在 CM6 的 .cm-scroller 上，#editor 自己不动，所以这里要把
+   scroller 变成一个居中的容器。`safe center` 是关键：普通 center 会让超出窗口的页面
+   从上方溢出且滚不回去，safe 会在装不下时退回顶对齐。 */
+body.presenting #editor .cm-scroller {
+  display: flex !important;
+  align-items: safe center !important;
+  overflow: auto !important;
+}
+
 /* Centred by auto margins instead of justify-content: a page taller than the
    window has to stay scrollable from its own first line, and centring inside a
    flex container clips exactly that. */
-body.presenting #editor .ProseMirror {
+body.presenting #editor .cm-content {
   flex: 0 0 auto;
-  margin: auto;
+  margin: 0 auto;
   max-width: min(38em, 86vw);
   padding: 4vh 0;
   font-size: var(--slide-font-size, 24px);
@@ -1685,23 +1413,28 @@ body.presenting #editor .ProseMirror {
 
 /* Content that does not fit gives way to the surface: a table scrolls inside the
    page, a diagram or a photo shrinks to fit it. */
-body.presenting #editor .ProseMirror > * {
+body.presenting #editor .cm-content > * {
   max-width: 100%;
 }
 
-body.presenting #editor .ProseMirror pre {
+body.presenting #editor .cm-content .cm-md-table-widget {
+  display: block;
   overflow-x: auto;
 }
 
-body.presenting #editor .ProseMirror img,
-body.presenting #editor .ProseMirror svg {
+body.presenting #editor .cm-content .cm-md-codeblock {
+  overflow-x: auto;
+}
+
+body.presenting #editor .cm-content img,
+body.presenting #editor .cm-content svg {
   max-height: 72vh;
 }
 
 /* Print only document content; app overlays can appear at any time. */
 @media print {
   body > :not(#editor),
-  #editor > .code-copy-btn,
+  #editor .code-copy-btn,
   #editor > .footnote-preview {
     display: none !important;
   }
