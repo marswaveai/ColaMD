@@ -251,15 +251,30 @@ const MEASURE = `(() => {
   })
 })()`
 
-/** 复制一段带加粗的选区，看剪贴板里两个口味各是什么。 */
-const COPY_PROBE = `(() => {
+/**
+ * 复制一段带加粗的选区，看剪贴板里两个口味各是什么。
+ *
+ * 分两步：先设 DOM 选区，等一拍，再发 copy。CodeMirror 要等浏览器派发的
+ * `selectionchange` 才把 DOM 选区读进自己的状态（`observer.selectionRange`），
+ * 而 `selectionchange` 是异步的。同一个表达式里设完就发，复制处理器读到的
+ * 还是旧的（折叠的）选区，于是 text/html 是空的。真机上手选完再按 ⌘C，
+ * 两个事件本来就不在同一个任务里，所以只有探针会踩到。
+ */
+const COPY_SELECT = `(() => {
   const lines = [...document.querySelectorAll('#editor .cm-line')]
   const line = lines.find((l) => l.textContent.includes('普通段落'))
+  if (!line) return 'no-line'
+  document.querySelector('#editor .cm-content').focus()
   const range = document.createRange()
   range.selectNodeContents(line)
   const selection = window.getSelection()
   selection.removeAllRanges()
   selection.addRange(range)
+  return 'ok'
+})()`
+
+const COPY_PROBE = `(() => {
+  const selection = window.getSelection()
   const data = new DataTransfer()
   const event = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true })
   document.querySelector('#editor .cm-content').dispatchEvent(event)
@@ -270,10 +285,7 @@ const COPY_PROBE = `(() => {
     diag: {
       collapsed: selection.isCollapsed,
       ranges: selection.rangeCount,
-      contains: selection.rangeCount > 0 && document.querySelector('#editor').contains(selection.getRangeAt(0).commonAncestorContainer),
       children: selection.rangeCount > 0 ? selection.getRangeAt(0).cloneContents().childNodes.length : -1,
-      lineFound: !!line,
-      lineConnected: line ? line.isConnected : null,
       contentFocus: document.querySelector('#editor .cm-content') === document.activeElement
     }
   })
@@ -484,12 +496,19 @@ function main() {
         `cm-md 类名残留=${m.exportHtml.cmClass}[${m.exportHtml.cmClassNames}] cm-line 残留=${m.exportHtml.cmLine} 属性区残留=${m.exportHtml.frontmatter}`)
       check('导出的 HTML 带图片', m.exportHtml.img === true, `img=${m.exportHtml.img} 长度=${m.exportHtml.size}`)
 
+      const selected = await evaluate(renderer, COPY_SELECT)
+      if (selected !== 'ok') console.log(`  （复制探针：${selected}）`)
+      await sleep(300)
       const copy = JSON.parse(await evaluate(renderer, COPY_PROBE))
-      check('复制带富文本口味', /<strong|<b>/.test(copy.html) && copy.handled === true,
+      const paragraphs = (copy.html.match(/<p>/g) ?? []).length
+      check('复制带富文本口味', /<strong/.test(copy.html) && copy.handled === true,
         `text/html 长度=${copy.html.length} 有处理器=${copy.handled} 诊断=${JSON.stringify(copy.diag)}`)
+      check('复制的一行不被拆成多段', paragraphs === 1, `段落数=${paragraphs} html=${copy.html.slice(0, 160)}`)
       check('复制不带编辑器结构', copy.html !== '' && !copy.html.includes('cm-md-') && !copy.html.includes('cm-line'),
         `text/html: ${copy.html.slice(0, 120)}`)
-      check('复制的纯文本不带标记', copy.text !== '' && !copy.text.includes('**'), `text/plain: ${copy.text.slice(0, 80)}`)
+      check('复制的纯文本不带标记',
+        copy.text !== '' && !/[*~`=]/.test(copy.text) && !copy.text.includes('\n'),
+        `text/plain: ${JSON.stringify(copy.text)}`)
 
       const perf = await measureKeys(renderer)
       check('30 次光标移动 < 1200ms', perf < 1200, `${perf}ms`)

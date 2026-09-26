@@ -24,6 +24,9 @@ const DROP_CLASSES = new Set([
   'cm-md-quotemark',
   'code-copy-btn',
   'cm-md-jump-flash',
+  // 光标所在的那一行会把 markdown 标记（`**`、`#`、`==` 等）露出来给人看，
+  // 它们不属于正文，交出去的那份里不能带
+  'cm-md-marker',
 ])
 
 type LineKind = 'code' | 'li' | 'quote' | 'hr' | 'table' | 'empty' | 'p' | `h${1 | 2 | 3 | 4 | 5 | 6}`
@@ -194,11 +197,16 @@ function blocksHTML(nodes: Node[]): string {
   let index = 0
   while (index < nodes.length) {
     const node = nodes[index]
-    if (!(node instanceof HTMLElement) || !node.classList.contains('cm-line')) {
-      // 选区被截断时会出现半行：当成一个段落
-      const inline = inlineHTML(node)
-      if (inline.trim() !== '') html += `<p>${inline}</p>`
-      index += 1
+    if (!isLineElement(node)) {
+      // 选区从一个行的中间开始或结束：连续的行内片段属于同一行，要合成一个段落。
+      // 不合并的话，`含 **加粗**、` 会变成「含」「加粗」「、」三个段落。
+      const inline: string[] = []
+      while (index < nodes.length && !isLineElement(nodes[index])) {
+        inline.push(inlineHTML(nodes[index]))
+        index += 1
+      }
+      const merged = inline.join('')
+      if (merged.trim() !== '') html += `<p>${merged}</p>`
       continue
     }
     const kind = lineKind(node)
@@ -218,6 +226,33 @@ function blocksHTML(nodes: Node[]): string {
     html += renderGroup(kind, group)
   }
   return html
+}
+
+/** 这一行是不是编辑器画出来的行（选区完整盖住的行）。 */
+function isLineElement(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement && node.classList.contains('cm-line')
+}
+
+/**
+ * 一段行内内容 → 纯文本。取舍与 inlineHTML 一致，只是不带标签。
+ *
+ * 不能直接拿 textContent：编辑器自己的零件（列表圆点、复制按钮）与露出来的 markdown
+ * 标记都在 DOM 里，拿 textContent 会把它们一起带走。
+ */
+function inlineText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+  if (!(node instanceof HTMLElement)) return ''
+  const classes = node.classList
+  for (const dropped of DROP_CLASSES) {
+    if (classes.contains(dropped)) return ''
+  }
+  if (classes.contains('cm-md-frontmatter')) return ''
+  if (node.tagName === 'IMG') return node.getAttribute('alt') ?? ''
+  if (classes.contains('cm-md-image')) {
+    const img = node.querySelector('img')
+    return img ? img.getAttribute('alt') ?? '' : ''
+  }
+  return Array.from(node.childNodes).map(inlineText).join('')
 }
 
 /** 选中的一段 → 干净的 HTML。复制用它。 */
@@ -241,16 +276,18 @@ export function plainTextFrom(root: Node): string {
   const rows: string[] = []
   const top = Array.from(root.childNodes)
 
-  const isLine = (node: Node): node is HTMLElement =>
-    node instanceof HTMLElement && node.classList.contains('cm-line')
-
   let index = 0
   while (index < top.length) {
     const node = top[index]
-    if (!isLine(node)) {
-      const text = (node.textContent ?? '').trim()
+    if (!isLineElement(node)) {
+      // 与 blocksHTML 同理：半行的行内片段要合成一行，不能一段一行
+      const parts: string[] = []
+      while (index < top.length && !isLineElement(top[index])) {
+        parts.push(inlineText(top[index]))
+        index += 1
+      }
+      const text = parts.join('').trim()
       if (text !== '') rows.push(text)
-      index += 1
       continue
     }
 
@@ -263,18 +300,21 @@ export function plainTextFrom(root: Node): string {
     if (kind === 'code') {
       const group: HTMLElement[] = [node]
       let next = index + 1
-      while (next < top.length && isLine(top[next]) && lineKind(top[next] as HTMLElement) === 'code') {
-        group.push(top[next] as HTMLElement)
+      while (next < top.length) {
+        const candidate = top[next]
+        if (!isLineElement(candidate) || lineKind(candidate) !== 'code') break
+        group.push(candidate)
         next += 1
       }
       const body = group.slice(1)
       if (body.length > 0 && (body[body.length - 1].textContent ?? '').trim() === '') body.pop()
+      // 代码块里的内容是代码本身，原样带走（围栏行已经在上面被切掉了）
       for (const line of body) rows.push(line.textContent ?? '')
       index = next
       continue
     }
 
-    rows.push((node.textContent ?? '').trim())
+    rows.push(inlineText(node).trim())
     index += 1
   }
 

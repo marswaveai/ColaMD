@@ -105,11 +105,14 @@ const hide = (from: number, to: number) => Decoration.replace({})
  * 标题与引用的文字会比正文右移一个字：`# 标题` 藏掉 `#` 剩下 ` 标题`。
  * 这个偏移很小，但正是「前置对齐不对」的全部来源。
  */
-function hideMarker(state: EditorState, from: number, to: number, ranges: DecorationRange[]): void {
+function hideMarker(state: EditorState, from: number, to: number, ranges: DecorationRange[], visible = false): void {
   const next = to < state.doc.length ? state.doc.sliceString(to, to + 1) : ''
   // 空格不可能是换行，所以 to + 1 不会越到下一行
   const end = next === ' ' || next === '\t' ? to + 1 : to
-  ranges.push({ from, to: end, deco: hide(from, end) })
+  // 光标在这一行时标记要露出来（这是「当前行看源码」的手感），但它不属于正文。
+  // 给它一个类名，复制和导出才认得出它并丢掉：2026-09-26 发现，在一行里选一段带加粗的
+  // 文字，纯文本里带着 `**`，因为标记只在光标离开这一行时才从 DOM 里消失。
+  ranges.push({ from, to: end, deco: visible ? MARK({ class: 'cm-md-marker' }) : hide(from, end) })
 }
 
 interface DecorationRange {
@@ -395,8 +398,13 @@ function collectMath(state: EditorState, ranges: DecorationRange[]): void {
   const excluded: Excluded[] = excludedRanges(text, syntaxTree(state))
 
   for (const range of scanMath(text, excluded)) {
-    // 光标所在行不画，退回源码，方便编辑
-    if (isActiveLine(state, range.from)) continue
+    // 光标所在行不画，退回源码，方便编辑；但定界符不属于正文，标出来让复制丢掉它
+    if (isActiveLine(state, range.from)) {
+      const delim = range.block ? 2 : 1
+      ranges.push({ from: range.from, to: range.from + delim, deco: MARK({ class: 'cm-md-marker' }) })
+      ranges.push({ from: range.to - delim, to: range.to, deco: MARK({ class: 'cm-md-marker' }) })
+      continue
+    }
     ranges.push({
       from: range.from,
       to: range.to,
@@ -423,10 +431,12 @@ function collectHighlight(state: EditorState, ranges: DecorationRange[], exclude
     const start = match.index
     const end = start + match[0].length
     if (inExcluded(start)) continue
-    if (isActiveLine(state, start)) continue
-    // 藏定界符，给中间那段加底色
-    ranges.push({ from: start, to: start + 2, deco: hide(start, start + 2) })
-    ranges.push({ from: end - 2, to: end, deco: hide(end - 2, end) })
+    const active = isActiveLine(state, start)
+    // 藏定界符，给中间那段加底色；光标在这一行时定界符露出来，但仍要能认出来
+    const delimiter = (from: number, to: number) =>
+      active ? MARK({ class: 'cm-md-marker' }) : hide(from, to)
+    ranges.push({ from: start, to: start + 2, deco: delimiter(start, start + 2) })
+    ranges.push({ from: end - 2, to: end, deco: delimiter(end - 2, end) })
     ranges.push({ from: start + 2, to: end - 2, deco: MARK({ class: 'cm-md-highlight' }) })
   }
 }
@@ -919,8 +929,7 @@ function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Ran
         // 待办项的圆点要去掉：它已经有复选框了，两个标记并排就是「• ☐ 文案」。
         const after = state.doc.sliceString(node.to, node.to + 4)
         if (/^\s+\[[ xX]\]/.test(after)) {
-          if (!isActiveLine(state, node.from)) hideMarker(state, node.from, node.to, ranges)
-          else ranges.push({ from: node.from, to: node.to, deco: MARK({ class: 'cm-md-listmark' }) })
+          hideMarker(state, node.from, node.to, ranges, isActiveLine(state, node.from))
           break
         }
         // `-` / `*` / `+` 画成真的圆点；`1.` 这种保留原文，序号就是用户写的
@@ -1010,7 +1019,7 @@ function collectInline(state: EditorState, ranges: DecorationRange[], front: Ran
         case 'EmphasisMark':
         case 'StrikethroughMark':
         case 'CodeMark': {
-          if (!active) ranges.push({ from, to, deco: hide(from, to) })
+          ranges.push({ from, to, deco: active ? MARK({ class: 'cm-md-marker' }) : hide(from, to) })
           break
         }
         case 'CodeInfo': {
@@ -1020,7 +1029,7 @@ function collectInline(state: EditorState, ranges: DecorationRange[], front: Ran
         }
         case 'HeaderMark': {
           // 标题的 `#` 连同后面那个空格一起藏，否则标题会比正文右移一个字
-          if (!active) hideMarker(state, from, to, ranges)
+          hideMarker(state, from, to, ranges, active)
           break
         }
         case 'InlineCode': {
