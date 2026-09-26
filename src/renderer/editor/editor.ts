@@ -13,6 +13,7 @@ import { EditorSelection, type EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { createEditorCore, getEditorHandle, type EditorHandle } from './core'
 import { footnoteDefinitions } from './footnotes'
+import { selectionHTMLFrom } from './clean-html'
 
 import { headingFlashEffect, setCleanExport as setCleanExportEffect, setDocumentFileUrlEffect, primeDocumentFileUrl } from './live-preview'
 import { runFormatCommand as runFormat, type FormatCommandId } from './format-commands'
@@ -259,9 +260,7 @@ function installEditorInteractions(root: HTMLElement, view: EditorView): void {
   })
 
   setupFootnotePreview(root)
-
-  // 复制行为在 core.ts 里以 CodeMirror 的 DOM 事件处理器注册（见那里的注释：
-  // 挂在外面的监听器和 CodeMirror 自己抢 copy 事件，顺序不可靠）。
+  setupRichCopy(root)
 
   // 代码块右上角的复制按钮：把围栏里的代码原样写进剪贴板
   root.addEventListener('click', (e) => {
@@ -329,6 +328,60 @@ const FOOTNOTE_HIDE_GRACE = 120
  * 定义从**当前文档的文本**里扫出来（footnotes.ts），不查第二份状态：文件就是真相。
  * 悬停区是「引用 + 卡片本身」，所以定义长了可以滚着看。
  */
+/**
+ * 选区是否完全落在已经渲染出来的范围里。
+ *
+ * CodeMirror 只为视口内的行建 DOM，其余用 `.cm-gap` 占位元素撑高。富文本口味只能从
+ * DOM 里取，所以得先问这一句；不问的后果就是全选复制只得到第一屏（2026-09-26 报的）。
+ *
+ * 判据用 `.cm-gap` 而不是 `view.visibleRanges`：后者是「装饰没盖住的空隙」，
+ * 不是「已经渲染的范围」。实测一篇 13 行的小文档，装饰把它切成两段，
+ * `visibleRanges` 就报 `[[0,29],[51,101]]`，看着像有内容没渲染。
+ */
+function selectionRendered(view: EditorView): boolean {
+  if (view.contentDOM.querySelector('.cm-gap')) return false
+  const viewport = view.viewport
+  return view.state.selection.ranges.every(
+    (range) => range.empty || (range.from >= viewport.from && range.to <= viewport.to),
+  )
+}
+
+/**
+ * 复制给两个口味，各自管一种去处：
+ *
+ *   text/plain 给**原文**（markdown 本身）。它从文档里取，所以总是完整的，不受
+ *   「只渲染了视口」影响；粘到 Typora、另一个编辑器、聊天框里，拿到的就是 markdown
+ *   原文，可以接着编辑（Obsidian 也是这么做的）。
+ *   text/html 给渲染后的样子，粘到 Word、飞书这类富文本去处时用。
+ *
+ * 为什么挂在 `#editor` 上，而不是 CodeMirror 的事件链里：CodeMirror 自己也处理 copy，
+ * 它先 `clearData()` 再写 text/plain。它的监听器在 contentDOM（事件目标）上，我们在祖先上，
+ * 所以我们的永远在它之后跑。挂进它的处理器列表反而不确定：内置处理器排在最后，
+ * 我们返回 true 也拦不住它，实测 text/html 会被它清掉。
+ */
+function setupRichCopy(root: HTMLElement): void {
+  root.addEventListener('copy', (event) => {
+    if (!(event instanceof ClipboardEvent)) return
+    const view = getEditorView()
+    if (!view) return
+    // 没选中东西时不动：CodeMirror 那时复制的是整行，那是它更懂的行为。
+    const ranges = view.state.selection.ranges.filter((range) => !range.empty)
+    if (ranges.length === 0) return
+    event.clipboardData?.setData(
+      'text/plain',
+      ranges.map((range) => view.state.sliceDoc(range.from, range.to)).join('\n'),
+    )
+    if (!selectionRendered(view)) return
+    const start = view.domAtPos(ranges[0].from)
+    const end = view.domAtPos(ranges[ranges.length - 1].to)
+    const range = document.createRange()
+    range.setStart(start.node, start.offset)
+    range.setEnd(end.node, end.offset)
+    const html = selectionHTMLFrom(range.cloneContents())
+    if (html) event.clipboardData?.setData('text/html', html)
+  })
+}
+
 function setupFootnotePreview(root: HTMLElement): void {
   const card = document.createElement('div')
   card.className = 'footnote-preview'

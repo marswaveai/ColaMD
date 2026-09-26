@@ -13,7 +13,6 @@ import { EditorState } from '@codemirror/state'
 import { EditorView, drawSelection, dropCursor, highlightSpecialChars, rectangularSelection, crosshairCursor } from '@codemirror/view'
 import { undo, redo } from '@codemirror/commands'
 import { livePreview, setEditorFocus } from './live-preview'
-import { plainTextFrom, selectionHTMLFrom } from './clean-html'
 import { listInput } from './list-input'
 import { searchHighlightField } from './search-highlight'
 import { stateExtensions, editableCompartment } from './state'
@@ -84,28 +83,6 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
       blur: (_event, view) => {
         if (view.dom.isConnected) view.dispatch({ effects: setEditorFocus.of(false) })
         return false
-      },
-    }),
-    // 复制交出去的是「一篇文档」，不是编辑器此刻的 DOM。
-    //
-    // 必须走 CodeMirror 的 DOM 事件处理器，不能在旁边再挂一个监听器：CodeMirror 自己也
-    // 处理 copy（它写 text/plain），两家的顺序取决于它内部缓存的选区状态，实测时好时坏。
-    // 插件形式的处理器排在它前面（computeHandlers 先收插件的、再收内置的），我们返回 true
-    // 它就整个不执行，剪贴板里放什么是我们说了算。
-    EditorView.domEventHandlers({
-      copy: (event, view) => {
-        // 没选中东西时不动：CodeMirror 那时复制的是整行，那是它更懂的行为。
-        const selection = window.getSelection()
-        if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false
-        const range = selection.getRangeAt(0)
-        if (!view.contentDOM.contains(range.commonAncestorContainer)) return false
-        const fragment = range.cloneContents()
-        const html = selectionHTMLFrom(fragment)
-        if (!html) return false
-        event.preventDefault()
-        event.clipboardData?.setData('text/html', html)
-        event.clipboardData?.setData('text/plain', plainTextFrom(fragment))
-        return true
       },
     }),
     // 回车续列表。这是编辑器的输入手感，与渲染无关，所以单独一个模块。

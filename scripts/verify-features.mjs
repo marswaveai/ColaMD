@@ -254,25 +254,9 @@ const MEASURE = `(() => {
 /**
  * 复制一段带加粗的选区，看剪贴板里两个口味各是什么。
  *
- * 分两步：先设 DOM 选区，等一拍，再发 copy。CodeMirror 要等浏览器派发的
- * `selectionchange` 才把 DOM 选区读进自己的状态（`observer.selectionRange`），
- * 而 `selectionchange` 是异步的。同一个表达式里设完就发，复制处理器读到的
- * 还是旧的（折叠的）选区，于是 text/html 是空的。真机上手选完再按 ⌘C，
- * 两个事件本来就不在同一个任务里，所以只有探针会踩到。
+ * 选区走键盘（点一下定位光标，Home、Shift+End），不自己设 DOM 选区：
+ * CodeMirror 会重渲染行元素，程序设的 DOM 选区可能被丢掉或映射错位置，实测时好时坏。
  */
-const COPY_SELECT = `(() => {
-  const lines = [...document.querySelectorAll('#editor .cm-line')]
-  const line = lines.find((l) => l.textContent.includes('普通段落'))
-  if (!line) return 'no-line'
-  document.querySelector('#editor .cm-content').focus()
-  const range = document.createRange()
-  range.selectNodeContents(line)
-  const selection = window.getSelection()
-  selection.removeAllRanges()
-  selection.addRange(range)
-  return 'ok'
-})()`
-
 const COPY_PROBE = `(() => {
   const selection = window.getSelection()
   const data = new DataTransfer()
@@ -289,6 +273,19 @@ const COPY_PROBE = `(() => {
       contentFocus: document.querySelector('#editor .cm-content') === document.activeElement
     }
   })
+})()`
+
+/**
+ * 全选：走 CodeMirror 自己的 keymap。它的 keymap 是 contentDOM 上的 DOM 监听器，
+ * 所以合成的 keydown 能进得去（CDP 的真键盘事件反而进不去，实测选不中任何东西）。
+ */
+const SELECT_ALL = `(() => {
+  const content = document.querySelector('#editor .cm-content')
+  content.focus()
+  content.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'a', code: 'KeyA', metaKey: true, bubbles: true, cancelable: true,
+  }))
+  return 'ok'
 })()`
 
 /**
@@ -496,9 +493,10 @@ function main() {
         `cm-md 类名残留=${m.exportHtml.cmClass}[${m.exportHtml.cmClassNames}] cm-line 残留=${m.exportHtml.cmLine} 属性区残留=${m.exportHtml.frontmatter}`)
       check('导出的 HTML 带图片', m.exportHtml.img === true, `img=${m.exportHtml.img} 长度=${m.exportHtml.size}`)
 
-      const selected = await evaluate(renderer, COPY_SELECT)
-      if (selected !== 'ok') console.log(`  （复制探针：${selected}）`)
-      await sleep(300)
+      // 点一下把光标放到那一行，再用键盘选中整行
+      await clickLine(renderer, '普通段落')
+      await pressKey(renderer, 'Home', 'Home', 36)
+      await pressKey(renderer, 'End', 'End', 35, 8)
       const copy = JSON.parse(await evaluate(renderer, COPY_PROBE))
       const paragraphs = (copy.html.match(/<p>/g) ?? []).length
       check('复制带富文本口味', /<strong/.test(copy.html) && copy.handled === true,
@@ -506,9 +504,30 @@ function main() {
       check('复制的一行不被拆成多段', paragraphs === 1, `段落数=${paragraphs} html=${copy.html.slice(0, 160)}`)
       check('复制不带编辑器结构', copy.html !== '' && !copy.html.includes('cm-md-') && !copy.html.includes('cm-line'),
         `text/html: ${copy.html.slice(0, 120)}`)
-      check('复制的纯文本不带标记',
-        copy.text !== '' && !/[*~`=]/.test(copy.text) && !copy.text.includes('\n'),
+      // 纯文本口味给的是**原文**（markdown 本身），不是洗过的文字：
+      // 粘到 Typora 或另一个编辑器里，拿到的必须是能继续编辑的 markdown。
+      check('复制的纯文本是原文',
+        copy.text.includes('**加粗**') && copy.text.includes('==高亮=='),
         `text/plain: ${JSON.stringify(copy.text)}`)
+
+      // 全选复制：CodeMirror 只为视口内的行建 DOM，选区伸到没渲染的地方时
+      // 浏览器选区被夹在已渲染的那一段里，所以这里必须拿到整篇。
+      await evaluate(renderer, SELECT_ALL)
+      await sleep(300)
+      const whole = JSON.parse(await evaluate(renderer, COPY_PROBE))
+      check('全选复制拿到整篇', whole.text === fixture(),
+        `复制到 ${whole.text.length} 字节，原文 ${fixture().length} 字节，结尾 ${JSON.stringify(whole.text.slice(-24))}`)
+      const listTags = (html, tag) => [
+        (html.match(new RegExp(`<${tag}>`, 'g')) ?? []).length,
+        (html.match(new RegExp(`</${tag}>`, 'g')) ?? []).length,
+      ]
+      const unbalanced = ['ul', 'ol', 'li'].filter((tag) => {
+        const [open, close] = listTags(whole.html, tag)
+        return open !== close
+      })
+      check('复制的 HTML 列表结构合法',
+        whole.html !== '' && unbalanced.length === 0 && !/<(ul|ol)>(?!<li>)/.test(whole.html),
+        `不配对的标签=${unbalanced.join(',') || '无'} html=${whole.html.slice(0, 200)}`)
 
       const perf = await measureKeys(renderer)
       check('30 次光标移动 < 1200ms', perf < 1200, `${perf}ms`)
