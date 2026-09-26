@@ -1953,12 +1953,20 @@ async function init(): Promise<void> {
   })
 
   // --- Auto update banner (weak, non-blocking) ---
+  // 2.7.0 换了编辑器内核，用户点「更新」之前就该知道这次不是普通修复。
+  // 只给需要提前打招呼的版本写一句，没登记的版本保持原样。
+  const UPDATE_NOTES: Record<string, { zh: string; en: string }> = {
+    '2.7.0': { zh: '这次换了编辑器内核', en: 'new editor core' }
+  }
   let updateDownloaded = false
   function showUpdateBanner(version: string): void {
+    const zh = isChinese()
+    const note = UPDATE_NOTES[version]
+    const suffix = note ? ` · ${zh ? note.zh : note.en}` : ''
     updateBannerTextEl().textContent = updateDownloaded
-      ? (isChinese() ? `新版本 v${version} 已就绪` : `Update v${version} is ready`)
-      : (isChinese() ? `发现新版本 v${version}` : `Update v${version} available`)
-    updateBannerActionEl().textContent = updateDownloaded ? (isChinese() ? '重启安装' : 'Restart') : (isChinese() ? '更新' : 'Update')
+      ? (zh ? `新版本 v${version} 已就绪${suffix}` : `Update v${version} is ready${suffix}`)
+      : (zh ? `发现新版本 v${version}${suffix}` : `Update v${version} available${suffix}`)
+    updateBannerActionEl().textContent = updateDownloaded ? (zh ? '重启安装' : 'Restart') : (zh ? '更新' : 'Update')
     updateBannerActionEl().disabled = false
     updateBannerEl().hidden = false
   }

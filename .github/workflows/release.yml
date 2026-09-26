@@ -78,7 +78,15 @@ jobs:
           if-no-files-found: ignore
 
   # Tag pushes publish a release; manual dispatches are build-only so the
-  # artifacts can be verified (or attached manually) before publishing.
+  # artifacts can be verified (or attached manually) before attaching them.
+  #
+  # `COLAMD_PRERELEASE=true` publishes the release as a pre-release. Stable
+  # installs ask GitHub for `/releases/latest`, which never returns a
+  # pre-release, so those users are not offered the version; anyone who wants
+  # it can still download it from the releases page. The flag is read at
+  # creation time, so there is no window in which a pre-release is briefly
+  # live as the latest release. Promote the same build by clearing the
+  # variable and running `gh release edit <tag> --prerelease=false --latest`.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
@@ -131,6 +139,7 @@ jobs:
         with:
           files: artifacts/*
           body_path: ${{ runner.temp }}/notes.md
+          prerelease: ${{ vars.COLAMD_PRERELEASE == 'true' }}
 
       # A missing section still publishes, so a typo in the version number
       # cannot leave a tagged release unpublished. The warning above is the
@@ -141,3 +150,4 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+          prerelease: ${{ vars.COLAMD_PRERELEASE == 'true' }}
