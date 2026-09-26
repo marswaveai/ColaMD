@@ -289,28 +289,33 @@ function exportingCleanly(state: EditorState): boolean {
  * 判断粒度是「行」而不是「精确区间」：光标所在的这一行，标记全部显形，
  * 这样用户点一下就能看到并修改原始语法，不需要精确点到标记上。
  */
+/**
+ * 光标所在的那一行算「激活」，这一行会露出源码。
+ *
+ * 只看**空选区**：一旦拉出选区就保持渲染。Typora 与 Obsidian 都是这个规矩
+ * （2026-09-26 定的）。按选区露源码的话，全选会让整屏变成 markdown。
+ */
 function isActiveLine(state: EditorState, pos: number): boolean {
   if (exportingCleanly(state)) return false
   if (!editorFocused(state)) return false
-  const line = state.doc.lineAt(pos)
+  const line = state.doc.lineAt(pos).number
   for (const range of state.selection.ranges) {
-    const selStart = state.doc.lineAt(range.from)
-    const selEnd = state.doc.lineAt(range.to)
-    if (line.number >= selStart.number && line.number <= selEnd.number) return true
+    if (!range.empty) continue
+    if (state.doc.lineAt(range.head).number === line) return true
   }
   return false
 }
 
-/** 区间覆盖的任意一行落在选区里就算激活。跨行的块（表格、公式）用它。 */
+/** 跨行的块（表格、公式、属性区）同理：只有光标落在块里才露出源码。 */
 function isActiveRange(state: EditorState, from: number, to: number): boolean {
   if (exportingCleanly(state)) return false
   if (!editorFocused(state)) return false
   const first = state.doc.lineAt(from).number
   const last = state.doc.lineAt(to).number
   for (const range of state.selection.ranges) {
-    const selStart = state.doc.lineAt(range.from).number
-    const selEnd = state.doc.lineAt(range.to).number
-    if (selEnd >= first && selStart <= last) return true
+    if (!range.empty) continue
+    const at = state.doc.lineAt(range.head).number
+    if (at >= first && at <= last) return true
   }
   return false
 }
