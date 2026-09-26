@@ -421,6 +421,59 @@ async function checkCheatsheet() {
     check('速查文档：代码着色', m.codeColors >= 4, `代码颜色种类=${m.codeColors}`)
     check('速查文档：标题与代码块渲染', m.headings >= 5 && m.codeLines >= 6,
       `标题=${m.headings} 代码块行=${m.codeLines}`)
+
+    // 大选区的复制：CodeMirror 只为视口建 DOM，所以全选时拿不到完整的富文本口味，
+    // 得在 copy 事件之后把整篇渲染出来补上。这条断言看的是**系统剪贴板**：
+    // 补写发生在事件之后，事件里的 clipboardData 里没有它（2026-09-26 报的）。
+    await renderer.send('Browser.grantPermissions', {
+      origin: 'file://', permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite']
+    }).catch(() => { /* Electron 里读剪贴板本来就放行 */ })
+    await renderer.send('Emulation.clearDeviceMetricsOverride')
+    await sleep(600)
+    // 读剪贴板、以及让 CodeMirror 自己接住 ⌘A（而不是浏览器的全选），都要求这个窗口
+    // 真的拿到焦点。窗口在屏幕外，点一次不一定拿得到，所以点到为止地重试。
+    await renderer.send('Page.bringToFront')
+    await sleep(300)
+    const editorBox = JSON.parse(await evaluate(renderer, `(() => {
+      const r = document.querySelector('#editor .cm-content').getBoundingClientRect()
+      return JSON.stringify({ x: Math.round(r.left + 40), y: Math.round(r.top + 20) })
+    })()`))
+    let focused = false
+    for (let i = 0; i < 8; i++) {
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await renderer.send('Input.dispatchMouseEvent', { type, x: editorBox.x, y: editorBox.y, button: 'left', clickCount: 1 })
+      }
+      await sleep(400)
+      focused = (await evaluate(renderer, `document.hasFocus()`)) === true
+      if (focused) break
+    }
+    const gaps = Number(await evaluate(renderer, `document.querySelectorAll('#editor .cm-gap').length`))
+    await evaluate(renderer, `document.querySelector('#editor .cm-content').dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', metaKey: true, bubbles: true, cancelable: true }))`)
+    await sleep(600)
+    const eventData = JSON.parse(await evaluate(renderer, `(() => {
+      const data = new DataTransfer()
+      const e = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true })
+      document.querySelector('#editor .cm-content').dispatchEvent(e)
+      return JSON.stringify({ text: data.getData('text/plain').length, html: data.getData('text/html').length })
+    })()`))
+    await sleep(1800)
+    let clip = ''
+    for (let i = 0; i < 5; i++) {
+      clip = await evaluate(renderer, `(async () => {
+        try {
+          const items = await navigator.clipboard.read()
+          const types = items[0].types
+          const html = types.includes('text/html') ? await (await items[0].getType('text/html')).text() : ''
+          return JSON.stringify({ types, htmlLen: html.length, head: html.slice(0, 24) })
+        } catch (error) { return JSON.stringify({ error: String(error.message) }) }
+      })()`)
+      if (!clip.includes('error')) break
+      await sleep(600)
+    }
+    const copied = JSON.parse(clip)
+    check('大选区复制也带富文本口味',
+      gaps > 0 && focused && eventData.html === 0 && (copied.types ?? []).includes('text/html') && copied.htmlLen > 2000,
+      `占位=${gaps} 有焦点=${focused} 事件里 html=${eventData.html} 纯文本=${eventData.text} 剪贴板=${clip}`)
   } finally {
     try { process.kill(-child.pid) } catch { /* 已经退了 */ }
   }
@@ -446,11 +499,16 @@ function main() {
       await renderer.send('Emulation.setDeviceMetricsOverride', {
         width: 1200, height: 2600, deviceScaleFactor: 1, mobile: false
       })
+      // 等到**这份夹具**真的进了编辑器。只数行数不够：认错了文档时它照样满屏是行，
+      // 后面会红一片看不懂的断言（2026-09-26 碰上过一次，18 条一起红）。
+      let loaded = false
       for (let i = 0; i < 80; i++) {
-        const lines = await evaluate(renderer, `document.querySelectorAll('#editor .cm-line').length`)
-        if (Number(lines) > 5) break
+        const ok = await evaluate(renderer,
+          `(() => { const el = document.querySelector('#editor .cm-content'); return el ? el.textContent.includes('功能验收') : false })()`)
+        if (ok === true) { loaded = true; break }
         await sleep(250)
       }
+      check('夹具已加载', loaded, `编辑器里有没有这份夹具：${loaded}`)
       // mermaid 是异步画的，多等一会儿
       await sleep(2500)
 

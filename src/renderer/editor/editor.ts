@@ -9,11 +9,12 @@
 // 设计原则见 docs/editor-architecture.md。一句话：缓冲区里存的就是文件的字节，
 // 渲染是叠在上面的一层装饰，保存时原样写回，不做任何序列化。
 
-import { EditorSelection, type EditorState } from '@codemirror/state'
+import { EditorSelection, type EditorState, type SelectionRange } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { createEditorCore, getEditorHandle, type EditorHandle } from './core'
 import { footnoteDefinitions } from './footnotes'
 import { selectionHTMLFrom } from './clean-html'
+import { renderWholeDocument, restoreViewport } from '../print-layout'
 
 import { headingFlashEffect, setCleanExport as setCleanExportEffect, setDocumentFileUrlEffect, primeDocumentFileUrl } from './live-preview'
 import { runFormatCommand as runFormat, type FormatCommandId } from './format-commands'
@@ -346,6 +347,48 @@ function selectionRendered(view: EditorView): boolean {
   )
 }
 
+/** 选区对应的 DOM 区间。位置从文档坐标换算，所以只要那些行在 DOM 里就能取到。 */
+function selectionRange(view: EditorView, ranges: readonly SelectionRange[]): Range {
+  const start = view.domAtPos(ranges[0].from)
+  const end = view.domAtPos(ranges[ranges.length - 1].to)
+  const range = document.createRange()
+  range.setStart(start.node, start.offset)
+  range.setEnd(end.node, end.offset)
+  return range
+}
+
+function selectionHTML(view: EditorView, ranges: readonly SelectionRange[]): string {
+  return selectionHTMLFrom(selectionRange(view, ranges).cloneContents())
+}
+
+/**
+ * 大选区的复制：把整篇渲染出来再取 HTML，然后两个口味一起写回剪贴板。
+ *
+ * 为什么不在事件里直接写：整篇渲染要等下一帧（实测 35ms 上下），而剪贴板事件是同步的。
+ * 纯文本口味在事件里已经给出去了，所以即使这一步失败，粘出来也只是没有排版，不会丢内容。
+ */
+async function writeRichCopy(
+  view: EditorView,
+  ranges: readonly SelectionRange[],
+  text: string,
+): Promise<void> {
+  try {
+    if (!(await renderWholeDocument())) return
+    const html = selectionHTML(view, ranges)
+    if (!html) return
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+        'text/html': new Blob([html], { type: 'text/html' }),
+      }),
+    ])
+  } catch (error) {
+    console.error('复制富文本口味失败:', error)
+  } finally {
+    restoreViewport()
+  }
+}
+
 /**
  * 复制给两个口味，各自管一种去处：
  *
@@ -367,18 +410,18 @@ function setupRichCopy(root: HTMLElement): void {
     // 没选中东西时不动：CodeMirror 那时复制的是整行，那是它更懂的行为。
     const ranges = view.state.selection.ranges.filter((range) => !range.empty)
     if (ranges.length === 0) return
-    event.clipboardData?.setData(
-      'text/plain',
-      ranges.map((range) => view.state.sliceDoc(range.from, range.to)).join('\n'),
-    )
-    if (!selectionRendered(view)) return
-    const start = view.domAtPos(ranges[0].from)
-    const end = view.domAtPos(ranges[ranges.length - 1].to)
-    const range = document.createRange()
-    range.setStart(start.node, start.offset)
-    range.setEnd(end.node, end.offset)
-    const html = selectionHTMLFrom(range.cloneContents())
-    if (html) event.clipboardData?.setData('text/html', html)
+    const text = ranges.map((range) => view.state.sliceDoc(range.from, range.to)).join('\n')
+    event.clipboardData?.setData('text/plain', text)
+    if (selectionRendered(view)) {
+      const html = selectionHTML(view, ranges)
+      if (html) event.clipboardData?.setData('text/html', html)
+      return
+    }
+    // 选区伸到了还没渲染的行上。CodeMirror 只为视口建 DOM，所以此刻拿不到完整的 HTML。
+    // 富文本口味只能在事件之后补：先同步给出纯文本口味（它来自文档本身，总是完整的），
+    // 再把整篇渲染出来、取 HTML，两个口味一起写回剪贴板。
+    event.preventDefault()
+    void writeRichCopy(view, ranges, text)
   })
 }
 
