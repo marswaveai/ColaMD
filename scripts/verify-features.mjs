@@ -402,8 +402,14 @@ async function checkCheatsheet() {
       if (Number(lines) > 100) break
       await sleep(250)
     }
-    await sleep(2500)
-    const m = JSON.parse(await evaluate(renderer, CHEATSHEET_MEASURE))
+    // 图片和 Mermaid 是异步渲染的，机器忙的时候会晚一点。等它稳定再断言，
+    // 不要睡一个固定时长（2026-09-26：连续跑测试时这里会假红）。
+    let m = JSON.parse(await evaluate(renderer, CHEATSHEET_MEASURE))
+    for (let i = 0; i < 60; i++) {
+      if (m.imageLoaded === true && m.katex >= 2 && m.mermaid >= 1) break
+      await sleep(250)
+      m = JSON.parse(await evaluate(renderer, CHEATSHEET_MEASURE))
+    }
 
     check('速查文档：整篇渲染', m.lines >= 100, `行数=${m.lines}`)
     check('速查文档：图片加载', m.images >= 1 && m.imageLoaded === true,

@@ -1185,12 +1185,14 @@ export const decorationsRefreshEffect = StateEffect.define<null>()
 const parseRefresh = ViewPlugin.fromClass(class {
   private parsed = 0
   private pending = false
+  private attempts = 0
   update(update: ViewUpdate) {
     const tree = syntaxTree(update.state)
     const grew = tree.length > this.parsed
     this.parsed = tree.length
     const viewportEnd = update.view.viewport.to
     if (tree.length >= viewportEnd) {
+      this.attempts = 0
       if (grew) this.later(update.view, null)
       return
     }
@@ -1204,6 +1206,13 @@ const parseRefresh = ViewPlugin.fromClass(class {
       if (!view.dom.isConnected) return
       if (parseTo !== null) forceParsing(view, parseTo)
       view.dispatch({ effects: decorationsRefreshEffect.of(null) })
+      // `forceParsing` 是有时间预算的：机器忙的时候一次推不到视口末尾，
+      // 而装饰是照着语法树算的，树没铺到的地方就会露出原始 markdown。
+      // 所以要一直补到铺满为止（次数封顶，避免文档本身有问题时空转）。
+      if (syntaxTree(view.state).length < view.viewport.to && this.attempts < 40) {
+        this.attempts += 1
+        this.later(view, view.viewport.to)
+      }
     }, 0)
   }
 })

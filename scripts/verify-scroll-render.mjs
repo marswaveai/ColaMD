@@ -117,12 +117,22 @@ async function main() {
 
     for (const position of POSITIONS) {
       await evaluate(renderer, `document.querySelector(".cm-scroller").scrollTop = ${position}`)
-      await sleep(1600)
-      const state = JSON.parse(await evaluate(renderer, PROBE))
+      // 装饰是从语法树上读的，而语法树按视口惰性解析：滚过去之后要等它铺到视口。
+      // 机器忙的时候这一步会慢，所以轮询等它稳定，而不是睡一个固定时长
+      // （2026-09-26：固定 1600ms 在连续跑测试时会假红）。
+      let state = null
+      const started = Date.now()
+      for (let i = 0; i < 25; i++) {
+        state = JSON.parse(await evaluate(renderer, PROBE))
+        if (state.raw === 0 && state.decorated > 0) break
+        await sleep(200)
+      }
+      const waited = Date.now() - started
       const ok = state.raw === 0 && state.decorated > 0
       if (!ok) failures++
       console.log(`${ok ? '✓' : '✗'} 滚到 ${String(position).padStart(6)}：` +
-        `视口 ${state.rows} 行，原始标记 ${state.raw} 行，有装饰 ${state.decorated} 行，首行「${state.first}」`)
+        `视口 ${state.rows} 行，原始标记 ${state.raw} 行，有装饰 ${state.decorated} 行，` +
+        `等了 ${waited}ms，首行「${state.first}」`)
     }
   } finally {
     try { process.kill(-child.pid, 'SIGKILL') } catch { /* 已经退出 */ }
