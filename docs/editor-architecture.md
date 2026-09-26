@@ -79,12 +79,13 @@
 
 ## 已知的坑
 
-四件都是**静默失效**：不报错，只是画得不对。写下来免得再烧一次。
+五件都是**静默失效**：不报错，只是画得不对。写下来免得再烧一次。
 
 - **装饰不许跨行替换**：用函数式 `EditorView.decorations.compute()` 提供的装饰命中跨行替换时会抛 `RangeError: Decorations that replace line breaks may not be specified via plugins`，整层装饰更新中断，表现是「整个界面错乱」。块公式、属性区、表格这类跨行替换必须由 `StateField` + `provide: (field) => EditorView.decorations.from(field)` 提供。
 - **不许在插件 `update` 里派发事务**：CM6 会报 `Calls to EditorView.update are not allowed while an update is in progress`，然后让那个插件直接崩掉，之后它不再更新。要派发就推到 `setTimeout` 里做。
-- **语法树是按视口惰性解析的**：`syntaxTree(state)` 只覆盖已经解析过的那一段。装饰从树上读，所以滚到没解析过的区域时，那几行会以**原始源码**显示（`- **加粗**`），要点一下才会重算。视口移动时推一把解析（`forceParsing`）再请装饰重算一次。回归网：`npm run verify:scroll-render`。
-- **视口只渲染一屏**：CM6 只为视口附近的行建 DOM，其余用 `.cm-gap` 占位。任何把 DOM 当作「整篇文档」用的地方（导出、放映）都必须先让整篇渲染出来（`ViewState.printing`），否则拿到的只有当前一屏。
+- **语法树是按视口惰性解析的**：`syntaxTree(state)` 只覆盖已经解析过的那一段。装饰从树上读，所以滚到没解析过的区域时，那几行会以**原始源码**显示（`- **加粗**`），要点一下才会重算。视口移动时推一把解析（`forceParsing`）再请装饰重算一次。**推一次不够**：`forceParsing` 有时间预算，机器忙的时候一次推不到视口末尾，而不再有第二次的话就永远停在那儿了，表现为图片、公式、脚注、图表整片不渲染。要一直补到铺满为止（次数封顶）。回归网：`npm run verify:scroll-render`。
+- **视口只渲染一屏**：CM6 只为视口附近的行建 DOM，其余用 `.cm-gap` 占位。任何把 DOM 当作「整篇文档」用的地方（导出、放映、复制）都必须先让整篇渲染出来（`ViewState.printing`），否则拿到的只有当前一屏。复制因此分两个口味：纯文本从文档本身取（`sliceDoc`，永远完整），HTML 只在选区确实落在已渲染范围里时才给；判「渲染出来了没有」看有没有 `.cm-gap`，不要看 `view.visibleRanges`，后者是「装饰没盖住的空隙」，不是「已经渲染的范围」。
+- **CM6 自带的复制处理器排在插件处理器之后**：它在自己的处理器里 `clearData()` 再写纯文本，我们写在插件链里的 `text/html` 会被它清掉，返回 `true` 也拦不住。自定义复制要挂在**祖先元素**（`#editor`）的冒泡阶段。
 
 ## 与外壳的关系
 
