@@ -1956,7 +1956,8 @@ async function init(): Promise<void> {
   // 2.7.0 换了编辑器内核，用户点「更新」之前就该知道这次不是普通修复。
   // 只给需要提前打招呼的版本写一句，没登记的版本保持原样。
   const UPDATE_NOTES: Record<string, { zh: string; en: string }> = {
-    '2.7.0': { zh: '这次换了编辑器内核', en: 'new editor core' }
+    '2.7.0': { zh: '这次换了编辑器内核', en: 'new editor core' },
+    '2.7.1-beta.1': { zh: '选中一段不再翻成源码', en: 'selections stay rendered' }
   }
   let updateDownloaded = false
   function showUpdateBanner(version: string): void {

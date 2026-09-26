@@ -1,6 +1,6 @@
 {
   "name": "colamd",
-  "version": "2.7.0",
+  "version": "2.7.1-beta.1",
   "description": "A free, elegant Markdown editor for macOS, Windows and Linux. Simple by design, always in sync with the file on disk.",
   "main": "dist/main/index.js",
   "author": {
