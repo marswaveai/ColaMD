@@ -39,7 +39,7 @@ export interface ElectronAPI {
   setTabFiles: (paths: string[]) => void
   fileUrl: (path: string) => Promise<string | null>
   onFocusFile: (callback: (path: string) => void) => void
-  onOpenInNewTab: (callback: (path: string) => void) => void
+  onOpenInNewTab: (callback: (path: string, fragment?: string) => void) => void
   saveFile: (content: string, expectedPath?: string, rebuildMenu?: boolean, autosave?: boolean) => Promise<string | null>
   saveFileAs: (content: string, expectedPath?: string) => Promise<string | null>
   exportPDF: () => Promise<boolean>
@@ -121,8 +121,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onFocusFile: (callback: (path: string) => void) => {
     ipcRenderer.on('focus-file', (_event, path: string) => callback(path))
   },
-  onOpenInNewTab: (callback: (path: string) => void) => {
-    ipcRenderer.on('open-in-new-tab', (_event, path: string) => callback(path))
+  onOpenInNewTab: (callback: (path: string, fragment?: string) => void) => {
+    ipcRenderer.on('open-in-new-tab', (_event, path: string, fragment?: string) => callback(path, fragment))
   },
   saveFile: (content: string, expectedPath?: string, rebuildMenu?: boolean, autosave?: boolean) => ipcRenderer.invoke('save-file', content, expectedPath, rebuildMenu, autosave),
   saveFileAs: (content: string, expectedPath?: string) => ipcRenderer.invoke('save-file-as', content, expectedPath),

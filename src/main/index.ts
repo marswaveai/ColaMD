@@ -5,6 +5,7 @@ import { join, basename, dirname, extname, isAbsolute, resolve, relative, sep } 
 import { fileURLToPath, pathToFileURL } from 'url'
 import { appendFile, readFile, writeFile, readdir, copyFile, mkdir, stat } from 'fs/promises'
 import { watch, FSWatcher, existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'fs'
+import { resolveMarkdownLink } from './markdown-link'
 
 const startupStartedAt = performance.now()
 const startupTraceEnabled = process.env.COLAMD_STARTUP_TRACE === '1'
@@ -641,11 +642,11 @@ function loadFileInWindow(win: BrowserWindow, filePath: string): Promise<void> {
 
 // Find window that already has this file open, either as its active document or
 // in one of its tabs.
-function findWindowForFile(filePath: string): BrowserWindow | null {
+function findWindowForFile(filePath: string, focusTab = true): BrowserWindow | null {
   for (const [id, state] of windowStates) {
     if (state.filePath === filePath || state.tabFiles.includes(filePath)) {
       const win = BrowserWindow.fromId(id)
-      if (win && state.filePath !== filePath) win.webContents.send('focus-file', filePath)
+      if (win && focusTab && state.filePath !== filePath) win.webContents.send('focus-file', filePath)
       return win
     }
   }
@@ -777,9 +778,35 @@ function saveToPath(win: BrowserWindow, filePath: string, content: string, sourc
 
 // IPC Handlers
 
-ipcMain.on('open-external', (_event, url: string) => {
-  if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
-    shell.openExternal(url)
+ipcMain.on('open-external', async (event, url: string) => {
+  if (typeof url !== 'string') return
+  const sourceWindow = getWinFromEvent(event)
+  try {
+    if (/^https?:\/\//i.test(url)) {
+      await shell.openExternal(url)
+      return
+    }
+    if (!sourceWindow || sourceWindow.isDestroyed()) return
+    const link = resolveMarkdownLink(url, getState(sourceWindow).filePath)
+    if (!link) return
+    if (!(await stat(link.path)).isFile()) throw new Error('Not a file')
+    // Check readability before creating a tab, so a failed read keeps the source.
+    await readFile(link.path, 'utf-8')
+    if (sourceWindow.isDestroyed()) return
+    // Let the same queue activate existing tabs, including in another window.
+    // Sending focus-file separately would race that activation with the anchor.
+    const target = findWindowForFile(link.path, false) ?? sourceWindow
+    if (target.isDestroyed()) return
+    target.webContents.send('open-in-new-tab', link.path, link.fragment)
+    if (target.isMinimized()) target.restore()
+    target.focus()
+  } catch {
+    if (!sourceWindow || sourceWindow.isDestroyed()) return
+    void dialog.showMessageBox(sourceWindow, {
+      type: 'error',
+      message: uiText('无法打开链接指向的文件', 'Could not open the linked file'),
+      detail: url,
+    })
   }
 })
 
@@ -1056,7 +1083,7 @@ ipcMain.handle('open-sibling', async (event, filePath: string) => {
   } catch {
     return false
   }
-  loadFileInWindow(win, filePath)
+  await loadFileInWindow(win, filePath)
   return true
 })
 

@@ -25,6 +25,7 @@
     "preview:web": "vite preview --config vite.web.config.ts",
     "check:theme-colors": "node scripts/check-theme-colors.mjs",
     "verify:markdown": "node scripts/verify-markdown.mjs",
+    "verify:links": "node scripts/verify-links.mjs",
     "verify:features": "node scripts/verify-features.mjs",
     "verify:scroll-render": "node scripts/verify-scroll-render.mjs",
     "verify:image-export": "node scripts/verify-image-export.mjs",

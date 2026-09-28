@@ -1,4 +1,4 @@
-import { createEditor, focusEditor, getMarkdown, getEditorView, getEditorScroller, onEditorJumpPhase, setMarkdown, setEditorEditable, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, jumpToLine, setCleanExport, setDocumentFileUrl, type FormatCommandId } from './editor/editor'
+import { createEditor, focusEditor, getMarkdown, getEditorView, getEditorScroller, onEditorJumpPhase, setMarkdown, setEditorEditable, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, jumpToLine, jumpToHeading, setCleanExport, setDocumentFileUrl, type FormatCommandId } from './editor/editor'
 import { markdownForWord } from './editor/mermaid-export'
 import { documentHTMLFrom } from './editor/clean-html'
 import { isPresenting, startSlideshow, stopSlideshow } from './slideshow'
@@ -719,7 +719,9 @@ async function openFileInNewTab(path: string): Promise<void> {
   // queued tab-opens would otherwise see this tab as still blank and reuse it
   // for the next file, overwriting the one just opened (#99).
   const claimed = activeTab()
-  if (claimed) claimed.filePath = path
+  // A failed save can prevent openNewTab from creating a tab. Keep the source.
+  if (!claimed || claimed === current) return
+  claimed.filePath = path
   await window.electronAPI.openSibling(path)
 }
 
@@ -741,8 +743,18 @@ function bindTabBar(api: import('../preload/index').ElectronAPI): void {
   // (multi-file launch, fast second-instance) interleaves and two documents
   // land in one tab (#99).
   let tabOpenQueue: Promise<void> = Promise.resolve()
-  const enqueueTabOpen = (path: string): void => {
-    tabOpenQueue = tabOpenQueue.then(() => openFileInNewTab(path)).catch(() => { /* next file still opens */ })
+  const enqueueTabOpen = (path: string, fragment?: string): void => {
+    tabOpenQueue = tabOpenQueue.then(async () => {
+      await openFileInNewTab(path)
+      if (!fragment || currentFilePath !== path) return
+      // Run after the tab's scroll restoration. Hidden windows suspend frames,
+      // so visual work must not block subsequent requests in the open queue.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (currentFilePath !== path) return
+        if (sourceModeActive) exitSourceMode()
+        jumpToHeading(fragment)
+      }))
+    }).catch(() => { /* next file still opens */ })
   }
   // Tabs are also created from the File menu / ⌘T and from the file list; the
   // strip's own plus is bound above, in renderTabBar.
