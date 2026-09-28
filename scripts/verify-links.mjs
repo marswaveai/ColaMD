@@ -36,6 +36,21 @@ async function unitChecks() {
     [join(WORK, 'absolute.md'), join(WORK, 'absolute.md')],
   ]) check(`resolve ${href}`, () => assert.equal(resolveMarkdownLink(href, source).path, expected))
   check('fragment stays separate', () => assert.equal(resolveMarkdownLink('next.md#中文', source).fragment, '中文'))
+  for (const href of ['next.md:147', './中文%20空格.md:147', pathToFileURL(join(WORK, 'next.md')).href + ':147', join(WORK, 'next.md') + ':147']) {
+    check(`source line ${href}`, () => {
+      const link = resolveMarkdownLink(href, source)
+      assert.equal(link.line, 147)
+      assert(link.path.endsWith('.md'))
+    })
+  }
+  check('line and heading remain separate', () => {
+    const link = resolveMarkdownLink('next.md:147#heading', source)
+    assert.equal(link.line, 147); assert.equal(link.fragment, 'heading')
+  })
+  check('encoded filename colon is not a line suffix', () => assert.equal(resolveMarkdownLink('part%3A147.md', source).line, undefined))
+  for (const href of ['next.md:0', 'next.md:9007199254740992', 'next.md:-1', 'next.md:abc']) {
+    check(`reject invalid line ${href}`, () => assert.equal(resolveMarkdownLink(href, source), null))
+  }
   for (const href of ['#local', 'https://example.com', 'javascript:alert(1)', 'data:text/html,hi', 'run.exe']) {
     check(`reject non-Markdown target ${href}`, () => assert.equal(resolveMarkdownLink(href, source), null))
   }
@@ -93,11 +108,16 @@ async function runtimeChecks() {
   const notes = join(WORK, 'notes'), home = join(WORK, 'home'), profile = join(WORK, 'profile')
   for (const dir of [notes, join(notes, 'child'), home, profile]) mkdirSync(dir, { recursive: true })
   const source = join(notes, 'source.md'), target = join(notes, '中文 空格.md'), childFile = join(notes, 'child', 'child.md')
+  const lineFile = join(notes, 'lines.md'), largeFile = join(notes, 'large.md')
+  const lineText = ['---', 'title: Lines', '---', ...Array.from({ length: 143 }, (_, i) => `Paragraph ${i}.`), 'LINE_147_TARGET', 'Last line.'].join('\r\n')
+  const largeText = [...Array.from({ length: 146 }, () => 'Long wrapped paragraph. '.repeat(180)), 'LARGE_147_TARGET', 'Last line.'].join('\n')
   const targetText = '# Destination\n\n' + 'Paragraph.\n\n'.repeat(100) + '## 目标标题\n\nTail.\n'
   const sourceText = '# Source\n\n[相对链接](中文%20空格.md)\n\n[子目录](child/child.md)\n\n[标题](中文%20空格.md#目标标题)\n\n' +
+    `[行号](lines.md:147)\n\n[文件行号](${pathToFileURL(lineFile).href}:147)\n\n[源码行号](large.md:147)\n\n[越界行号](lines.md:9999)\n\n` +
     `[File URL](${pathToFileURL(target).href})\n\n[网页](https://example.com)\n\n[缺失](missing.md)\n\n[文内](#source)\n`
   writeFileSync(source, sourceText); writeFileSync(target, targetText); writeFileSync(childFile, '# Child\n\n[上级](../source.md)\n')
-  const before = new Map([source, target, childFile].map(file => [file, { bytes: readFileSync(file), mtime: statSync(file).mtimeMs }]))
+  writeFileSync(lineFile, lineText); writeFileSync(largeFile, largeText)
+  const before = new Map([source, target, childFile, lineFile, largeFile].map(file => [file, { bytes: readFileSync(file), mtime: statSync(file).mtimeMs }]))
   const events = join(WORK, 'events.jsonl'), harness = join(WORK, 'main.cjs')
   const port = 18000 + Math.floor(Math.random() * 2000)
   // Stub only OS browser launching/error dialogs; real IPC, file IO and tab UI run.
@@ -156,6 +176,17 @@ async function runtimeChecks() {
     check('cross-file heading outside the initial viewport', () => {})
     await openSource(); await click('File URL'); await wait(`document.title==='中文 空格.md'`, 'file URL')
     check('file URL', () => {})
+    for (const label of ['行号', '文件行号']) {
+      await openSource(); await click(label)
+      await wait(`document.title==='lines.md' && document.querySelector('.cm-md-jump-flash')?.textContent==='LINE_147_TARGET'`, label)
+      check(`${label}: exact line with CRLF and frontmatter`, () => {})
+    }
+    await openSource(); await click('越界行号')
+    await wait(`document.title==='lines.md' && document.querySelector('.cm-md-jump-flash')?.textContent==='Last line.'`, 'line past EOF')
+    check('line past EOF clamps to last line', () => {})
+    await openSource(); await click('源码行号')
+    await wait(`(() => { const s=document.querySelector('#source-editor'); return document.title==='large.md' && s.classList.contains('visible') && s.value.slice(s.selectionStart,s.selectionEnd)==='LARGE_147_TARGET' && s.scrollTop>0; })()`, 'source mode line')
+    check('large source document selects line after wrapped paragraphs', () => {})
     await openSource(); await click('网页'); await sleep(150)
     check('web link still uses the OS browser', () => assert.match(readFileSync(events, 'utf8'), /"external":"https:\/\/example.com"/))
     await openSource(); await click('缺失'); await sleep(200)

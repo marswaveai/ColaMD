@@ -797,7 +797,7 @@ ipcMain.on('open-external', async (event, url: string) => {
     // Sending focus-file separately would race that activation with the anchor.
     const target = findWindowForFile(link.path, false) ?? sourceWindow
     if (target.isDestroyed()) return
-    target.webContents.send('open-in-new-tab', link.path, link.fragment)
+    target.webContents.send('open-in-new-tab', link.path, link.fragment, link.line)
     if (target.isMinimized()) target.restore()
     target.focus()
   } catch {

@@ -1,5 +1,6 @@
 import { createEditor, focusEditor, getMarkdown, getEditorView, getEditorScroller, onEditorJumpPhase, setMarkdown, setEditorEditable, releaseMermaidRenderer, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, jumpToLine, jumpToHeading, setCleanExport, setDocumentFileUrl, type FormatCommandId } from './editor/editor'
 import { markdownForWord } from './editor/mermaid-export'
+import { jumpToSourceLine } from './editor/source-line'
 import { documentHTMLFrom } from './editor/clean-html'
 import { isPresenting, startSlideshow, stopSlideshow } from './slideshow'
 import { enterPrintLayout, exitPrintLayout } from './slides-export'
@@ -743,16 +744,21 @@ function bindTabBar(api: import('../preload/index').ElectronAPI): void {
   // (multi-file launch, fast second-instance) interleaves and two documents
   // land in one tab (#99).
   let tabOpenQueue: Promise<void> = Promise.resolve()
-  const enqueueTabOpen = (path: string, fragment?: string): void => {
+  const enqueueTabOpen = (path: string, fragment?: string, line?: number): void => {
     tabOpenQueue = tabOpenQueue.then(async () => {
       await openFileInNewTab(path)
-      if (!fragment || currentFilePath !== path) return
+      if ((!fragment && line === undefined) || currentFilePath !== path) return
       // Run after the tab's scroll restoration. Hidden windows suspend frames,
       // so visual work must not block subsequent requests in the open queue.
       requestAnimationFrame(() => requestAnimationFrame(() => {
         if (currentFilePath !== path) return
+        if (line !== undefined) {
+          if (sourceModeActive) jumpToSourceLine(sourceEl(), line)
+          else jumpToLine(Math.min(line, getMarkdown().split('\n').length) - 1)
+          return
+        }
         if (sourceModeActive) exitSourceMode()
-        jumpToHeading(fragment)
+        jumpToHeading(fragment!)
       }))
     }).catch(() => { /* next file still opens */ })
   }
