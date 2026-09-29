@@ -91,7 +91,15 @@ linux:
     - AppImage
     - deb
   category: Office
-  icon: resources/icon.png
+  # A directory of size-named PNGs, not one 1024px file: with a single PNG the
+  # AppImage shipped exactly one hicolor entry, and start menus / taskbars ask
+  # for standard sizes like 48 or 256 first (#127).
+  # StartupWMClass must match Electron's window class, which is package.json's
+  # lowercase name (colamd). The default was productName (ColaMD), and the
+  # taskbar could not associate a running window with the desktop entry.
+  icon: resources/icons
+  desktop:
+    StartupWMClass: colamd
 
 nsis:
   # No spaces: the default "${productName} Setup ${version}.exe" gets sanitized
