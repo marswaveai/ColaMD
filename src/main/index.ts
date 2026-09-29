@@ -2385,6 +2385,21 @@ ipcMain.on('set-dirty', (event, isDirty: boolean) => {
   if (win) getState(win).dirty = !!isDirty
 })
 
+// ⌘W on a window whose last tab is a clean blank document closes the window
+// instead of looping blank documents (#132). Goes through the ordinary close
+// guard, so a dirty window still gets its save prompt.
+ipcMain.handle('request-close-window', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.close()
+})
+
+// The one trace a white window leaves behind (#126): the renderer's init threw
+// and the packaged app has no console to show it. Append-only, few lines a
+// failure, and it lives with the other user data.
+ipcMain.handle('log-renderer-error', (_event, message: string) => {
+  const line = `[${new Date().toISOString()}] ${String(message).slice(0, 8000)}\n`
+  return appendFile(join(app.getPath('userData'), 'renderer-errors.log'), line, 'utf-8').catch(() => { /* nowhere to write it */ })
+})
+
 // Concurrent close events for the same window must share one prompt and save.
 function confirmWindowClose(win: BrowserWindow, state: WindowState): Promise<boolean> {
   if (!state.closePromise) {

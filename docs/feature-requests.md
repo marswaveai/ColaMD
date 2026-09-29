@@ -225,6 +225,12 @@ Rule kept: exactly nine cards. The order is documented in an HTML comment above 
 
 ## Candidates
 
+### Zoomable viewer for Mermaid diagrams (#129)
+
+**Source:** [#129](https://github.com/marswaveai/ColaMD/issues/129)
+
+Mermaid renders with `useMaxWidth`, so a diagram wider than the reading column scales down with no lower bound on text size, and `overflow-x` never engages because the SVG never exceeds 100%. Needs a way to inspect a wide diagram at full size (zoom or open-in-overlay). Undecided.
+
 ### One row title bar with tabs
 
 **Source:** [#90](https://github.com/marswaveai/ColaMD/issues/90)

@@ -682,9 +682,13 @@ async function closeTab(id: string): Promise<void> {
   tabs.splice(index, 1)
   if (tabs.length === 0) {
     // The last tab closed: the window falls back to a single blank document and
-    // the bar disappears with it.
+    // the bar disappears with it — then asks to close (#132). A clean blank
+    // window is not a state the user can reach any other way, and ⌘W used to
+    // loop here forever: close the blank, get a fresh blank. If the close is
+    // denied (the guard never does for a clean window), the fallback remains.
     activeTabId = null
     await openNewTab()
+    void window.electronAPI.closeWindow()
     return
   }
   if (tab.id === activeTabId) {
@@ -2023,4 +2027,9 @@ async function init(): Promise<void> {
   })
 }
 
-init().catch((e) => console.error('ColaMD init failed:', e))
+// A packaged app has no console: without the IPC copy of this, a renderer that
+// dies during init leaves nothing behind but a white window (#126).
+init().catch((e) => {
+  console.error('ColaMD init failed:', e)
+  void window.electronAPI.logRendererError(e instanceof Error ? (e.stack ?? e.message) : String(e))
+})

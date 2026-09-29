@@ -98,6 +98,8 @@ export interface ElectronAPI {
   installUpdate: () => Promise<void>
   reportDirty: (isDirty: boolean) => void
   reportRendererReady: () => void
+  closeWindow: () => Promise<void>
+  logRendererError: (message: string) => Promise<void>
   onRequestDocumentState: (callback: (requestId: string) => void) => void
   respondDocumentState: (requestId: string, snapshot: { dirty: boolean; content: string; tabs?: { path: string | null; content: string }[] }) => void
 }
@@ -260,6 +262,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installUpdate: () => ipcRenderer.invoke('install-update'),
   reportDirty: (isDirty: boolean) => ipcRenderer.send('set-dirty', isDirty),
   reportRendererReady: () => ipcRenderer.send('renderer-ready'),
+  closeWindow: () => ipcRenderer.invoke('request-close-window'),
+  logRendererError: (message: string) => ipcRenderer.invoke('log-renderer-error', message),
   onRequestDocumentState: (callback: (requestId: string) => void) => {
     ipcRenderer.on('request-document-state', (_event, requestId) => callback(requestId))
   },
