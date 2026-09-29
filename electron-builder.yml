@@ -99,7 +99,8 @@ linux:
   # taskbar could not associate a running window with the desktop entry.
   icon: resources/icons
   desktop:
-    StartupWMClass: colamd
+    entry:
+      StartupWMClass: colamd
 
 nsis:
   # No spaces: the default "${productName} Setup ${version}.exe" gets sanitized
