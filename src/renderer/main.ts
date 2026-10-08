@@ -2077,6 +2077,20 @@ async function init(): Promise<void> {
   })
 }
 
+// Errors after init leave no trace in a packaged app either. Same log, and the
+// same error is written once per session so a render loop cannot fill the disk.
+const reportedErrors = new Set<string>()
+function reportRuntimeError(where: string, err: unknown): void {
+  const text = err instanceof Error ? (err.stack ?? err.message) : String(err)
+  const key = text.slice(0, 300)
+  if (reportedErrors.has(key) || reportedErrors.size >= 50) return
+  reportedErrors.add(key)
+  console.error(`ColaMD ${where}:`, err)
+  void window.electronAPI.logRendererError(`[${where}] ${text}`)
+}
+window.addEventListener('error', (event) => reportRuntimeError('error', event.error ?? event.message))
+window.addEventListener('unhandledrejection', (event) => reportRuntimeError('unhandledrejection', event.reason))
+
 // A packaged app has no console: without the IPC copy of this, a renderer that
 // dies during init leaves nothing behind but a white window (#126).
 init().catch((e) => {
