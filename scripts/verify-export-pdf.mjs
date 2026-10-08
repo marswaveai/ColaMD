@@ -116,7 +116,7 @@ async function main() {
       const { BrowserWindow, dialog } = require('electron')
       BrowserWindow.prototype.show = function () {}
       BrowserWindow.prototype.focus = function () {}
-      BrowserWindow.getAllWindows().forEach((win) => { win.setPosition(-4000, -4000); win.hide() })
+      BrowserWindow.getAllWindows().forEach((win) => { win.setPosition(-4000, -4000) })
       dialog.showSaveDialog = async () => ({ canceled: false, filePath: ${JSON.stringify(out)} })
       globalThis.__exportError = null
       dialog.showMessageBox = async (win, options) => { globalThis.__exportError = options; return { response: 0 } }
