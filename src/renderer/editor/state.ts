@@ -14,7 +14,6 @@ import { commonmarkLanguage, markdown } from '@codemirror/lang-markdown'
 import { GFM, type MarkdownParser } from '@lezer/markdown'
 import { languages } from '@codemirror/language-data'
 import { indentOnInput, bracketMatching, syntaxHighlighting, Language } from '@codemirror/language'
-import { highlightSelectionMatches } from '@codemirror/search'
 import { keymap } from '@codemirror/view'
 import { markdownHighlightStyle } from './source-theme'
 import { frontmatterRange } from './math-scan'
@@ -59,7 +58,8 @@ export function stateExtensions(): Extension {
     history(),
     indentOnInput(),
     bracketMatching(),
-    highlightSelectionMatches(),
+    // 不挂 highlightSelectionMatches()（#144）：选中一个字，全文同字都被框，
+    // 看着像渲染故障。查找替换的高亮是 search 扩展自己的，不在这里。
     // 增删有序列表项时把序号排一遍（见 list-renumber.ts）。它是**写文件**的一层，
     // 所以只认用户自己的编辑，打开文件、外部写入、导出都不碰。
     renumberLists,
