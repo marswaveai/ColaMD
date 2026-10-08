@@ -28,7 +28,7 @@ import type { SyntaxNode, SyntaxNodeRef } from '@lezer/common'
 import katex from 'katex'
 import { scanMath, excludedRanges, frontmatterRange, type Excluded } from './math-scan'
 import { renderMermaid } from './mermaid-bridge'
-import { sanitizeHTML } from './html-sanitize'
+import { sanitizeHTML, cleanStyle } from './html-sanitize'
 import { footnoteDefinitions, footnoteNumbers, FOOTNOTE_REF_RE } from './footnotes'
 import { isChinese } from '../ui-language'
 
@@ -874,10 +874,26 @@ class HTMLWidget extends WidgetType {
 }
 
 function collectHTML(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
+  // 成对的行内标签（`<span style="color:red">文字</span>`）一起处理：闭标签的起点记下来，
+  // 轮到它时就跳过。否则两个标签各自成一个 widget，样式落在空标签上（#125）。
+  const paired = new Set<number>()
   iterateContent(state, front, (node) => {
     const block = node.name === 'HTMLBlock'
     if (!block && node.name !== 'HTMLTag') return
     if (block ? isActiveRange(state, node.from, node.to) : isActiveLine(state, node.from)) return false
+    if (!block) {
+      if (paired.has(node.from)) return false
+      const pair = inlinePair(state, node.from, node.to)
+      if (pair) {
+        paired.add(pair.closeFrom)
+        ranges.push({ from: node.from, to: node.to, deco: Decoration.replace({}) })
+        ranges.push({ from: pair.closeFrom, to: pair.closeTo, deco: Decoration.replace({}) })
+        if (pair.closeFrom > node.to) {
+          ranges.push({ from: node.to, to: pair.closeFrom, deco: Decoration.mark({ attributes: { style: pair.style } }) })
+        }
+        return false
+      }
+    }
     ranges.push({
       from: node.from,
       to: node.to,
@@ -885,6 +901,25 @@ function collectHTML(state: EditorState, ranges: DecorationRange[], front: Range
     })
     return false
   })
+}
+
+/**
+ * 同一行里能配上的一对行内标签，且开标签带可用的 style。
+ * 只认 style：没有样式的 `<b>`、`<br>` 之类还是走原来的单标签路径。
+ * 返回闭标签的位置和过滤后的 style（只含白名单属性）。
+ */
+function inlinePair(state: EditorState, from: number, to: number): { closeFrom: number; closeTo: number; style: string } | null {
+  const open = /^<([a-zA-Z][a-zA-Z0-9-]*)((?:\s[^>]*)?)>$/.exec(state.doc.sliceString(from, to))
+  if (!open) return null
+  const styleAttr = /\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(open[2] ?? '')
+  if (!styleAttr) return null
+  const style = cleanStyle(styleAttr[1] ?? styleAttr[2] ?? '')
+  if (!style) return null
+  const rest = state.doc.sliceString(to, state.doc.lineAt(from).to)
+  const close = new RegExp(`</${open[1]}\\s*>`, 'i').exec(rest)
+  if (!close) return null
+  const closeFrom = to + close.index
+  return { closeFrom, closeTo: closeFrom + close[0].length, style }
 }
 
 // ─── 代码块的复制按钮 ────────────────────────────────────────────────────────

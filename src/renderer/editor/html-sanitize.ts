@@ -20,7 +20,7 @@ const SAFE_STYLE_PROPERTY = /^(?:text-align|color|background|background-color|fo
 /** 地址类属性里不许出现的协议。 */
 const DANGEROUS_URL = /^\s*(?:javascript|vbscript|data:text\/html)/i
 
-function cleanStyle(value: string): string {
+export function cleanStyle(value: string): string {
   return value
     .split(';')
     .map((part) => part.trim())

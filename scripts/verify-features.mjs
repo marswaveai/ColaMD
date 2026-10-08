@@ -98,10 +98,8 @@ function fixture() {
     '',
     '<div class="raw-html">HTML 块</div>',
     '',
-    // #125：行内 HTML 的 color 目前不生效。成对标签的开、合是两个各自独立的
-    // widget，中间的文字不归任何一个管，所以 style 落在空标签上。淡源里实测：
-    // 找不到任何 textContent 正好是「红色的字」的元素。这条断言记的是现状，
-    // 把它修好的时候这里会红，那正是提醒该换断言了（需求清单里记着这笔）。
+    // #125：行内成对标签（<span style="color">…</span>）的 style 生效。开、合两个标签
+    // 藏起来，中间的文字套一个 mark 装饰。这条断言钉住「红色的字」真的是红的。
     '行内上色：<span style="color: #ff0000">红色的字</span>。',
     '',
     // 查找跳转的靶子：这一条在文档最末尾，一屏高的视口里绝对看不见。
@@ -704,9 +702,9 @@ function main() {
       check('脚注渲染', m.footnote.refs >= 1, `refs=${m.footnote.refs} 露源码=${m.footnote.raw}`)
       check('脚注悬停预览', m.footnote.previewCard >= 1, `预览卡片=${m.footnote.previewCard}`)
       check('HTML 块渲染', m.html.rendered >= 1, `rendered=${m.html.rendered} 露源码=${m.html.raw}`)
-      // 块级 HTML 里的 color 是生效的；行内成对标签目前不生效，理由见夹具里那段注释。
-      check('行内 HTML 的 color 目前不生效（#125 已知缺口）', m.inlineColor === null,
-        `红色的字 computed color=${m.inlineColor}（真的变红了就说明这条缺口补上了，请改写这条断言）`)
+      // 行内成对标签的 color 生效（#125）：中间的文字必须是红的。
+      check('行内 HTML 的 color 生效（#125）', m.inlineColor === 'rgb(255, 0, 0)',
+        `红色的字 computed color=${m.inlineColor}`)
       check('导出的 HTML 是语义标签',
         m.exportHtml.strong && m.exportHtml.em && m.exportHtml.anchor && m.exportHtml.list &&
         m.exportHtml.code && m.exportHtml.table && m.exportHtml.quote && m.exportHtml.heading,
