@@ -44,6 +44,10 @@ The two items below are the ones actually blocking us. Everything else on this p
 
 ## Implemented On Main
 
+### Inline HTML pairs (#125)
+
+`<span style="color:red">文字</span>` in the middle of a paragraph styles the text between the tags. A matched pair on one line hides both tags and paints the inner text with a mark carrying the sanitized style; the text stays editable. Fixed 2026-10-08 (`8615cc0`), with `verify:features` asserting the computed colour. The earlier reply that said it already worked was wrong, and the issue was reopened with a correction.
+
 These features are implemented on `main` and await release verification.
 
 ### Footnote hover preview
@@ -262,12 +266,6 @@ Clicking a rendered block (table, diagram, image, formula, raw HTML) puts the ca
 **Source:** [#142](https://github.com/marswaveai/ColaMD/issues/142)
 
 Three paths are hardcoded under the home directory on all three platforms: `~/.colamd/themes`, `~/.colamd/recovered` and `~/.colamd/recent.json` (`src/main/index.ts`). Everything Electron manages already follows the platform convention: window state, language, the update flag and the renderer error log live in `userData`, which on Linux is `$XDG_CONFIG_HOME/colamd`. Moving the three to `$XDG_CONFIG_HOME` and `$XDG_DATA_HOME` means deciding what macOS and Windows do in the same breath, plus a migration for data already written. Reported as a standards issue rather than a breakage. Undecided.
-
-### Inline HTML pairs (#125)
-
-**Source:** [#125](https://github.com/marswaveai/ColaMD/issues/125)
-
-Block-level HTML renders, and its inline styles survive the sanitizer, `color` included. A paired inline tag does not: `<span style="color:red">文字</span>` in the middle of a paragraph parses as two separate `HTMLTag` nodes, each replaced by its own widget, so the style lands on an empty tag and the text between them stays plain. Measured on 2026-10-08, when an assertion was added to `verify:features` to pin the current state; the earlier reply on the issue claimed it already worked, and that was wrong. Fixing it means treating a matched pair as one range in the decoration layer, which first has to decide how far a pair may span (one line, or across a block). No bespoke colour syntax will be added on top of Markdown either way: it would produce files only ColaMD understands. Undecided.
 
 ### One row title bar with tabs
 
