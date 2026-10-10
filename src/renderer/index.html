@@ -77,8 +77,13 @@
     <ul id="outline-list" hidden></ul>
   </aside>
   <div id="panel-resizer" aria-hidden="true"></div>
-  <div id="editor"></div>
-  <textarea id="source-editor" spellcheck="false"></textarea>
+  <!-- The editor region is the visible document area. The file panel sits beside
+       it, so this region shrinks (and, on the left, moves) without changing the
+       editor's internal reading-column layout. -->
+  <div id="editor-region">
+    <div id="editor"></div>
+    <textarea id="source-editor" spellcheck="false"></textarea>
+  </div>
   <div id="update-banner" hidden>
     <span id="update-banner-text">发现新版本</span>
     <button id="update-banner-action" type="button">更新</button>
