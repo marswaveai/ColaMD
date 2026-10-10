@@ -79,6 +79,16 @@ export function scanMath(text: string, excluded: Excluded[] = []): MathRange[] {
   while (i < len) {
     const ch = src[i]
 
+    // LaTeX 定界符 `\[...\]`（块）与 `\(...\)`（行内）：GPT 等模型默认这样输出
+    if (ch === '\\' && (src[i + 1] === '[' || src[i + 1] === '(')) {
+      const hit = scanLatexDelim(src, i)
+      if (hit) {
+        out.push(hit)
+        i = hit.to
+        continue
+      }
+    }
+
     // 反斜杠转义：`\$` 永远只是字面的美元符号，跳过它和它后面的那个字符
     if (ch === '\\') {
       i += 2
@@ -148,6 +158,52 @@ export function scanMath(text: string, excluded: Excluded[] = []): MathRange[] {
   }
 
   return out
+}
+
+/**
+ * 这段看起来真是公式吗。
+ * `\[1\]`、`\(a\)` 这类转义括号在学术笔记和 CSV 里很常见，单纯的字母和数字
+ * 不能判成公式，否则会误伤普通文字。只认有 LaTeX 命令、上下标、等号、比较号、
+ * 花括号或四则运算的内容。
+ */
+const LATEX_SIGNAL = /\\[A-Za-z]|[\^_=<>{}]|\d\s*[+\-*/]\s*\d/
+
+/**
+ * 从 pos（一个反斜杠）起尝试识别 `\[...\]` 或 `\(...\)`，失败返回 null。
+ * 块形式的 `\[` 可以跨行，但不跨空行；行内形式只能在一行内。内容必须有公式信号。
+ */
+function scanLatexDelim(src: string, pos: number): MathRange | null {
+  const open = src[pos + 1]
+  const close = open === '[' ? '\\]' : '\\)'
+  const bodyStart = pos + 2
+  let end = -1
+  let j = bodyStart
+  while (j < src.length) {
+    if (src[j] === '\\' && src.startsWith(close, j)) {
+      end = j
+      break
+    }
+    if (src[j] === '\\') {
+      j += 2
+      continue
+    }
+    if (open === '(' && src[j] === '\n') return null
+    if (open === '[' && src[j] === '\n' && /^\n[ \t]*\n/.test(src.slice(j, j + 256))) return null
+    j++
+  }
+  if (end === -1) return null
+
+  const code = src.slice(bodyStart, end)
+  if (!code.trim() || !LATEX_SIGNAL.test(code)) return null
+  // 行内形式：开头后不能紧跟空白，结尾前不能紧贴空白（与 `$...$` 的规则一致）
+  if (open === '(' && (isSpace(code[0]) || isSpace(code[code.length - 1]))) return null
+
+  return {
+    from: pos,
+    to: end + close.length,
+    code,
+    block: open === '[' && isLineStart(src, pos) && isLineEnd(src, end + close.length - 1),
+  }
 }
 
 /** pos 之前到行首之间是否只有空白（含 pos 位于行首的情形）。 */
