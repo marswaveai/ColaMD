@@ -77,6 +77,29 @@ async function unitChecks() {
   vm.runInNewContext(compiled, context)
   await context.openFileInNewTab(join(WORK, 'other.md'))
   check('failed save preserves current tab', () => { assert.equal(current.filePath, source); assert.equal(opens, 0) })
+
+  // Verify tableCellStart (supports indented & unbordered tables, #153)
+  const editorCode = readFileSync(join(ROOT, 'src/renderer/editor/editor.ts'), 'utf8')
+  const tStart = editorCode.indexOf('function tableCellStart(')
+  const tEnd = editorCode.indexOf('\n}\n', tStart) + 3
+  const { code: compiledTableCell } = await transform(editorCode.slice(tStart, tEnd), { loader: 'ts' })
+  const tableContext = {}
+  vm.runInNewContext(compiledTableCell, tableContext)
+  const { tableCellStart } = tableContext
+  check('tableCellStart standard', () => {
+    assert.equal(tableCellStart('| A | B |', 0, 0), 1)
+    assert.equal(tableCellStart('| A | B |', 0, 1), 5)
+  })
+  check('tableCellStart indented', () => {
+    assert.equal(tableCellStart('  | A | B |', 0, 0), 3)
+    assert.equal(tableCellStart('  | A | B |', 0, 1), 7)
+  })
+  check('tableCellStart unbordered', () => {
+    assert.equal(tableCellStart('A | B', 0, 0), 0)
+    assert.equal(tableCellStart('A | B', 0, 1), 3)
+  })
+
+
 }
 
 async function connect(port) {
