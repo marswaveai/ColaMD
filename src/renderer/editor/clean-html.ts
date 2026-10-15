@@ -165,10 +165,23 @@ function renderList(lines: HTMLElement[]): string {
   return html
 }
 
+function isCodeFenceStart(line: HTMLElement): boolean {
+  return line.classList.contains('cm-md-codeblock-first') || /^(`{3,}|~{3,})/.test((line.textContent ?? '').trimStart())
+}
+
+function isCodeFenceEnd(line: HTMLElement): boolean {
+  return line.classList.contains('cm-md-codeblock-last') || /^(`{3,}|~{3,})\s*$/.test((line.textContent ?? '').trim())
+}
+
 function renderCode(lines: HTMLElement[]): string {
-  // 第一行是围栏（语言标记留在行里），最后一行是收尾围栏
-  const body = lines.slice(1)
-  if (body.length > 0 && (body[body.length - 1].textContent ?? '').trim() === '') body.pop()
+  // 第一行是首行围栏，最后一行是收尾围栏；若选区只截取内部几行，则不截断内容
+  let body = lines
+  if (body.length > 0 && isCodeFenceStart(body[0])) {
+    body = body.slice(1)
+  }
+  if (body.length > 0 && isCodeFenceEnd(body[body.length - 1])) {
+    body = body.slice(0, -1)
+  }
   const code = body.map((line) => line.textContent ?? '').join('\n')
   return `<pre><code>${escapeText(code)}</code></pre>`
 }

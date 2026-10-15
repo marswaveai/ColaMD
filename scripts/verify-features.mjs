@@ -291,6 +291,7 @@ const MEASURE = `(() => {
         anchor: /<a[^>]+href/i.test(out),
         list: /<ul>|<ol>/i.test(out),
         code: /<pre><code>/i.test(out),
+        codeFenceFree: !/<pre><code>[\s\S]*?```[\s\S]*?<\/code><\/pre>/i.test(out),
         table: /<table/i.test(out),
         quote: /<blockquote>/i.test(out),
         heading: /<h1>/i.test(out),
@@ -723,6 +724,7 @@ function main() {
         m.exportHtml.strong && m.exportHtml.em && m.exportHtml.anchor && m.exportHtml.list &&
         m.exportHtml.code && m.exportHtml.table && m.exportHtml.quote && m.exportHtml.heading,
         `strong=${m.exportHtml.strong} em=${m.exportHtml.em} a=${m.exportHtml.anchor} ul=${m.exportHtml.list} pre=${m.exportHtml.code} table=${m.exportHtml.table} quote=${m.exportHtml.quote} h1=${m.exportHtml.heading}`)
+      check('导出的 HTML 代码块不残留收尾反引号', m.exportHtml.codeFenceFree === true, 'pre code 里无 ``` 残留')
       check('导出的 HTML 不带编辑器结构',
         m.exportHtml.cmClass === false && m.exportHtml.cmLine === false && m.exportHtml.frontmatter === false,
         `cm-md 类名残留=${m.exportHtml.cmClass}[${m.exportHtml.cmClassNames}] cm-line 残留=${m.exportHtml.cmLine} 属性区残留=${m.exportHtml.frontmatter}`)
