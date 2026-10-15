@@ -77,6 +77,34 @@ async function unitChecks() {
   vm.runInNewContext(compiled, context)
   await context.openFileInNewTab(join(WORK, 'other.md'))
   check('failed save preserves current tab', () => { assert.equal(current.filePath, source); assert.equal(opens, 0) })
+
+  // Verify renderCode (strips closing fence without leaking backticks)
+  const cleanHtmlCode = readFileSync(join(ROOT, 'src/renderer/editor/clean-html.ts'), 'utf8')
+  const rStart = cleanHtmlCode.indexOf('function isCodeFenceStart(')
+  const rEnd = cleanHtmlCode.indexOf('\nfunction renderGroup(', rStart)
+  const { code: compiledCleanHtml } = await transform(cleanHtmlCode.slice(rStart, rEnd), { loader: 'ts' })
+  const cleanContext = { escapeText: (v) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+  vm.runInNewContext(compiledCleanHtml, cleanContext)
+  const { renderCode } = cleanContext
+  const mockLine = (text, classes = []) => {
+    const set = new Set(classes)
+    return { textContent: text, classList: { contains: (c) => set.has(c) } }
+  }
+  check('renderCode strips fences', () => {
+    const res = renderCode([
+      mockLine('```js', ['cm-md-codeblock', 'cm-md-codeblock-first']),
+      mockLine('const a = 1;', ['cm-md-codeblock']),
+      mockLine('```', ['cm-md-codeblock', 'cm-md-codeblock-last']),
+    ])
+    assert.equal(res, '<pre><code>const a = 1;</code></pre>')
+  })
+  check('renderCode preserves partial selection', () => {
+    const res = renderCode([
+      mockLine('const a = 1;', ['cm-md-codeblock']),
+      mockLine('const b = 2;', ['cm-md-codeblock']),
+    ])
+    assert.equal(res, '<pre><code>const a = 1;\nconst b = 2;</code></pre>')
+  })
 }
 
 async function connect(port) {
