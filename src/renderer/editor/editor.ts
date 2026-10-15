@@ -337,11 +337,30 @@ function tableCellAnchor(view: EditorView, widget: HTMLElement, e: MouseEvent): 
 
 /** 表格源码行里第 index 格的起始位置。 */
 function tableCellStart(text: string, from: number, index: number): number {
-  let i = text.startsWith('|') ? 1 : 0
-  const starts = [from + i]
+  const trimmed = text.trimStart()
+  const leadingSpaces = text.length - trimmed.length
+  const hasLeadingPipe = trimmed.startsWith('|')
+
+  const starts: number[] = []
+  let i = 0
+
+  if (hasLeadingPipe) {
+    const firstPipe = text.indexOf('|')
+    i = firstPipe + 1
+    starts.push(from + i)
+  } else {
+    starts.push(from + leadingSpaces)
+    i = leadingSpaces
+  }
+
   for (; i < text.length; i++) {
-    if (text[i] === '\\' && text[i + 1] === '|') { i++; continue }
-    if (text[i] === '|') starts.push(from + i + 1)
+    if (text[i] === '\\' && text[i + 1] === '|') {
+      i++
+      continue
+    }
+    if (text[i] === '|') {
+      starts.push(from + i + 1)
+    }
   }
   return starts[Math.min(index, starts.length - 1)]
 }
