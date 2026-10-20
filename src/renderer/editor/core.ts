@@ -9,8 +9,9 @@
 // 这一层需要 DOM（EditorView 要做布局测量）。不依赖 DOM 的那一半在 state.ts 里，
 // 验收脚本直接消费那一半，所以保真的证明不需要真实浏览器。
 
-import { EditorState } from '@codemirror/state'
-import { EditorView, drawSelection, dropCursor, highlightSpecialChars, rectangularSelection, crosshairCursor } from '@codemirror/view'
+import { EditorState, RangeSet } from '@codemirror/state'
+import { EditorView, drawSelection, dropCursor, highlightSpecialChars, rectangularSelection, crosshairCursor, Decoration } from '@codemirror/view'
+import { syntaxTree } from '@codemirror/language'
 import { undo, redo } from '@codemirror/commands'
 import { livePreview, setEditorFocus } from './live-preview'
 import { listInput } from './list-input'
@@ -27,8 +28,7 @@ export interface EditorOptions {
   editable?: boolean
 }
 
-/** 编辑器对外句柄。外壳只认这个，不认 CodeMirror。 */
-export interface EditorHandle {
+/** 编辑器对外句柄。外壳只认这个，不认 CodeMirror。 */export interface EditorHandle {
   /** 当前缓冲区内容，即文件应有的字节。 */
   getText(): string
   /** 用新文本替换整个文档（换文件、外部改动）。会清空撤销栈。 */
@@ -53,6 +53,38 @@ let handle: EditorHandle | null = null
 export function getEditorHandle(): EditorHandle | null {
   return handle
 }
+
+/**
+ * 任务项的方框（`[ ]` / `[x]`）当作原子区间。
+ *
+ * 它被换成了一个 checkbox widget，但替换本身不拦光标：不声明的话光标能停在两个方框
+ * 之间那一格里，看不见自己在哪，按左右键要一格一格试（#164）。声明成原子区间后，
+ * 左右键一次跨过整个复选框。
+ *
+ * 范围从语法树上取，所以只覆盖眼下已经解析过的那一段；远处的任务项滚过去、被解析
+ * 之后才变成原子，而光标本来也去不了没解析的地方，这个精度够用。
+ */
+const taskMarkerAtomicRanges = EditorView.atomicRanges.of((view) => {
+  const doc = view.state.doc
+  const ranges: { from: number; to: number }[] = []
+  syntaxTree(view.state).iterate({
+    enter: (node) => {
+      if (node.name !== 'TaskMarker') return
+      const line = doc.lineAt(node.from)
+      // 行的前缀（`- ` / `* ` / `1. `）也算进来：光标停在 `-` 和 `[` 之间打字，
+      // 列表标记就没了；停在 `]` 和正文之间打字，`[x]` 后面不再跟空格，任务语法也拆了。
+      // 两种都是 `TaskMarker` 看着还在、下一帧就变回源码的那种怪事（#164）。
+      const prefix = doc.sliceString(line.from, node.from)
+      const from = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]+$/.test(prefix) ? line.from : node.from
+      const trailing = doc.sliceString(node.to, Math.min(node.to + 1, line.to)) === ' ' ? node.to + 1 : node.to
+      ranges.push({ from, to: trailing })
+    },
+  })
+  // 这个值不参与绘制，只借 Range 的形状把位置报上去。
+  return RangeSet.of(ranges.map((r) => ATOMIC_MARK.range(r.from, r.to)), true)
+})
+
+const ATOMIC_MARK = Decoration.replace({})
 
 export function createEditorCore(parent: HTMLElement, options: EditorOptions = {}): EditorHandle {
   const changeListener = options.onChange
@@ -90,6 +122,10 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     // 检索高亮。面板靠 effect 改它，而 effect 得有 StateField 接住；
     // 不装这一条，检索面板会以为高亮画上了，实际什么也没发生。
     searchHighlightField,
+    // 任务项的复选框是一个 replace widget，但没声明成原子区间时，光标能停在
+    // `[ ]` 两个方框之间那一格里：左右键要一格一格挪过去，停在里面打字又把
+    // `- [ ]` 敲成 `- [x]` 之类的残骸（#164）。声明成原子区间后，光标一次跨过它。
+    taskMarkerAtomicRanges,
     editableCompartment.of(EditorView.editable.of(options.editable ?? true)),
     // 文档变化的唯一出口：把新文本交给外壳
     EditorView.updateListener.of((update) => {

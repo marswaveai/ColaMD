@@ -590,13 +590,14 @@ const TASK_RE = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])(\])/
 
 /** 从点击位置找回任务项那一行；不是任务项就返回 null。 */
 function sourceFromTaskClick(view: EditorView, e: MouseEvent): number | null {
+  if (!(e.target instanceof HTMLElement)) return null
+  // 只认复选框本身（#164）：以前看的是「离行左边缘 24px 以内」，在复选框前后
+  // 那两块空白上一点也会切换勾选，想在行首补字的人会莫名其妙勾上。
+  if (!e.target.closest('.cm-md-task')) return null
   const pos = view.posAtCoords({ x: e.clientX, y: e.clientY })
   if (pos === null) return null
   const line = view.state.doc.lineAt(pos)
   if (!TASK_RE.test(line.text)) return null
-  // 只有复选框那块区域才切换，点文案仍旧放光标
-  const rect = (e.target as HTMLElement).getBoundingClientRect()
-  if (e.clientX - rect.left > 24) return null
   return line.from
 }
 

@@ -1259,6 +1259,29 @@ function main() {
       check('点击待办能勾选', Math.abs(Number(checkedAfter) - Number(checkedBefore)) === 1,
         `点击前已勾=${checkedBefore} 点击后=${checkedAfter} 坐标=${box.x},${box.y}`)
 
+      // #164：复选框只在它自己身上响应。以前看的是「离行左边缘 24px 以内」，
+      // 点复选框右边、行首空白都会把钩切过去，想在行首补字的人会莫名其妙勾上。
+      const beside = JSON.parse(await evaluate(renderer, `(() => {
+        const el = document.querySelector('.cm-md-task')
+        if (!el) return JSON.stringify({ x: 0, y: 0 })
+        const r = el.getBoundingClientRect()
+        return JSON.stringify({ x: Math.round(r.right + 6), y: Math.round(r.top + r.height / 2) })
+      })()`))
+      const checkedBesideBefore = await evaluate(renderer, `document.querySelectorAll('.cm-md-task-checked').length`)
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        if (!beside.x) break
+        await renderer.send('Input.dispatchMouseEvent', { type, x: beside.x, y: beside.y, button: 'left', clickCount: 1 })
+      }
+      await sleep(350)
+      const checkedBesideAfter = await evaluate(renderer, `document.querySelectorAll('.cm-md-task-checked').length`)
+      check('点复选框旁边的空白不勾选（#164）', checkedBesideBefore === checkedBesideAfter,
+        `点击前=${checkedBesideBefore} 点击后=${checkedBesideAfter} 坐标=${beside.x},${beside.y}`)
+
+      // #164：左右键跨过复选框前缀的行为（原子区间）在真窗口里验过：从文字里
+      // 往左第一下到文字前，第二下直接到行首，不会停在 `[ ]` 方框之间或 `]` 与
+      // 正文之间。不写成断言，是因为它需要向编辑器里插字符再撤销，而夹具里的
+      // 那几行在视口外时 clickLine 定位不到，稳定性不如人看一遍。
+
       await checkCheatsheet()
 
       // 列表缩进：Tab 把这一行缩进一级，Shift+Tab 退回来。
