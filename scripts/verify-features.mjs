@@ -90,6 +90,9 @@ function fixture() {
     '| --- | --- |',
     '| 甲一 | 乙一<br/>乙二 |',
     '| ![格子里的图](pixel.png) | 乙三 |',
+    // #161：格子里的单词含下划线时，两个相邻单词之间的那一对 `_` 曾经被当斜体吃掉。
+    '| 甲二 | local_upload / external_api / excel_upload |',
+    '| *真斜体* | snake_case_name |',
     '',
     '行内公式 $a^2+b^2=c^2$ 与价格 $349。',
     '',
@@ -233,7 +236,10 @@ const MEASURE = `(() => {
       headers: q('.cm-md-table-widget th').length,
       // 格子里的 <br/> 要画成换行，格子里的图片要画出来
       brs: q('.cm-md-table-widget td br').length,
-      imgs: q('.cm-md-table-widget td img').length
+      imgs: q('.cm-md-table-widget td img').length,
+      // #161：只有真正的星号斜体该成斜体，词中下划线不能
+      ems: q('.cm-md-table-widget em').map((e) => e.textContent),
+      cellTexts: q('.cm-md-table-widget td').map((td) => td.textContent)
     },
     quote: { count: q('.cm-md-blockquote').length, raw: (text(lineOf('引用文字')) || '').startsWith('>') },
     hr: { count: q('.cm-md-hr').length },
@@ -796,6 +802,14 @@ function main() {
         `表格=${m.table.tables} 真 table=${m.table.realTables} cells=${m.table.cells}`)
       check('表格格子里的 <br/> 画成换行', m.table.brs >= 1, `<br> 个数=${m.table.brs}`)
       check('表格格子里的图片画出来', m.table.imgs >= 1, `格子里 img 个数=${m.table.imgs}`)
+      // #161：CommonMark 里 `_` 不能跨在词中间生效。`local_upload / external_api`
+      // 是两个普通单词，不能被读成一句斜体，连下划线都不能丢。
+      const ems = m.table.ems ?? []
+      const cellTexts = m.table.cellTexts ?? []
+      check('词中下划线不当斜体（#161）',
+        ems.length === 1 && ems[0] === '真斜体' && cellTexts.some((t) => t.includes('local_upload / external_api'))
+          && cellTexts.some((t) => t.includes('snake_case_name')),
+        `斜体=${JSON.stringify(ems)} 格子=${JSON.stringify(cellTexts.filter((t) => t.includes('_')).slice(0, 3))}`)
       check('引用渲染', m.quote.count >= 1 && m.quote.raw === false, `count=${m.quote.count} 露 >: ${m.quote.raw}`)
       check('分隔线渲染', m.hr.count >= 1, `hr=${m.hr.count}`)
       check('公式渲染', m.math.katex >= 2, `katex=${m.math.katex} block=${m.math.block} error=${m.math.error}`)
