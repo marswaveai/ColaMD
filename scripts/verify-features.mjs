@@ -296,6 +296,16 @@ const MEASURE = `(() => {
         : ''
       return {
         size: out.length,
+        codeColor: (() => {
+          const article = document.createElement('article')
+          article.className = 'colamd-document'
+          article.innerHTML = '<pre><code>const answer = 42</code></pre>'
+          document.body.appendChild(article)
+          const exported = getComputedStyle(article.querySelector('code')).color
+          const editor = getComputedStyle(document.querySelector('.cm-md-codeblock')).color
+          article.remove()
+          return { exported, editor }
+        })(),
         strong: /<strong>/i.test(out),
         em: /<em>/i.test(out),
         img: /<img[^>]+src/i.test(out),
@@ -844,6 +854,8 @@ function main() {
         m.exportHtml.cmClass === false && m.exportHtml.cmLine === false && m.exportHtml.frontmatter === false,
         `cm-md 类名残留=${m.exportHtml.cmClass}[${m.exportHtml.cmClassNames}] cm-line 残留=${m.exportHtml.cmLine} 属性区残留=${m.exportHtml.frontmatter}`)
       check('导出的 HTML 带图片', m.exportHtml.img === true, `img=${m.exportHtml.img} 长度=${m.exportHtml.size}`)
+      check('HTML 导出代码文字沿用编辑器配色', m.exportHtml.codeColor.exported === m.exportHtml.codeColor.editor,
+        `导出=${m.exportHtml.codeColor.exported} 编辑器=${m.exportHtml.codeColor.editor}`)
 
       // ─── #138 那一批：阅读体验的退化 ─────────────────────────────────────────
 
