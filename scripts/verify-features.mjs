@@ -12,7 +12,7 @@
 // 注意：页面侧表达式写在模板字符串里，反斜杠会被模板字符串吃掉一次，
 // 所以那边一律用 includes() 而不是正则；非要匹配反引号时写 \x60。
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { assertBuildFresh } from './build-freshness.mjs'
@@ -497,6 +497,99 @@ function reportChecks() {
     ? `\n✗ ${failed.length}/${checks.length} 条没通过`
     : `\n✓ ${checks.length} 条全通过`)
   if (failed.length) process.exitCode = 1
+}
+
+/** 复用当前窗口逐主题截图取色，检查选区是否真的画在引用和代码背景之上。 */
+async function checkSelectionVisibility(renderer) {
+  const doc = [
+    '> 引用文字 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789',
+    '> 引用第二行 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789', '',
+    '> ```text', '> quoted_code ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789',
+    '> second_code ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789', '> ```', '',
+    '> > 嵌套引用 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789', '',
+    '```text', 'plain_code ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789', '```', '',
+    '> 自动换行引用文字 ' + 'ABCDEFGHIJKLMN '.repeat(12), '', '末尾正文',
+  ].join('\n')
+  const scenarios = [
+    ['引用文字', '引用文字', '0123456789'],
+    ['引用多行', '引用文字', '引用第二行 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789'],
+    ['引用内代码', 'quoted_code', 'second_code ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789'],
+    ['跨引用与代码', '引用文字', 'second_code ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789'],
+    ['嵌套引用', '嵌套引用', '0123456789'],
+    ['普通代码', 'plain_code', '0123456789'],
+    ['自动换行引用', '自动换行引用文字', 'ABCDEFGHIJKLMN '.repeat(12).trim()],
+    ['鼠标拖选引用', '引用文字', '0123456789', 'mouse'],
+    ['失焦引用内代码', 'quoted_code', 'second_code ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789', 'blur'],
+  ]
+  const themes = [
+    ...['light', 'dark', 'elegant', 'sepia', 'notion', 'bear', 'writer', 'solarized-dark', 'nord', 'gruvbox', 'dracula', 'midnight']
+      .map(name => ({ name, className: `theme-${name}` })),
+    ...readdirSync(join(APP, 'themes')).filter(name => name.endsWith('.css')).sort()
+      .map(name => ({ name, className: 'theme-custom', css: readFileSync(join(APP, 'themes', name), 'utf8') })),
+  ]
+  const pixels = async (bands) => {
+    const { data } = await renderer.send('Page.captureScreenshot', { format: 'png' })
+    return evaluate(renderer, `(async () => {
+      const image = new Image(); image.src = 'data:image/png;base64,${data}'; await image.decode()
+      const canvas = new OffscreenCanvas(image.width, image.height), ctx = canvas.getContext('2d')
+      ctx.drawImage(image, 0, 0)
+      const sx = image.width / innerWidth, sy = image.height / innerHeight
+      return ${JSON.stringify(bands)}.map(r => {
+        const x = Math.ceil((r.x + 2) * sx), end = Math.floor((r.x + r.width - 2) * sx)
+        return [...ctx.getImageData(x, Math.ceil((r.y + 2) * sy), end - x, 1).data]
+      })
+    })()`)
+  }
+  const saved = await evaluate(renderer, `(() => {
+    window.__selectionView = document.querySelector('.cm-content').cmTile.root.view
+    window.__selectionState = __selectionView.state
+    return {className:document.body.className,width:innerWidth,height:innerHeight,scroll:__selectionView.scrollDOM.scrollTop}
+  })()`)
+  try {
+    await renderer.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+    await renderer.send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 1200, deviceScaleFactor: 1, mobile: false })
+    await evaluate(renderer, `__selectionView.setState(__selectionState.constructor.create({doc:${JSON.stringify(doc)},extensions:__selectionState.config.base}))`)
+    for (const theme of themes) {
+      await evaluate(renderer, `(() => {
+        document.getElementById('selection-theme')?.remove(); document.body.className = ${JSON.stringify(theme.className)}
+        const style = document.createElement('style'); style.id = 'selection-theme'; style.textContent = ${JSON.stringify(theme.css || '')}; document.head.append(style)
+        __selectionView.dispatch({selection:{anchor:0}}); __selectionView.focus(); __selectionView.scrollDOM.scrollTop = 0
+      })()`)
+      await sleep(60)
+      for (const [name, start, end, mode] of scenarios) {
+        const from = doc.indexOf(start), to = doc.indexOf(end, from) + end.length
+        await evaluate(renderer, `__selectionView.dispatch({selection:{anchor:${mode === 'mouse' ? 0 : from},head:${mode === 'mouse' ? 0 : to}}}); __selectionView.focus()`)
+        if (mode === 'mouse') {
+          const [a, b] = await evaluate(renderer, `[__selectionView.coordsAtPos(${from}),__selectionView.coordsAtPos(${to})].map(r=>({x:r.left,y:(r.top+r.bottom)/2}))`)
+          for (const [type, point] of [['mousePressed', a], ['mouseMoved', b], ['mouseReleased', b]]) {
+            await renderer.send('Input.dispatchMouseEvent', { type, ...point, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 })
+          }
+        }
+        if (mode === 'blur') await evaluate(renderer, '__selectionView.contentDOM.blur()')
+        await sleep(40)
+        const selectedRange = await evaluate(renderer, '[__selectionView.state.selection.main.from,__selectionView.state.selection.main.to]')
+        const bands = await evaluate(renderer, `[...document.querySelectorAll('.cm-selectionBackground')].map(el=>{
+          const r=el.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}
+        }).filter(r=>r.width>4 && r.height>4)`)
+        const selected = await pixels(bands)
+        await evaluate(renderer, '__selectionView.dispatch({selection:{anchor:0}})')
+        await sleep(30)
+        const collapsed = await pixels(bands)
+        const deltas = selected.map((row, band) => {
+          let total = 0
+          for (let i = 0; i < row.length; i += 4) total += Math.max(...[0, 1, 2].map(c => Math.abs(row[i + c] - collapsed[band][i + c])))
+          return Math.round(total / (row.length / 4) * 10) / 10
+        })
+        check(`${theme.name} ${name}选区可见`, selectedRange[0] === from && selectedRange[1] === to && deltas.length > 0 && deltas.every(delta => delta >= 8),
+          `选区=${selectedRange} 选中前后像素差=${deltas}`)
+      }
+    }
+    check('逐主题选区验收不修改文档', await evaluate(renderer, '__selectionView.state.doc.toString()') === doc)
+  } finally {
+    await evaluate(renderer, `document.getElementById('selection-theme')?.remove(); document.body.className=${JSON.stringify(saved.className)};
+      __selectionView.setState(__selectionState); __selectionView.scrollDOM.scrollTop=${saved.scroll}; delete window.__selectionState; delete window.__selectionView`)
+    await renderer.send('Emulation.setDeviceMetricsOverride', { width: saved.width, height: saved.height, deviceScaleFactor: 1, mobile: false })
+  }
 }
 
 /** 点一下某一行（把光标放进去），返回它的坐标。 */
@@ -1405,6 +1498,7 @@ function main() {
         afterReset.contentFont === beforeZoom.contentFont && afterReset.contentFamily === beforeZoom.contentFamily,
         `字号 ${afterZoom.contentFont} → ${afterReset.contentFont}（默认 ${beforeZoom.contentFont}），字体族 ${JSON.stringify(afterReset.contentFamily)}`)
 
+      await checkSelectionVisibility(renderer)
       reportChecks()
     } finally {
       stopVerifyApp(udd)

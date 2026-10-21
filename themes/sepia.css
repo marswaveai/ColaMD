@@ -36,7 +36,6 @@
 }
 
 #editor .cm-content .cm-md-blockquote {
-  background: var(--blockquote-bg);
   /* Horizontal only: a quote is one div per line in the editor, so vertical
      padding would be added once for every line of the quote. */
   padding-left: 24px;

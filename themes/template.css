@@ -57,10 +57,10 @@
 }
 
 /* 引用块。
+   底色只改上面的 --blockquote-bg，编辑器会把它画在选区下方。
    注意：引用和代码块在编辑器里是**一行一个 div**，不是包住整块的一个盒子。
    所以纵向内边距会每一行加一遍，看上去会散架。要留呼吸感只给左右。 */
 #editor .cm-content .cm-md-blockquote {
-  background: rgba(47, 111, 159, 0.05);
   padding-left: 20px;
   padding-right: 16px;
 }

@@ -166,10 +166,22 @@
 /* ======= 引用块 ======= */
 
 .cm-content .cm-md-blockquote {
+  position: relative;
   color: var(--text-secondary, var(--text-muted));
   border-left: 4px solid var(--blockquote-border);
   padding-left: 16px;
   padding-right: 16px;
+}
+
+/* 引用底色和代码块一样放在选区下方，不能直接画在文字行上。
+ * 引用内的代码行使用代码块自己的底色。 */
+.cm-content .cm-md-blockquote:not(.cm-md-codeblock)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  background: var(--blockquote-bg, transparent);
+  pointer-events: none;
 }
 
 /* ======= 列表 ======= */
@@ -658,14 +670,6 @@ body.theme-bear .cm-content .cm-md-atxheading1 {
 }
 
 /* 引用块 */
-body.theme-elegant .cm-content .cm-md-blockquote {
-  background: var(--blockquote-bg);
-}
-
-body.theme-sepia .cm-content .cm-md-blockquote {
-  background: var(--blockquote-bg);
-}
-
 body.theme-writer .cm-content .cm-md-blockquote {
   border-left-width: 3px;
   font-style: normal;
