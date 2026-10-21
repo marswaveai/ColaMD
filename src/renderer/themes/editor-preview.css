@@ -236,6 +236,19 @@
   padding-bottom: 0.8em;
 }
 
+/* 引用里的代码块：这些行同时带着引用和代码块的类。
+ *
+ * 雅致、Sepia 等主题把引用的底色直接画在行上，而代码块的深色底在 z-index -3 的伪元素上
+ * （为了让选区高亮落在它上面，见上面那条），行自己的底色反过来把它盖住，浅色的代码字落在
+ * 浅色的引用底上几乎看不见（v2.7.7 用户报的）。nord、dracula 等主题给引用设的文字色，选择器
+ * 比代码块的重，代码字也会被染成引用色。所以这些行不要引用底色，字色回到代码块的；
+ * 引用左边的竖线留着，代码块贴着它画。选择器带 #editor，独立主题文件里的引用规则也压得住。 */
+#editor .cm-content .cm-md-blockquote.cm-md-codeblock {
+  background: transparent;
+  color: var(--code-block-text, var(--text-color));
+  font-style: normal;
+}
+
 /* 围栏上的语言名。压淡到与底色同族的灰，别抢代码正文的注意力。 */
 .cm-content .cm-md-codeinfo {
   color: color-mix(in srgb, var(--code-block-text, var(--text-color)) 45%, transparent);

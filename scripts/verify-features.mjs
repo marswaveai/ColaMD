@@ -96,6 +96,10 @@ function fixture() {
     '',
     '行内公式 $a^2+b^2=c^2$ 与价格 $349。',
     '',
+    '> ```bash',
+    '> npm run quoted',
+    '> ```',
+    '',
     '$$',
     '\\int_0^1 x^2 dx',
     '$$',
@@ -739,6 +743,32 @@ async function checkCheatsheet() {
   }
 }
 
+/**
+ * 引用里的代码块：引用的底色和字色不能盖住代码块（v2.7.7 雅致主题里浅字落在浅底上，几乎看不见）。
+ * 每套内置主题都量代码字与代码块底色的对比度，至少 4.5:1。
+ */
+async function checkQuotedCodeBlock(renderer) {
+  const saved = await evaluate(renderer, 'document.body.className')
+  for (const theme of ['light', 'dark', 'elegant', 'sepia', 'notion', 'bear', 'writer', 'solarized-dark', 'nord', 'gruvbox', 'dracula', 'midnight']) {
+    const result = JSON.parse(await evaluate(renderer, `(async () => {
+      document.body.className = ${JSON.stringify(`theme-${theme}`)}
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      const line = [...document.querySelectorAll('#editor .cm-line')].find((el) => el.textContent.includes('npm run quoted'))
+      if (!line) return JSON.stringify({ missing: true })
+      const rgb = (value) => value.match(/[\\d.]+/g).slice(0, 3).map(Number)
+      const lum = (value) => { const [r, g, b] = rgb(value).map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }); return 0.2126 * r + 0.7152 * g + 0.0722 * b }
+      const text = getComputedStyle(line).color
+      const lineBg = getComputedStyle(line).backgroundColor
+      const codeBg = getComputedStyle(line, '::before').backgroundColor
+      const [hi, lo] = [lum(text), lum(codeBg)].sort((a, b) => b - a)
+      return JSON.stringify({ text, codeBg, lineBg, quote: line.classList.contains('cm-md-blockquote'), contrast: Math.round((hi + 0.05) / (lo + 0.05) * 10) / 10 })
+    })()`))
+    check(`${theme} 引用里的代码块看得清`,
+      !result.missing && result.quote && result.lineBg === 'rgba(0, 0, 0, 0)' && result.contrast >= 4.5, JSON.stringify(result))
+  }
+  await evaluate(renderer, `document.body.className = ${JSON.stringify(saved)}`)
+}
+
 function main() {
   return (async () => {
     mkdirSync(WORK, { recursive: true })
@@ -788,6 +818,7 @@ function main() {
       check('==高亮== 渲染', m.inline.highlight >= 1, `highlight=${m.inline.highlight}`)
       check('时间戳不被当成 emoji 染色', m.timestamp.colors.length === 1,
         `颜色=${JSON.stringify(m.timestamp.colors)} 片段=${JSON.stringify(m.timestamp.spans)}`)
+      await checkQuotedCodeBlock(renderer)
       check('链接可点（带地址）', m.link.anchors >= 1, `带 data-href 的元素=${m.link.anchors}`)
       check('链接不露源码', m.link.brackets === false, `行内容: ${m.link.url}`)
       check('本地图片渲染', m.image.imgs >= 1 && m.image.naturalWidth > 0,
