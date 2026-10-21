@@ -7,6 +7,7 @@
 //
 // 用法: npm run verify:features（先 npm run build）
 // 只验 Mermaid 点击往返：npm run verify:features -- --mermaid-only
+// 只验代码块与正文的光标颜色：npm run verify:features -- --cursor-only
 // 窗口放在屏幕外，不占用屏幕；一次启动跑完所有断言。
 //
 // 注意：页面侧表达式写在模板字符串里，反斜杠会被模板字符串吃掉一次，
@@ -615,6 +616,54 @@ async function checkMermaidRestoration(renderer) {
   await clickLine(renderer, '普通段落')
 }
 
+async function checkCodeCursor(renderer) {
+  await renderer.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+  const saved = await evaluate(renderer, 'document.body.className')
+  for (const theme of ['light', 'dark', 'elegant', 'sepia', 'notion', 'bear', 'writer', 'solarized-dark', 'nord', 'gruvbox', 'dracula', 'midnight']) {
+    for (const code of [true, false]) {
+      await evaluate(renderer, `(() => {
+        document.body.className = ${JSON.stringify(`theme-${theme}`)}
+        const view = document.querySelector('.cm-content').cmTile.root.view
+        const from = view.state.doc.toString().indexOf(${JSON.stringify(code ? 'const answer' : '普通段落')})
+        view.dispatch({ selection: { anchor: from }, scrollIntoView: true })
+        view.focus()
+      })()`)
+      await sleep(100)
+      const colors = await evaluate(renderer, `(() => {
+        const line = [...document.querySelectorAll('.cm-line')].find(el => el.textContent.includes(${JSON.stringify(code ? 'const answer' : '普通段落')}))
+        return { cursor: getComputedStyle(document.querySelector('.cm-cursor-primary')).borderLeftColor,
+          text: getComputedStyle(line).color }
+      })()`)
+      check(`${theme} ${code ? '代码块' : '正文'}光标使用对应文字色`, colors.cursor === colors.text, JSON.stringify(colors))
+      // 拖放的插入竖线：走浏览器的拖拽事件，拖到这一行上不松手，取消后竖线和标记都要撤掉
+      const point = await evaluate(renderer, `(() => {
+        const line = [...document.querySelectorAll('.cm-line')].find(el => el.textContent.includes(${JSON.stringify(code ? 'const answer' : '普通段落')}))
+        const r = line.getBoundingClientRect()
+        return { x: Math.round(r.left + 30), y: Math.round(r.top + r.height / 2) }
+      })()`)
+      const data = { items: [{ mimeType: 'text/plain', data: 'x' }], dragOperationsMask: 1 }
+      await renderer.send('Input.dispatchDragEvent', { type: 'dragEnter', ...point, data })
+      await renderer.send('Input.dispatchDragEvent', { type: 'dragOver', ...point, data })
+      await sleep(150)
+      const drop = await evaluate(renderer, `(() => {
+        const marker = document.querySelector('.cm-dropCursor')
+        const line = [...document.querySelectorAll('.cm-line')].find(el => el.textContent.includes(${JSON.stringify(code ? 'const answer' : '普通段落')}))
+        return { cursor: marker ? getComputedStyle(marker).borderLeftColor : null, text: getComputedStyle(line).color }
+      })()`)
+      check(`${theme} ${code ? '代码块' : '正文'}拖放竖线使用对应文字色`, drop.cursor === drop.text, JSON.stringify(drop))
+      // CDP 的 dragCancel 不给页面发 dragleave，补一个，等同于拖出编辑区
+      await renderer.send('Input.dispatchDragEvent', { type: 'dragCancel', ...point, data })
+      await evaluate(renderer, `document.querySelector('.cm-content').dispatchEvent(new DragEvent('dragleave', { bubbles: true }))`)
+      await sleep(100)
+      if (code) {
+        const leftover = JSON.parse(await evaluate(renderer, `JSON.stringify({ cursor: !!document.querySelector('.cm-dropCursor'), mark: !!document.querySelector('.cm-drop-in-code') })`))
+        check(`${theme} 拖出代码块后不残留插入竖线与代码块标记`, !leftover.cursor && !leftover.mark, JSON.stringify(leftover))
+      }
+    }
+  }
+  await evaluate(renderer, `document.body.className = ${JSON.stringify(saved)}`)
+}
+
 /** 语法速查：单独开一次窗口量一遍（它和夹具不是同一份文档）。 */
 async function checkCheatsheet() {
   const source = join(APP, 'resources', 'templates', 'cheatsheet.md')
@@ -770,6 +819,11 @@ function main() {
         await sleep(250)
       }
       check('夹具已加载', loaded, `编辑器里有没有这份夹具：${loaded}`)
+      await checkCodeCursor(renderer)
+      if (process.argv.includes('--cursor-only')) {
+        reportChecks()
+        return
+      }
       // mermaid 是异步画的，多等一会儿
       await sleep(2500)
 

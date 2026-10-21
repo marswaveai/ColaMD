@@ -18,6 +18,7 @@ import { listInput } from './list-input'
 import { searchHighlightField } from './search-highlight'
 import { stateExtensions, editableCompartment, bodyStart } from './state'
 import { editorTheme } from './source-theme'
+import { cursorColors } from './cursor-colors'
 
 export interface EditorOptions {
   /** 初始文本。就是文件的字节。 */
@@ -94,6 +95,7 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     stateExtensions(),
     // 以下是 view 层：选区绘制、拖放光标、特殊字符、主题
     drawSelection(),
+    cursorColors,
     // 自动换行。CodeMirror 默认**不换行**，长行会横向滚动；markdown 正文必须换行。
     EditorView.lineWrapping,
     dropCursor(),
