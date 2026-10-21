@@ -223,7 +223,9 @@ export async function renderDocumentImages(
     if (single) return [single]
 
     const pages: Buffer[] = []
-    for (let offset = 0; offset < dimensions.height; offset += pageHeight) {
+    // 底部 padding 只能补在最后一页里，不能单独生成一张全是留白的图片。
+    const contentEnd = dimensions.height - PRESETS[preset].padding
+    for (let offset = 0; offset < contentEnd; offset += pageHeight) {
       const height = Math.min(pageHeight, dimensions.height - offset)
       pages.push(await captureReadingPage(win, dimensions, offset, height))
     }

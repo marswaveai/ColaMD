@@ -71,21 +71,38 @@
 
 /* ======= 标题 ======= */
 
-/* 标题上方留白。
- *
- * 换内核之后标题只靠上一行的空行把它和上文分开，而 Milkdown 时代每个标题自带
- * 上边距（h1 1.5em、h2 1.25em、h3 以下 1em，2026-10-20 量过旧版）。少了这一段，
- * 标题和前一段挤在一起，整页读起来比原来紧。
- *
- * 用 padding-top 而不是 margin-top：CodeMirror 按行盒量光标位置，margin 不进入
- * 行盒，落在空白里的点击会被判到相邻行；padding 计入行盒，点标题上方的空白仍然
- * 落在这一个标题上。下方的留白不动，那里已经有空行。
+/* 分隔空行由 paragraph-layout 隐藏，间距按相邻块计算，不再叠加一整行。
+ * 用 padding 而非 margin，让 CodeMirror 的点击和光标测量包含这段留白。
+ * 上一标题的下边距与当前块的上边距取较大值，对应旧版的外边距折叠。
  */
+.cm-content .cm-md-flow-paragraph,
+.cm-content .cm-md-block-space {
+  --md-space-before: 0.5em;
+}
+.cm-content .cm-md-flow-paragraph {
+  padding-top: max(var(--md-space-before), var(--md-previous-space, 0px));
+}
+.cm-content .cm-md-paragraph-separator {
+  /* 空 span 不占宽度，光标高度沿用同一行的字体度量。
+   * inline-block + 1em 会让保留的空段落光标矮于正文（雅致 16px 对 22.5px）。 */
+  display: inline;
+}
+.cm-content .cm-md-block-space {
+  height: max(var(--md-space-before), var(--md-previous-space, 0px));
+  pointer-events: none;
+}
+.cm-content .cm-md-after-heading1 { --md-previous-space: var(--editor-font-size, 16px); }
+.cm-content .cm-md-after-heading2 { --md-previous-space: calc(var(--editor-font-size, 16px) * 0.75); }
+.cm-content .cm-md-after-heading3 { --md-previous-space: calc(var(--editor-font-size, 16px) * 0.625); }
+.cm-content .cm-md-after-heading4,
+.cm-content .cm-md-after-heading5,
+.cm-content .cm-md-after-heading6 { --md-previous-space: calc(var(--editor-font-size, 16px) * 0.5); }
+
 .cm-content .cm-md-atxheading1 {
   font-size: 2em;
   font-weight: 700;
   line-height: 1.25;
-  padding-top: 1.5em;
+  padding-top: max(1.5em, var(--md-previous-space, 0px));
   padding-bottom: 0.3em;
   border-bottom: 1px solid var(--border-color);
 }
@@ -94,7 +111,7 @@
   font-size: 1.5em;
   font-weight: 600;
   line-height: 1.3;
-  padding-top: 1.25em;
+  padding-top: max(1.25em, var(--md-previous-space, 0px));
   padding-bottom: 0.25em;
   border-bottom: 1px solid var(--border-color);
 }
@@ -103,7 +120,7 @@
   font-size: 1.25em;
   font-weight: 600;
   line-height: 1.4;
-  padding-top: 1em;
+  padding-top: max(1em, var(--md-previous-space, 0px));
 }
 
 .cm-content .cm-md-atxheading4,
@@ -111,7 +128,7 @@
 .cm-content .cm-md-atxheading6 {
   font-weight: 600;
   line-height: 1.5;
-  padding-top: 1em;
+  padding-top: max(1em, var(--md-previous-space, 0px));
 }
 
 /* 标记字符（#、>、-、围栏、*）：光标不在这一行时压淡。 */
@@ -256,6 +273,13 @@
 .cm-content .cm-line:has(> .cm-md-mermaid) > .cm-widgetBuffer,
 .cm-content .cm-line:has(> .cm-md-math-block) > .cm-widgetBuffer,
 .cm-content .cm-line:has(> .cm-md-html-block) > .cm-widgetBuffer {
+  position: absolute;
+  height: 0;
+  line-height: 0;
+}
+
+/* 分隔占位与光标缓冲同理：不能在块级 widget 后再撑起一个匿名文字行。 */
+.cm-content .cm-line:has(> .cm-md-table-widget, > .cm-md-mermaid, > .cm-md-math-block, > .cm-md-html-block) > .cm-md-paragraph-separator {
   position: absolute;
   height: 0;
   line-height: 0;
