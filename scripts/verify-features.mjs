@@ -299,6 +299,7 @@ const MEASURE = `(() => {
         strong: /<strong>/i.test(out),
         em: /<em>/i.test(out),
         img: /<img[^>]+src/i.test(out),
+        mermaid: q('.cm-md-mermaid-ready svg').some((svg) => out.includes(svg.outerHTML)),
         anchor: /<a[^>]+href/i.test(out),
         list: /<ul>|<ol>/i.test(out),
         code: /<pre><code>/i.test(out),
@@ -843,6 +844,7 @@ function main() {
       check('导出的 HTML 不带编辑器结构',
         m.exportHtml.cmClass === false && m.exportHtml.cmLine === false && m.exportHtml.frontmatter === false,
         `cm-md 类名残留=${m.exportHtml.cmClass}[${m.exportHtml.cmClassNames}] cm-line 残留=${m.exportHtml.cmLine} 属性区残留=${m.exportHtml.frontmatter}`)
+      check('导出的 HTML 保留 Mermaid 图表', m.exportHtml.mermaid === true, 'HTML 中缺少编辑器已渲染的 SVG')
       check('导出的 HTML 带图片', m.exportHtml.img === true, `img=${m.exportHtml.img} 长度=${m.exportHtml.size}`)
 
       // ─── #138 那一批：阅读体验的退化 ─────────────────────────────────────────

@@ -44,6 +44,8 @@ function lineKind(line: HTMLElement): LineKind {
   for (let level = 1; level <= 6; level++) {
     if (classes.contains(`cm-md-atxheading${level}`)) return `h${level}` as LineKind
   }
+  // 图表沿用围栏行的代码块类，已有 SVG 时不能再按代码围栏删掉。
+  if (line.querySelector('.cm-md-mermaid svg')) return 'p'
   if (classes.contains('cm-md-codeblock')) return 'code'
   if (classes.contains('cm-md-blockquote')) return 'quote'
   if (classes.contains('cm-md-hr')) return 'hr'
