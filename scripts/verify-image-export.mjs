@@ -21,9 +21,10 @@ const { dir: WORK } = verifyWorkdir('image-export')
 // 短的应导出成一张连续长图，长的应退回编号页；两个阅读宽度走的是同一套逻辑
 const CASES = [
   { name: 'short', preset: 'desktop', width: 1200, rows: 60, expect: 'single' },
-  { name: 'long', preset: 'desktop', width: 1200, rows: 130, expect: 'pages' },
+  // 段落排版收起分隔空行后，130 行已能放进一张图；180 行仍跨过捕获上限。
+  { name: 'long', preset: 'desktop', width: 1200, rows: 180, expect: 'pages' },
   { name: 'mobile-short', preset: 'mobile', width: 414, rows: 30, expect: 'single' },
-  { name: 'mobile-long', preset: 'mobile', width: 414, rows: 130, expect: 'pages' }
+  { name: 'mobile-long', preset: 'mobile', width: 414, rows: 180, expect: 'pages' }
 ]
 
 // 行号编码成颜色：base 7 的三个通道，相邻行至少差 30，取色不会有歧义
