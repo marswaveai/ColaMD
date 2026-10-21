@@ -14,6 +14,7 @@ import './themes/base.css'
 import './themes/premium.css'
 import './themes/editor-preview.css'
 import './themes/document.css'
+import type { DetachedTab } from '../tab-transfer'
 
 let sourceModeActive = false
 const editorEl = () => document.getElementById('editor') as HTMLElement
@@ -281,6 +282,7 @@ const tabs: DocumentTab[] = []
 let activeTabId: string | null = null
 let nextTabId = 1
 let switchingTab = false
+let transferringTab = false
 
 const tabBarEl = () => document.getElementById('tab-bar') as HTMLElement
 
@@ -548,6 +550,7 @@ function ensureTab(): DocumentTab {
 }
 
 async function openNewTab(): Promise<void> {
+  if (transferringTab) return
   const previous = activeTab()
   captureActiveTab()
   if (!await saveTabForLeaving(previous)) return
@@ -597,7 +600,7 @@ async function refreshDocumentFileUrl(): Promise<void> {
 }
 
 async function activateTab(id: string): Promise<void> {
-  if (switchingTab || id === activeTabId) return
+  if (transferringTab || switchingTab || id === activeTabId) return
   if (isPresenting()) stopSlideshow()
   const target = tabs.find((tab) => tab.id === id)
   if (!target) return
@@ -670,6 +673,7 @@ async function activateTab(id: string): Promise<void> {
 }
 
 async function closeTab(id: string): Promise<void> {
+  if (transferringTab) return
   const index = tabs.findIndex((tab) => tab.id === id)
   if (index < 0) return
   const tab = tabs[index]
@@ -750,6 +754,99 @@ async function closeTabsMatching(keep: (index: number) => boolean): Promise<void
   }
 }
 
+async function detachDocumentTab(id: string, position?: { x: number; y: number }): Promise<void> {
+  if (transferringTab || switchingTab || tabs.length < 2 || externalConflictPending) return
+  const tab = tabs.find((candidate) => candidate.id === id)
+  if (!tab) return
+  transferringTab = true
+  hideTabTip()
+  if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null }
+  document.body.inert = true
+  setEditorEditable(false)
+  sourceEl().readOnly = true
+  try {
+    await saveQueue
+    captureActiveTab()
+    const selection = tab.sourceMode
+      ? { anchor: tab.id === activeTabId ? sourceEl().selectionStart : 0, head: tab.id === activeTabId ? sourceEl().selectionEnd : 0 }
+      : { anchor: tab.editorState?.selection.main.anchor ?? 0, head: tab.editorState?.selection.main.head ?? 0 }
+    const snapshot: DetachedTab = {
+      filePath: tab.filePath, content: tab.content, dirty: tab.dirty,
+      sourceMode: tab.sourceMode, sourceText: tab.sourceText, diskContent: tab.diskContent,
+      scrollTop: tab.scrollTop, selection
+    }
+    if (!await window.electronAPI.detachTab(snapshot, position)) {
+      alert(isChinese() ? '未能创建新窗口，原标签页已保留。' : 'Could not create a new window. The original tab was kept.')
+      return
+    }
+    const index = tabs.findIndex((candidate) => candidate.id === id)
+    tabs.splice(index, 1)
+    transferringTab = false
+    if (activeTabId === id) {
+      activeTabId = null
+      await activateTab(tabs[Math.min(index, tabs.length - 1)].id)
+    }
+    renderTabBar()
+  } catch (error) {
+    console.error('Tab transfer failed:', error)
+  } finally {
+    transferringTab = false
+    document.body.inert = false
+    setEditorEditable(true)
+    sourceEl().readOnly = false
+    if (dirty) scheduleAutosave()
+  }
+}
+
+async function receiveDetachedTab(snapshot: DetachedTab): Promise<void> {
+  const api = window.electronAPI
+  try {
+    const disk = await api.activateFile(snapshot.filePath)
+    if (snapshot.filePath && !disk) throw new Error('Cannot bind transferred file')
+    const changedOnDisk = !!disk && snapshot.diskContent !== null && disk.content !== snapshot.diskContent
+    const content = changedOnDisk && !snapshot.dirty ? disk!.content : snapshot.content
+    setContent(content, true)
+    if (snapshot.sourceMode) enterSourceMode(content)
+    currentFilePath = snapshot.filePath
+    applyDocumentFileUrl(disk?.fileUrl ?? null)
+    tabs.length = 0
+    activeTabId = null
+    ensureTab()
+    const tab = activeTab()!
+    tab.filePath = snapshot.filePath
+    tab.diskContent = snapshot.diskContent
+    dirty = snapshot.dirty
+    reportDirty()
+    updateWordCount()
+    updateFileTitle()
+    updatePanelVisibility()
+    renderTabBar()
+    void refreshSiblings()
+    scheduleOutlineUpdate()
+    const max = sourceModeActive ? sourceEl().value.length : (getEditorState()?.doc.length ?? 0)
+    const anchor = Math.max(0, Math.min(snapshot.selection.anchor, max))
+    const head = Math.max(0, Math.min(snapshot.selection.head, max))
+    if (sourceModeActive) sourceEl().setSelectionRange(Math.min(anchor, head), Math.max(anchor, head))
+    else getEditorView()?.dispatch({ selection: { anchor, head } })
+    const restoreScroll = (): void => {
+      if (sourceModeActive) sourceEl().scrollTop = snapshot.scrollTop
+      else editorScroller().scrollTop = snapshot.scrollTop
+    }
+    restoreScroll()
+    // A hidden window may suspend animation frames. Acknowledge the content
+    // first so main can show it; finish the visual scroll after it is painted.
+    requestAnimationFrame(() => { restoreScroll(); requestAnimationFrame(restoreScroll) })
+    captureActiveTab()
+    if (dirty) showSaveStatus('dirty')
+    api.detachedTabReady(true)
+    if (changedOnDisk && dirty) raiseExternalConflict()
+    else if (dirty) scheduleAutosave()
+  } catch (error) {
+    console.error('Could not receive detached tab:', error)
+    api.detachedTabReady(false)
+  }
+}
+
 function bindTabBar(api: import('../preload/index').ElectronAPI): void {
   // Tab-opens are serialized: each request awaits main (activateFile,
   // file-opened) before the next runs. Without this, a burst of queued opens
@@ -780,6 +877,7 @@ function bindTabBar(api: import('../preload/index').ElectronAPI): void {
   api.onMenuCloseTab(() => { if (activeTabId) void closeTab(activeTabId) })
   api.onOpenInNewTab(enqueueTabOpen)
   const handleTabMenuAction = ({ action, tabId }: { action: string; tabId: string }) => {
+    if (action === 'detach') { void detachDocumentTab(tabId); return }
     if (action === 'close') { void closeTab(tabId); return }
     if (action === 'close-others') { void closeTabsMatching((i) => tabs[i].id !== tabId); return }
     if (action === 'close-right') {
@@ -787,6 +885,63 @@ function bindTabBar(api: import('../preload/index').ElectronAPI): void {
     }
   }
   api.onTabMenuAction(handleTabMenuAction)
+  let suppressTabClick = false
+  tabBarEl().addEventListener('mousedown', (event) => {
+    if (event.button !== 0 || tabs.length < 2 || transferringTab) return
+    const target = event.target as HTMLElement
+    if (target.closest('.tab-entry-close')) return
+    const entry = target.closest('.tab-entry') as HTMLElement | null
+    const id = entry?.dataset.tabId
+    if (!entry || !id) return
+    const start = { x: event.clientX, y: event.clientY }
+    let dragged = false
+    let preview: HTMLElement | null = null
+    event.preventDefault()
+    const move = (e: MouseEvent): void => {
+      if (!dragged && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 8) return
+      dragged = true
+      hideTabTip()
+      entry.classList.add('tab-drag-source')
+      if (!preview) {
+        preview = document.createElement('div')
+        preview.className = 'tab-drag-preview'
+        preview.textContent = entry.dataset.fullName ?? ''
+        document.body.append(preview)
+      }
+      preview.style.left = `${e.clientX + 12}px`
+      preview.style.top = `${e.clientY + 12}px`
+    }
+    const finish = (e: MouseEvent): void => {
+      window.removeEventListener('mousemove', move, true)
+      window.removeEventListener('mouseup', finish, true)
+      window.removeEventListener('blur', cancel)
+      window.removeEventListener('keydown', escape, true)
+      preview?.remove()
+      entry.classList.remove('tab-drag-source')
+      if (!dragged) return
+      suppressTabClick = true
+      setTimeout(() => { suppressTabClick = false }, 0)
+      if (e.type !== 'mouseup') return
+      const rect = tabBarEl().getBoundingClientRect()
+      if (e.clientY < rect.top - 20 || e.clientY > rect.bottom + 20 || e.clientX < rect.left - 24 || e.clientX > rect.right + 24) {
+        void detachDocumentTab(id, { x: e.screenX, y: e.screenY })
+      } else {
+        const entries = Array.from(tabBarEl().querySelectorAll<HTMLElement>('.tab-entry')).filter((item) => item.dataset.tabId !== id)
+        const before = entries.find((item) => e.clientX < item.getBoundingClientRect().left + item.offsetWidth / 2)
+        const index = tabs.findIndex((item) => item.id === id)
+        const [tab] = tabs.splice(index, 1)
+        const next = before ? tabs.findIndex((item) => item.id === before.dataset.tabId) : tabs.length
+        tabs.splice(next, 0, tab)
+        renderTabBar()
+      }
+    }
+    const cancel = (): void => finish(new MouseEvent('cancel'))
+    const escape = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.preventDefault(); cancel() } }
+    window.addEventListener('mousemove', move, true)
+    window.addEventListener('mouseup', finish, true)
+    window.addEventListener('blur', cancel)
+    window.addEventListener('keydown', escape, true)
+  })
   // Chromium re-dispatches hover events after the DOM under the pointer changes,
   // with the same coordinates. Closing a tab rebuilds the strip, so the hint used
   // to re-arm itself under a pointer that never moved and looked like it refused
@@ -825,6 +980,7 @@ function bindTabBar(api: import('../preload/index').ElectronAPI): void {
     if (tab) void activateTab(tab.id)
   })
   tabBarEl().addEventListener('click', (e) => {
+    if (suppressTabClick || transferringTab) { e.preventDefault(); return }
     const target = e.target as HTMLElement
     const entry = target.closest('.tab-entry') as HTMLElement | null
     const id = entry?.dataset.tabId
@@ -921,6 +1077,7 @@ async function runAutosave(): Promise<void> {
 }
 
 async function saveCurrent(saveAs = false): Promise<boolean> {
+  if (transferringTab) return false
   const revision = documentRevision
   const content = getFileContent()
   const expectedPath = currentFilePath
@@ -1535,6 +1692,88 @@ function renderFileList(files: import('../preload/index').SiblingFile[]): void {
   }
 }
 
+function showRenameDialog(path: string): void {
+  if (document.querySelector('.rename-dialog')) return
+  const dialog = document.createElement('dialog')
+  dialog.className = 'rename-dialog'
+  const form = document.createElement('form')
+  const label = document.createElement('label')
+  label.textContent = isChinese() ? '重命名文件' : 'Rename file'
+  label.htmlFor = 'rename-file-name'
+  const input = document.createElement('input')
+  input.id = 'rename-file-name'
+  input.type = 'text'
+  input.value = path.split(/[\\/]/).pop() ?? ''
+  input.required = true
+  input.autocomplete = 'off'
+  input.spellcheck = false
+  const error = document.createElement('p')
+  error.className = 'rename-error'
+  error.setAttribute('role', 'alert')
+  const actions = document.createElement('div')
+  actions.className = 'rename-actions'
+  const cancel = document.createElement('button')
+  cancel.type = 'button'
+  cancel.textContent = isChinese() ? '取消' : 'Cancel'
+  const submit = document.createElement('button')
+  submit.type = 'submit'
+  submit.textContent = isChinese() ? '重命名' : 'Rename'
+  actions.append(cancel, submit)
+  form.append(label, input, error, actions)
+  dialog.append(form)
+  document.body.append(dialog)
+  dialog.setAttribute('aria-labelledby', 'rename-file-label')
+  label.id = 'rename-file-label'
+  dialog.addEventListener('close', () => dialog.remove())
+  cancel.addEventListener('click', () => dialog.close())
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault()
+    if (submit.disabled) return
+    submit.disabled = true
+    input.readOnly = true
+    cancel.disabled = true
+    let failure = ''
+    try {
+      await saveQueue
+      if (path === currentFilePath && dirty && !await saveCurrent()) {
+        error.textContent = isChinese() ? '请先处理当前文档的保存问题。' : 'Please resolve the pending save first.'
+        return
+      }
+      await enqueueSave(async () => {
+        const result = await window.electronAPI.renameFile(path, input.value)
+        failure = result.error ?? ''
+        return result.path ?? null
+      })
+      if (!failure) {
+        dialog.close()
+        return
+      }
+      error.textContent = failure === 'EEXIST'
+        ? (isChinese() ? '已有同名文件，请换一个名称。' : 'A file with this name already exists.')
+        : failure === 'EINVAL'
+          ? (isChinese() ? '文件名不能包含路径或特殊字符，请保留原扩展名。' : 'Use a valid filename and keep the original extension.')
+          : failure === 'ENOENT'
+            ? (isChinese() ? '文件已被移动或删除，请刷新后重试。' : 'The file was moved or deleted. Refresh and try again.')
+            : (isChinese() ? '无法重命名，请检查文件权限及所在磁盘是否支持此操作。' : 'Cannot rename. Check file permissions and filesystem support.')
+    } catch {
+      error.textContent = isChinese() ? '重命名失败，原文件已保留。' : 'Rename failed. The original file was preserved.'
+    } finally {
+      submit.disabled = false
+      input.readOnly = false
+      cancel.disabled = false
+      if (dialog.isConnected) input.focus()
+    }
+  })
+  // Escape may cancel before a write starts, but never dismiss an operation
+  // already being committed by the main process.
+  dialog.addEventListener('cancel', (event) => { if (submit.disabled) event.preventDefault() })
+  hideTip()
+  dialog.showModal()
+  input.focus()
+  const dot = input.value.lastIndexOf('.')
+  input.setSelectionRange(0, dot > 0 ? dot : input.value.length)
+}
+
 async function refreshSiblings(): Promise<void> {
   const files = await window.electronAPI.listSiblings()
   if (files) renderFileList(files)
@@ -1875,6 +2114,7 @@ async function init(): Promise<void> {
   // reacts to this signal by flushing queued tab-opens and by trusting the
   // window with close/quit flows. It sat mid-init once and the flush raced
   // bindTabBar: files handed over at launch were dropped silently.
+  api.onReceiveDetachedTab((tab) => { void receiveDetachedTab(tab) })
   api.reportRendererReady()
 
   // Save before switching files. If saving is cancelled or fails, preserve the
@@ -1938,6 +2178,21 @@ async function init(): Promise<void> {
   // by sections passed along the way (review on #68).
   onEditorJumpPhase((phase) => (phase === 'start' ? beginOutlineJump() : endOutlineJump()))
 
+  api.onRequestRenameFile(showRenameDialog)
+  api.onFileRenamed(({ oldPath, newPath, fileUrl }) => {
+    for (const tab of tabs) {
+      if (tab.filePath === oldPath) tab.filePath = newPath
+    }
+    if (currentFilePath === oldPath) {
+      currentFilePath = newPath
+      applyDocumentFileUrl(fileUrl)
+      updateFileTitle()
+      if (dirty) scheduleAutosave()
+    }
+    panelChildren.clear()
+    renderTabBar()
+    void refreshSiblings()
+  })
   api.onSiblingsChanged((files) => {
     // A watcher refresh can change any directory that is open, so drop the
     // cached levels and let the expanded ones read themselves again.

@@ -44,6 +44,22 @@ The two items below are the ones actually blocking us. Everything else on this p
 
 ## Implemented On Main
 
+### Reorder and detach document tabs
+
+Drag a tab outside the strip to move it to a separate window; dragging within
+the strip reorders tabs. A native Move to New Window menu is also available.
+Transfer waits for the receiver to acknowledge content, dirty state, display
+mode, selection and scroll. Failed transfers keep the source tab. Merging tabs back into an existing window is outside this change. Cross-window undo history is not transferred.
+
+### Rename files from the file panel
+
+The file entry's native context menu includes Rename. A temporary name dialog
+keeps the extension selected separately, reports collisions and preserves bytes.
+Writes are serialized across windows; open tabs, watchers and recent paths follow
+the new name. This avoids switching to Finder for a basic file operation without
+adding permanent controls. Filesystems that reject hard links report an error
+and leave the source untouched rather than falling back to an overwriting move.
+
 ### Inline HTML pairs (#125)
 
 `<span style="color:red">文字</span>` in the middle of a paragraph styles the text between the tags. A matched pair on one line hides both tags and paints the inner text with a mark carrying the sanitized style; the text stays editable. Fixed 2026-10-08 (`8615cc0`), with `verify:features` asserting the computed colour. The earlier reply that said it already worked was wrong, and the issue was reopened with a correction.

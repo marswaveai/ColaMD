@@ -6,6 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'url'
 import { appendFile, readFile, writeFile, readdir, copyFile, mkdir, stat } from 'fs/promises'
 import { watch, FSWatcher, existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'fs'
 import { resolveMarkdownLink } from './markdown-link'
+import { renameDocument } from './rename-file'
+import type { DetachedTab } from '../tab-transfer'
 
 const startupStartedAt = performance.now()
 const startupTraceEnabled = process.env.COLAMD_STARTUP_TRACE === '1'
@@ -292,6 +294,8 @@ interface PendingDocumentStateRequest {
 
 const windowStates = new Map<number, WindowState>()
 let pendingFilePaths: string[] = []
+const detachingSources = new Set<number>()
+const pendingDetachedTabs = new Map<number, { tab: DetachedTab; finish: (ok: boolean) => void }>()
 let isQuitting = false
 let nextDocumentStateRequestId = 0
 const pendingDocumentStateRequests = new Map<string, PendingDocumentStateRequest>()
@@ -345,6 +349,7 @@ function createWindow(
   // 没有路径的文档（语法速查）也要有一个「所在位置」：文件里的相对图片地址要相对它
   // 解析。传的是那份文档**本该在**的地址，所以文档直接打开和从菜单打开，图片都能出来。
   initialFileUrl?: string,
+  hidden = false,
 ): BrowserWindow {
   // Windows gets ONE row for its shell. A normal Windows frame stacks three
   // bars: the system title bar, the in-window menu bar, and our own row, which
@@ -354,6 +359,7 @@ function createWindow(
   // lights inside the same row, and Linux keeps its frame and its menu bar.
   const isWindows = process.platform === 'win32'
   const win = new BrowserWindow({
+    show: !hidden,
     ...(usableBounds() ?? { width: 960, height: 720 }),
     minWidth: 600,
     minHeight: 400,
@@ -452,6 +458,7 @@ function createWindow(
   // Intercept window close: confirm unsaved changes before the window dies.
   // cmd+w (role: 'close') and quit both funnel through here.
   win.on('close', (e) => {
+    if (detachingSources.has(win.id)) { e.preventDefault(); return }
     const st = getState(win)
     if (isQuitting || st.closeAuthorized || (!st.rendererReady && !st.dirty)) return
     e.preventDefault()
@@ -876,21 +883,14 @@ ipcMain.handle('tab-context-menu', (event, payload: unknown) => {
   ]
   if (canCloseOthers === true) {
     items.push({ label: zh ? '关闭其他标签页' : 'Close Other Tabs', click: () => send('close-others') })
+    items.push({ label: zh ? '移到新窗口' : 'Move to New Window', click: () => send('detach') })
   }
   if (canCloseRight === true) {
     items.push({ label: zh ? '关闭右侧标签页' : 'Close Tabs to the Right', click: () => send('close-right') })
   }
   if (typeof filePath === 'string' && filePath.length > 0) {
     items.push({ type: 'separator' })
-    // The rest of the menu sends actions back to the renderer; this one is a
-    // main-process job, so it runs here and needs no round trip.
-    items.push({
-      label: zh ? '在新窗口打开' : 'Open in New Window',
-      click: () => {
-        const opened = createWindow(filePath)
-        opened.focus()
-      }
-    })
+    // Path actions run in main; tab closing and transfer stay in the renderer.
     items.push({ label: zh ? '复制路径' : 'Copy path', click: () => copyToClipboard(filePath) })
     items.push({ label: revealLabel(zh), click: () => shell.showItemInFolder(filePath) })
   }
@@ -916,6 +916,10 @@ ipcMain.handle('entry-context-menu', (event, targetPath: unknown, kind: unknown)
         win.webContents.send('open-in-new-tab', targetPath)
       }
     })
+    items.push({
+      label: zh ? '重命名…' : 'Rename…',
+      click: () => win.webContents.send('request-rename-file', targetPath)
+    })
     items.push({ type: 'separator' })
   }
   items.push({ label: zh ? '复制路径' : 'Copy path', click: () => copyToClipboard(targetPath) })
@@ -927,6 +931,109 @@ ipcMain.handle('entry-context-menu', (event, targetPath: unknown, kind: unknown)
     click: () => shell.showItemInFolder(targetPath)
   })
   Menu.buildFromTemplate(items).popup({ window: win })
+})
+
+ipcMain.handle('detach-tab', async (event, payload: unknown, position: unknown) => {
+  const source = getWinFromEvent(event)
+  if (!source || detachingSources.has(source.id) || !payload || typeof payload !== 'object') return false
+  const tab = payload as DetachedTab
+  if ((tab.filePath !== null && (typeof tab.filePath !== 'string' || !getState(source).tabFiles.includes(tab.filePath))) ||
+    typeof tab.content !== 'string' || typeof tab.sourceText !== 'string' ||
+    typeof tab.dirty !== 'boolean' || typeof tab.sourceMode !== 'boolean' ||
+    (tab.diskContent !== null && typeof tab.diskContent !== 'string') ||
+    !Number.isFinite(tab.scrollTop) || !tab.selection ||
+    !Number.isSafeInteger(tab.selection.anchor) || !Number.isSafeInteger(tab.selection.head)) return false
+  detachingSources.add(source.id)
+  let target: BrowserWindow | null = null
+  try {
+    await getState(source).writeQueue
+    target = createWindow(undefined, undefined, getState(source).browsePath ?? undefined, undefined, true)
+    const receiver = target
+    const point = position as { x?: number; y?: number } | undefined
+    const bounds = source.getNormalBounds()
+    const x = typeof point?.x === 'number' && Number.isFinite(point.x) ? Math.round(point.x - 80) : bounds.x + 40
+    const y = typeof point?.y === 'number' && Number.isFinite(point.y) ? Math.round(point.y - 18) : bounds.y + 40
+    const area = screen.getDisplayNearestPoint({ x, y }).workArea
+    const width = Math.min(bounds.width, area.width), height = Math.min(bounds.height, area.height)
+    receiver.setBounds({ x: Math.max(area.x, Math.min(x, area.x + area.width - width)), y: Math.max(area.y, Math.min(y, area.y + area.height - height)), width, height })
+    const received = await new Promise<boolean>((resolveReady) => {
+      const id = receiver.webContents.id
+      const timeout = setTimeout(() => finish(false), 15_000)
+      const finish = (ok: boolean): void => {
+        if (!pendingDetachedTabs.has(id)) return
+        clearTimeout(timeout)
+        pendingDetachedTabs.delete(id)
+        resolveReady(ok)
+      }
+      pendingDetachedTabs.set(id, { tab, finish })
+      receiver.once('closed', () => finish(false))
+      receiver.webContents.once('render-process-gone', () => finish(false))
+    })
+    if (!received || source.isDestroyed() || receiver.isDestroyed()) {
+      if (!receiver.isDestroyed()) receiver.destroy()
+      return false
+    }
+    const state = getState(source)
+    state.tabFiles = state.tabFiles.filter((path) => path !== tab.filePath)
+    if (tab.filePath && state.filePath === tab.filePath) {
+      stopWatching(state)
+      if (state.debounceTimer) clearTimeout(state.debounceTimer)
+      if (state.siblingsTimer) clearTimeout(state.siblingsTimer)
+      state.filePath = null
+      state.lastInternalSaveContent = null
+      state.lastKnownMtime = 0
+    }
+    receiver.show()
+    receiver.focus()
+    return true
+  } catch (error) {
+    console.error('Tab transfer failed:', error)
+    if (target && !target.isDestroyed()) target.destroy()
+    return false
+  } finally {
+    detachingSources.delete(source.id)
+  }
+})
+
+ipcMain.on('detached-tab-ready', (event, ok: unknown) => {
+  pendingDetachedTabs.get(event.sender.id)?.finish(ok === true)
+})
+
+ipcMain.handle('rename-file', (event, source: unknown, name: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof source !== 'string' || typeof name !== 'string') return { error: 'EINVAL' }
+  // Insert one barrier into every window's write queue. An autosave captured
+  // before this rename must finish first; a stale one queued after it must fail
+  // its existing sourcePath check instead of recreating the old filename.
+  const states = BrowserWindow.getAllWindows().map((window) => ({ window, state: getState(window) }))
+  const pending = states.map(({ state }) => state.writeQueue)
+  const operation = Promise.all(pending).then(async () => {
+    try {
+      const target = await renameDocument(source, name)
+      if (target === source) return { path: target }
+      for (const { window, state } of states) {
+        if (window.isDestroyed()) continue
+        state.tabFiles = state.tabFiles.map((path) => path === source ? target : path)
+        state.pendingTabFiles = state.pendingTabFiles.map((path) => path === source ? target : path)
+        if (state.filePath === source) {
+          if (state.debounceTimer) clearTimeout(state.debounceTimer)
+          if (state.siblingsTimer) clearTimeout(state.siblingsTimer)
+          state.filePath = target
+          watchFile(window, state)
+          updateTitle(window)
+        }
+        window.webContents.send('file-renamed', { oldPath: source, newPath: target, fileUrl: pathToFileURL(target).href })
+      }
+      recentStore.recent = [...new Set(recentStore.recent.map((path) => path === source ? target : path))]
+      persistRecentStore()
+      if (process.platform === 'darwin') app.addRecentDocument(target)
+      return { path: target }
+    } catch (error) {
+      return { error: (error as NodeJS.ErrnoException).code ?? 'UNKNOWN' }
+    }
+  })
+  for (const { state } of states) state.writeQueue = operation.then(() => undefined, () => undefined)
+  return operation
 })
 
 ipcMain.handle('reveal-file', (event) => {
@@ -2400,6 +2507,8 @@ ipcMain.on('renderer-ready', (event) => {
     // for itself: a window restored into full screen must not keep the traffic
     // light clearance.
     win.webContents.send('fullscreen-changed', win.isFullScreen())
+    const detached = pendingDetachedTabs.get(win.webContents.id)
+    if (detached) win.webContents.send('receive-detached-tab', detached.tab)
     // Files queued before the renderer could listen (multi-file launch, early
     // second-instance) go out now.
     flushPendingTabFiles(win)

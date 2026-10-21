@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { DetachedTab } from '../tab-transfer'
+export type { DetachedTab } from '../tab-transfer'
 
 export interface SiblingFile {
   name: string
@@ -25,11 +27,17 @@ ipcRenderer.on('file-opened', (_event, data: FileOpenedData) => {
 })
 
 export interface ElectronAPI {
+  detachTab: (tab: DetachedTab, position?: { x: number; y: number }) => Promise<boolean>
+  onReceiveDetachedTab: (callback: (tab: DetachedTab) => void) => void
+  detachedTabReady: (ok: boolean) => void
   openFile: () => Promise<{ path: string; content: string } | null>
   openFilePath: (path: string) => Promise<{ path: string; content: string } | null>
   getFileManagerName: () => Promise<FileManagerName>
   revealFile: () => Promise<boolean>
   showEntryContextMenu: (path: string, kind: 'file' | 'directory') => Promise<void>
+  renameFile: (path: string, name: string) => Promise<{ path?: string; error?: string }>
+  onRequestRenameFile: (callback: (path: string) => void) => void
+  onFileRenamed: (callback: (data: { oldPath: string; newPath: string; fileUrl: string }) => void) => void
   showTabContextMenu: (payload: { tabId: string; filePath: string | null; canCloseOthers: boolean; canCloseRight: boolean }) => Promise<void>
   onTabMenuAction: (callback: (payload: { action: string; tabId: string }) => void) => void
   listSiblings: () => Promise<SiblingFile[] | null>
@@ -106,11 +114,23 @@ export interface ElectronAPI {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  detachTab: (tab: DetachedTab, position?: { x: number; y: number }) => ipcRenderer.invoke('detach-tab', tab, position),
+  onReceiveDetachedTab: (callback: (tab: DetachedTab) => void) => {
+    ipcRenderer.on('receive-detached-tab', (_event, tab: DetachedTab) => callback(tab))
+  },
+  detachedTabReady: (ok: boolean) => ipcRenderer.send('detached-tab-ready', ok),
   openFile: () => ipcRenderer.invoke('open-file'),
   openFilePath: (path: string) => ipcRenderer.invoke('open-file-path', path),
   getFileManagerName: () => ipcRenderer.invoke('get-file-manager-name') as Promise<FileManagerName>,
   revealFile: () => ipcRenderer.invoke('reveal-file') as Promise<boolean>,
   showEntryContextMenu: (path: string, kind: 'file' | 'directory') => ipcRenderer.invoke('entry-context-menu', path, kind) as Promise<void>,
+  renameFile: (path: string, name: string) => ipcRenderer.invoke('rename-file', path, name),
+  onRequestRenameFile: (callback: (path: string) => void) => {
+    ipcRenderer.on('request-rename-file', (_event, path: string) => callback(path))
+  },
+  onFileRenamed: (callback: (data: { oldPath: string; newPath: string; fileUrl: string }) => void) => {
+    ipcRenderer.on('file-renamed', (_event, data) => callback(data))
+  },
   showTabContextMenu: (payload: { tabId: string; filePath: string | null; canCloseOthers: boolean; canCloseRight: boolean }) => ipcRenderer.invoke('tab-context-menu', payload) as Promise<void>,
   onTabMenuAction: (callback: (payload: { action: string; tabId: string }) => void) => {
     ipcRenderer.on('tab-menu-action', (_event, payload: { action: string; tabId: string }) => callback(payload))
