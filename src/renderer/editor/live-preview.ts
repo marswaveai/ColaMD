@@ -68,6 +68,20 @@ function pushBlockLines(
 function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: DecorationRange[]): void {
   const className = `cm-md-li cm-md-li-${Math.min(listDepth(node), 6)}`
   const tree = syntaxTree(state)
+  // 行没有 li 外壳，续行也没有 ListMark。把语法树里已有的归属带到导出层，
+  // 表格、空行与父项续文才不会被误认成另一项；这里只记录位置，不另存内容。
+  const path: { list: number; item: number; start?: number }[] = []
+  let quoted = false
+  for (let ancestor: SyntaxNode | null = node; ancestor; ancestor = ancestor.parent) {
+    if (ancestor.name === 'Blockquote') quoted = true
+    if (ancestor.name !== 'ListItem') continue
+    const list = ancestor.parent!
+    const mark = ancestor.getChild('ListMark')
+    const start = list.name === 'OrderedList' && mark ? Number.parseInt(state.sliceDoc(mark.from, mark.to), 10) : undefined
+    path.unshift({ list: list.from, item: ancestor.from, ...(start === undefined ? {} : { start }) })
+  }
+  const attributes = { 'data-list-path': JSON.stringify(path), 'data-list-quoted': String(quoted) }
+  const paragraphs = node.getChildren('Paragraph')
 
   // 子列表之前的行一定是这一项自己的（包括项里的空行），不用问语法树。
   let ownEnd = node.to
@@ -79,10 +93,12 @@ function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: Decorat
   }
 
   const first = state.doc.lineAt(node.from).number
-  const last = state.doc.lineAt(node.to).number
+  const ownLast = state.doc.lineAt(node.to).number
+  // 同一列表的相邻项目间空行属于分隔，不让导出把一张列表截成两张。
+  const last = node.nextSibling?.name === 'ListItem' ? state.doc.lineAt(node.nextSibling.from).number - 1 : ownLast
   for (let n = first; n <= last; n++) {
     const line = state.doc.line(n)
-    if (line.to > ownEnd) {
+    if (n <= ownLast && line.to > ownEnd) {
       // 子列表里的行：问语法树，包住这一行的**最内层** ListItem 得是我自己。
       // 位置取行内第一个非空白字符——嵌套项的行首是缩进，从行首问会问到外层那一项。
       const indent = /^[ \t]*/.exec(line.text)?.[0].length ?? 0
@@ -91,7 +107,11 @@ function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: Decorat
       while (owner && owner.name !== 'ListItem') owner = owner.parent
       if (!owner || owner.from !== node.from) continue
     }
-    ranges.push({ from: line.from, to: line.from, deco: BLOCK(className) })
+    const paragraph = paragraphs.find(block => block.from <= line.to && block.to > line.from)
+    ranges.push({ from: line.from, to: line.from, deco: Decoration.line({ class: className, attributes: {
+      ...attributes,
+      ...(paragraph ? { 'data-list-paragraph': String(paragraph.from) } : {}),
+    } }) })
   }
 }
 

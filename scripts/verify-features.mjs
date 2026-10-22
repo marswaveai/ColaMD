@@ -7,6 +7,7 @@
 //
 // 用法: npm run verify:features（先 npm run build）
 // 只验 Mermaid 点击往返：npm run verify:features -- --mermaid-only
+// 只验列表中表格导出：npm run verify:features -- --list-export-only
 // 窗口放在屏幕外，不占用屏幕；一次启动跑完所有断言。
 //
 // 注意：页面侧表达式写在模板字符串里，反斜杠会被模板字符串吃掉一次，
@@ -739,6 +740,124 @@ async function checkCheatsheet() {
   }
 }
 
+/** 列表里的表格属于原列表项，空行和续段不能另起项目。 */
+async function checkListTableExport(renderer) {
+  const table = prefix => ['| 任务 | 状态 |', '| --- | --- |', '| 整理文档 | 已完成 |']
+    .map(line => prefix + line).join('\n')
+  const cases = [
+    { name: '有序列表项包含说明、表格和续段', source: `7. 项目计划\n\n${table('   ')}\n\n   以上任务将在周五统一验收。\n`, tag: 'OL', start: 7, items: 1, owner: '项目计划', tail: '以上任务将在周五统一验收。' },
+    { name: '有序列表保留下一项', source: `7. 前文\n\n${table('   ')}\n\n   后文\n\n8. 下一项\n`, tag: 'OL', start: 7, items: 2, owner: '前文', tail: '后文' },
+    { name: '表格是列表项首块', source: `7. ${table('').replaceAll('\n', '\n   ')}\n\n   后文\n\n8. 下一项\n`, tag: 'OL', start: 7, items: 2, tail: '后文' },
+    { name: '无序列表中的表格', source: `- 前文\n\n${table('  ')}\n\n  后文\n\n- 下一项\n`, tag: 'UL', items: 2, owner: '前文', tail: '后文' },
+    { name: '嵌套列表结束后返回父项', source: `7. 父项\n\n   - 子项前文\n\n${table('     ')}\n\n     子项后文\n\n   父项后文\n\n8. 下一项\n`, tag: 'OL', start: 7, items: 2, owner: '子项前文', tail: '子项后文', parentTail: '父项后文' },
+    { name: '引用中的有序列表', source: `> 7. 前文\n>\n${table('>    ')}\n>\n>    后文\n`, tag: 'OL', start: 7, items: 1, owner: '前文', tail: '后文', quote: true },
+    { name: '引用中的说明和列表', source: `> 引用前文\n>\n> 7. 前文\n>\n${table('>    ')}\n>\n>    后文\n>\n> 引用后文\n`, tag: 'OL', start: 7, items: 1, owner: '前文', tail: '后文', quote: true, quoteText: ['引用前文', '引用后文'] },
+    { name: '同项代码块和表格', source: `7. 前文\n\n   \x60\x60\x60js\n   const a = 1\n   \x60\x60\x60\n\n${table('   ')}\n\n   后文\n`, tag: 'OL', start: 7, items: 1, owner: '前文', tail: '后文', code: true },
+    { name: '未缩进正文退出列表', source: `7. 前文\n\n${table('   ')}\n\n列表外正文\n`, tag: 'OL', start: 7, items: 1, owner: '前文', outside: '列表外正文' },
+    { name: '同项两个表格', source: `7. 前文\n\n${table('   ')}\n\n   中段\n\n${table('   ')}\n\n   后文\n`, tag: 'OL', start: 7, items: 1, owner: '前文', tail: '后文', tables: 2 },
+    { name: '同级列表切换类型', source: `7. 前文\n\n${table('   ')}\n\n- 无序下一组\n`, tag: 'OL', start: 7, items: 1, owner: '前文', nextList: true },
+    { name: '表格内格式和空格子', source: '7. 前文\n\n   | 内容 | 备注 |\n   | :--- | ---: |\n   | **粗体** 与 [链接](https://example.com) | `代码` |\n   | a\\|b |  |\n\n   后文\n', tag: 'OL', start: 7, items: 1, owner: '前文', tail: '后文', format: true },
+  ]
+  await evaluate(renderer, `window.__listExportView = document.querySelector('#editor .cm-content').cmTile.root.view; window.__listExportState = __listExportView.state; true`)
+  try {
+    for (const sample of cases) {
+      await evaluate(renderer, `(() => {
+        const v = __listExportView
+        v.setState(v.state.constructor.create({doc:${JSON.stringify(sample.source)},extensions:v.state.config.base}))
+        v.dispatch({selection:{anchor:v.state.doc.length}})
+        return true
+      })()`)
+      await sleep(120)
+      const result = JSON.parse(await evaluate(renderer, `(() => {
+        const v = __listExportView, original = v.state.doc.toString()
+        const html = window.__colamdExportDocumentHTML()
+        const root = document.createElement('div'); root.innerHTML = html
+        const list = root.querySelector(${JSON.stringify(sample.tag.toLowerCase())})
+        const tables = [...root.querySelectorAll('table')]
+        const owner = tables[0]?.closest('li')
+        const ownText = element => { if (!element) return ''; const copy = element.cloneNode(true); copy.querySelectorAll('ul,ol,table,pre').forEach(node=>node.remove()); return copy.textContent.trim() }
+        const outside = [...root.querySelectorAll('p')].find(node=>node.textContent.includes(${JSON.stringify(sample.outside ?? '\u0000')}))
+        v.dispatch({selection:{anchor:0,head:v.state.doc.length}})
+        const selected = JSON.stringify(v.state.selection.toJSON())
+        const clipboard = new DataTransfer()
+        v.contentDOM.dispatchEvent(new ClipboardEvent('copy',{clipboardData:clipboard,bubbles:true,cancelable:true}))
+        const copied = document.createElement('div'); copied.innerHTML = clipboard.getData('text/html')
+        return JSON.stringify({html,tag:list?.tagName,start:Number(list?.getAttribute('start')??1),items:list?.querySelectorAll(':scope > li').length,
+          tables:tables.length,allOwned:tables.every(node=>!!node.closest('li')),owner:ownText(owner),
+          order:!!owner && owner.innerHTML.indexOf('<table') < owner.innerHTML.lastIndexOf(${JSON.stringify(sample.tail ?? '</table>')}),
+          parent:ownText(owner?.parentElement?.closest('li')),quoted:!!list?.closest('blockquote'),quoteText:list?.closest('blockquote')?.textContent??'',
+          code:!!owner?.querySelector('pre > code'),codeText:owner?.querySelector('pre > code')?.textContent,
+          empty:[...root.querySelectorAll('li')].filter(node=>!node.textContent.trim()&&!node.querySelector('table,img,pre')).length,
+          outside:!!outside && !outside.closest('li'),nextList:root.lastElementChild?.tagName === 'UL',
+          format:!!owner?.querySelector('td strong')&&!!owner?.querySelector('td a[href="https://example.com"]')&&!!owner?.querySelector('td code')&&owner.textContent.includes('a|b'),
+          copiedTables:copied.querySelectorAll('table').length,copiedOwned:[...copied.querySelectorAll('table')].every(node=>!!node.closest('li')),
+          copyUnchanged:v.state.doc.toString()===original&&JSON.stringify(v.state.selection.toJSON())===selected,
+          sourceUnchanged:v.state.doc.toString()===${JSON.stringify(sample.source)}
+        })
+      })()`))
+      check(`${sample.name}：列表类型和项目数量`, result.tag === sample.tag && result.items === sample.items && (!sample.start || result.start === sample.start), JSON.stringify(result))
+      check(`${sample.name}：表格保持原项目归属`, result.tables === (sample.tables ?? 1) && result.allOwned && (!sample.owner || result.owner.includes(sample.owner)) && (!sample.tail || result.owner.includes(sample.tail)) && (!sample.tail || result.order), result.html)
+      check(`${sample.name}：不生成空项目、不改源码`, result.empty === 0 && result.sourceUnchanged, result.html)
+      check(`${sample.name}：整段复制保留表格归属`, result.copiedTables === (sample.tables ?? 1) && result.copiedOwned && result.copyUnchanged, result.html)
+      if (sample.parentTail) check(`${sample.name}：续文回到父项目`, result.parent.includes(sample.parentTail) && !result.owner.includes(sample.parentTail), result.html)
+      if (sample.quote) check(`${sample.name}：引用层级保留`, result.quoted && (sample.quoteText ?? []).every(text=>result.quoteText.includes(text)), result.html)
+      if (sample.code) check(`${sample.name}：代码仍为代码块`, result.code && result.codeText.includes('const a = 1') && !result.codeText.includes('\x60\x60\x60'), result.html)
+      if (sample.outside) check(`${sample.name}：列表外正文不被吞入`, result.outside, result.html)
+      if (sample.nextList) check(`${sample.name}：新列表独立`, result.nextList, result.html)
+      if (sample.format) check(`${sample.name}：单元格格式保持`, result.format, result.html)
+    }
+    const nested = '7. 父项\n   - 子项甲\n   - 子项乙\n\n8. 下一项\n'
+    for (const reverse of [false, true]) {
+      const from = nested.indexOf('子项乙'), to = nested.indexOf('下一项') + 3
+      const result = JSON.parse(await evaluate(renderer, `(() => {
+        const v = __listExportView
+        v.setState(v.state.constructor.create({doc:${JSON.stringify(nested)},extensions:v.state.config.base}))
+        v.dispatch({selection:{anchor:${reverse ? to : from},head:${reverse ? from : to}}})
+        const selection = JSON.stringify(v.state.selection.toJSON())
+        const data = new DataTransfer()
+        v.contentDOM.dispatchEvent(new ClipboardEvent('copy',{clipboardData:data,bubbles:true,cancelable:true}))
+        const root = document.createElement('div'); root.innerHTML = data.getData('text/html')
+        const list = root.querySelector(':scope > ol')
+        return JSON.stringify({html:root.innerHTML,start:Number(list?.getAttribute('start')),items:list?.querySelectorAll(':scope > li').length,
+          nested:!!list?.firstElementChild?.querySelector('ul > li'),unselected:root.textContent.includes('父项')||root.textContent.includes('子项甲'),
+          unchanged:v.state.doc.toString()===${JSON.stringify(nested)}&&JSON.stringify(v.state.selection.toJSON())===selection})
+      })()`))
+      check(`从子项目跨到父级下一项${reverse ? '反向' : '正向'}复制保留结构但不补文字`, result.start === 7 && result.items === 2 && result.nested && !result.unselected && result.unchanged, result.html)
+    }
+    const continuation = '- 甲\n  续行\n- 乙\n'
+    await evaluate(renderer, `(() => {
+      const v = __listExportView
+      v.setState(v.state.constructor.create({doc:${JSON.stringify(continuation)},extensions:v.state.config.base}))
+      v.dispatch({selection:{anchor:2,head:v.state.doc.length}})
+      return true
+    })()`)
+    const continuationResult = JSON.parse(await evaluate(renderer, `(() => {
+      const root = document.createElement('div'); root.innerHTML = window.__colamdExportDocumentHTML()
+      const data = new DataTransfer()
+      __listExportView.contentDOM.dispatchEvent(new ClipboardEvent('copy',{clipboardData:data,bubbles:true,cancelable:true}))
+      const copied = document.createElement('div'); copied.innerHTML = data.getData('text/html')
+      return JSON.stringify({html:root.innerHTML,copy:copied.innerHTML,
+        exported:root.querySelectorAll('ul > li').length===2&&!!root.querySelector('ul > li > br'),
+        copied:copied.querySelectorAll('ul > li').length===2&&!!copied.querySelector('ul > li > br')})
+    })()`))
+    check('同一列表项的续行导出保留换行', continuationResult.exported, continuationResult.html)
+    check('续行跨到下一项复制保留换行', continuationResult.copied, continuationResult.copy)
+    const ordinary = '  保留段首空格\n\n> 引用第一行\n> 引用第二行\n'
+    const ordinaryResult = JSON.parse(await evaluate(renderer, `(() => {
+      const v = __listExportView
+      v.setState(v.state.constructor.create({doc:${JSON.stringify(ordinary)},extensions:v.state.config.base}))
+      v.dispatch({selection:{anchor:v.state.doc.length}})
+      const root = document.createElement('div'); root.innerHTML = window.__colamdExportDocumentHTML()
+      return JSON.stringify({html:root.innerHTML,paragraph:root.querySelector(':scope > p')?.textContent,
+        quoted:[...root.querySelectorAll('blockquote > p')].map(node=>node.textContent),unchanged:v.state.doc.toString()===${JSON.stringify(ordinary)}})
+    })()`))
+    check('列表外段落保留行首空格', ordinaryResult.paragraph === '  保留段首空格' && ordinaryResult.unchanged, ordinaryResult.html)
+    check('普通引用保留段落边界', JSON.stringify(ordinaryResult.quoted) === JSON.stringify(['引用第一行','引用第二行']), ordinaryResult.html)
+  } finally {
+    await evaluate(renderer, `__listExportView.setState(__listExportState); delete window.__listExportState; delete window.__listExportView; true`)
+  }
+}
+
 function main() {
   return (async () => {
     mkdirSync(WORK, { recursive: true })
@@ -770,6 +889,11 @@ function main() {
         await sleep(250)
       }
       check('夹具已加载', loaded, `编辑器里有没有这份夹具：${loaded}`)
+      if (process.argv.includes('--list-export-only')) {
+        await checkListTableExport(renderer)
+        reportChecks()
+        return
+      }
       // mermaid 是异步画的，多等一会儿
       await sleep(2500)
 
@@ -1405,6 +1529,7 @@ function main() {
         afterReset.contentFont === beforeZoom.contentFont && afterReset.contentFamily === beforeZoom.contentFamily,
         `字号 ${afterZoom.contentFont} → ${afterReset.contentFont}（默认 ${beforeZoom.contentFont}），字体族 ${JSON.stringify(afterReset.contentFamily)}`)
 
+      await checkListTableExport(renderer)
       reportChecks()
     } finally {
       stopVerifyApp(udd)

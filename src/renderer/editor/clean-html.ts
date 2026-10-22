@@ -39,7 +39,7 @@ function escapeAttribute(value: string): string {
   return escapeText(value).replace(/"/g, '&quot;')
 }
 
-function lineKind(line: HTMLElement): LineKind {
+function lineKind(line: HTMLElement, includeList = true): LineKind {
   const classes = line.classList
   for (let level = 1; level <= 6; level++) {
     if (classes.contains(`cm-md-atxheading${level}`)) return `h${level}` as LineKind
@@ -49,7 +49,7 @@ function lineKind(line: HTMLElement): LineKind {
   if (classes.contains('cm-md-hr')) return 'hr'
   if (line.querySelector('.cm-md-table-widget')) return 'table'
   if (classes.contains('cm-md-frontmatter')) return 'empty'
-  for (let depth = 0; depth <= 6; depth++) {
+  if (includeList) for (let depth = 0; depth <= 6; depth++) {
     if (classes.contains(`cm-md-li-${depth}`)) return 'li'
   }
   if ((line.textContent ?? '').trim() === '' && line.querySelector('img') === null) return 'empty'
@@ -165,6 +165,41 @@ function renderList(lines: HTMLElement[]): string {
   return html
 }
 
+type ListPath = { list: number; item: number; start?: number }[]
+
+/** 块容器从首个源码行读取列表归属。 */
+function listContext(node: Node): { path: ListPath; quoted: boolean } | null {
+  if (!(node instanceof HTMLElement)) return null
+  const line = node.classList.contains('cm-line') ? node : node.querySelector<HTMLElement>('.cm-line')
+  if (!line?.classList.contains('cm-md-li') || !line.dataset.listPath) return null
+  return { path: JSON.parse(line.dataset.listPath) as ListPath, quoted: line.dataset.listQuoted === 'true' }
+}
+
+/** 同一个源码 ListItem 的多段、表格和子列表，共用一个 li。 */
+function renderOwnedList(nodes: Node[], depth: number): string {
+  let html = '', index = 0
+  while (index < nodes.length) {
+    const first = listContext(nodes[index])!.path[depth]
+    const tag = first.start === undefined ? 'ul' : 'ol'
+    html += first.start !== undefined && first.start !== 1 ? `<ol start="${first.start}">` : `<${tag}>`
+    while (index < nodes.length && listContext(nodes[index])!.path[depth].list === first.list) {
+      const item = listContext(nodes[index])!.path[depth].item
+      const group: Node[] = []
+      while (index < nodes.length) {
+        const path = listContext(nodes[index])!.path[depth]
+        if (path.list !== first.list || path.item !== item) break
+        group.push(nodes[index++])
+      }
+      const body = blocksHTML(group, depth)
+      // 单段紧凑列表沿用原来的 li>文字；多块列表保留段落边界。
+      const singleParagraph = body.startsWith('<p>') && body.indexOf('</p>') === body.length - 4
+      html += `<li>${singleParagraph ? body.slice(3, -4).trimStart() : body}</li>`
+    }
+    html += `</${tag}>`
+  }
+  return html
+}
+
 function isCodeFenceStart(line: HTMLElement): boolean {
   return line.classList.contains('cm-md-codeblock-first') || /^(`{3,}|~{3,})/.test((line.textContent ?? '').trimStart())
 }
@@ -186,7 +221,7 @@ function renderCode(lines: HTMLElement[]): string {
   return `<pre><code>${escapeText(code)}</code></pre>`
 }
 
-function renderGroup(kind: LineKind, lines: HTMLElement[]): string {
+function renderGroup(kind: LineKind, lines: HTMLElement[], ownerDepth = -1): string {
   if (kind === 'code') return renderCode(lines)
   if (kind === 'li') return renderList(lines)
   if (kind === 'quote') {
@@ -209,7 +244,11 @@ function renderGroup(kind: LineKind, lines: HTMLElement[]): string {
     const level = kind.slice(1)
     return `<h${level}>${lineHTML(lines[0])}</h${level}>`
   }
-  return `<p>${lineHTML(lines[0])}</p>`
+  const separator = ownerDepth >= 0 && lines.length > 1 ? '<br>' : '\n'
+  return `<p>${lines.map(line => {
+    const content = lineHTML(line)
+    return line.dataset.listPath ? content.replace(/^[ \t]+/, '') : content
+  }).join(separator)}</p>`
 }
 
 /** 同类且可合并的块：列表、引用、代码要合起来才成形。 */
@@ -218,11 +257,50 @@ function mergeable(kind: LineKind): boolean {
 }
 
 /** 把一串「行」按块翻译成 HTML。行与行之间是编辑器自己的排版，这里重建文档结构。 */
-function blocksHTML(nodes: Node[]): string {
+function blocksHTML(nodes: Node[], ownerDepth = -1): string {
   let html = ''
   let index = 0
+  let quoteEnd = 0
   while (index < nodes.length) {
     const node = nodes[index]
+    const context = listContext(node)
+    // 引用在列表外时先包引用；列表里的引用则由该列表项递归处理。
+    if (index >= quoteEnd && node instanceof HTMLElement && node.classList.contains('cm-md-blockquote') &&
+        (!context || context.quoted || context.path.length <= ownerDepth + 1)) {
+      const group = [node]
+      let next = index + 1
+      while (next < nodes.length) {
+        const candidate = nodes[next]
+        if (!(candidate instanceof HTMLElement) || !candidate.classList.contains('cm-md-blockquote')) break
+        group.push(candidate)
+        next += 1
+      }
+      quoteEnd = next
+      // 只重建带列表归属的引用；普通引用保留既有处理，整段只扫描一次。
+      if (group.some(line => listContext(line))) {
+        const inner = group.map(line => {
+          const clone = line.cloneNode(true) as HTMLElement
+          clone.classList.remove('cm-md-blockquote')
+          return clone
+        })
+        html += `<blockquote>${blocksHTML(inner, ownerDepth)}</blockquote>`
+        index = next
+        continue
+      }
+    }
+    if (context && context.path.length > ownerDepth + 1) {
+      const group = [node]
+      while (++index < nodes.length) {
+        if ((listContext(nodes[index])?.path.length ?? 0) <= ownerDepth + 1) break
+        group.push(nodes[index])
+      }
+      // 从子列表跨到父项的下一项，仍须保留共同外层；只选子项则不补未选父层。
+      const depth = ownerDepth < 0
+        ? group.reduce((min, part) => Math.min(min, listContext(part)!.path.length - 1), context.path.length - 1)
+        : ownerDepth + 1
+      html += renderOwnedList(group, depth)
+      continue
+    }
     if (!isLineElement(node)) {
       // 选区从一个行的中间开始或结束：连续的行内片段属于同一行，要合成一个段落。
       // 不合并的话，`含 **加粗**、` 会变成「含」「加粗」「、」三个段落。
@@ -235,13 +313,15 @@ function blocksHTML(nodes: Node[]): string {
       if (merged.trim() !== '') html += `<p>${merged}</p>`
       continue
     }
-    const kind = lineKind(node)
+    const kind = lineKind(node, !context)
     const group = [node]
-    if (mergeable(kind)) {
+    const paragraph = node.dataset.listParagraph
+    if (mergeable(kind) || (kind === 'p' && paragraph)) {
       let next = index + 1
       while (next < nodes.length) {
         const candidate = nodes[next]
-        if (!(candidate instanceof HTMLElement) || lineKind(candidate) !== kind) break
+        if (!(candidate instanceof HTMLElement) || lineKind(candidate, !listContext(candidate)) !== kind ||
+            (kind === 'p' && candidate.dataset.listParagraph !== paragraph)) break
         group.push(candidate)
         next += 1
       }
@@ -249,7 +329,7 @@ function blocksHTML(nodes: Node[]): string {
     } else {
       index += 1
     }
-    html += renderGroup(kind, group)
+    html += renderGroup(kind, group, ownerDepth)
   }
   return html
 }
