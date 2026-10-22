@@ -28,6 +28,7 @@
     "verify:links": "node scripts/verify-links.mjs",
     "verify:features": "node scripts/verify-features.mjs",
     "verify:scroll-render": "node scripts/verify-scroll-render.mjs",
+    "verify:source-mode": "node scripts/verify-source-mode.mjs",
     "verify:image-export": "node scripts/verify-image-export.mjs",
     "verify:export-pdf": "node scripts/verify-export-pdf.mjs",
     "verify:themes": "node scripts/verify-themes.mjs"

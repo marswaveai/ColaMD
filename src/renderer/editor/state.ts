@@ -71,7 +71,7 @@ export function stateExtensions(): Extension {
     // 一起。查找是应用级功能，入口在菜单的「查找」上（Cmd+F 由菜单的快捷键发
     // `editor:search`），面板在 editor/search-panel.ts。
     keymap.of([
-      ...defaultKeymap,
+      ...defaultKeymap.filter(binding => binding.key !== 'Mod-/'),
       ...historyKeymap,
       indentWithTab,
     ]),

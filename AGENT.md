@@ -122,6 +122,7 @@ src/
   - `npm run verify:markdown`：打开再保存，字节不许变（`save(open(x)) === x`）
   - `npm run verify:features`：界面功能逐条断言，正文里能看见的东西最多的一条网
   - `npm run verify:scroll-render`：滚到没解析过的地方，那几行也必须渲染过
+  - `npm run verify:source-mode`：渲染与源码双向切换，检查选区方向、光标可见性和视口位置
   - `npm run verify:themes`：主题 CSS 的每条规则都要命中真实元素并改变计算样式
   - `npm run check:theme-colors`：12 套内置主题与独立主题文件的变量契约
   - `npm run verify:links`、`npm run verify:image-export`、`npm run verify:export-pdf`：链接跳转与两种导出的真机验证

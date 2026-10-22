@@ -537,6 +537,62 @@ async function pressKey(renderer, key, code, keyCode, modifiers = 0) {
   await sleep(200)
 }
 
+async function checkSourceShortcut(renderer) {
+  await renderer.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+  await evaluate(renderer, `document.querySelector('#editor .cm-content').focus()`)
+  await pressKey(renderer, '/', 'Slash', 191, 4)
+  const source = await evaluate(renderer, `(() => {
+    const el = document.getElementById('source-editor')
+    return { visible: el.classList.contains('visible'), focused: document.activeElement === el, text: el.value }
+  })()`)
+  check('源码快捷键切换并聚焦源码', source.visible && source.focused, JSON.stringify(source))
+  check('源码快捷键不插入注释', source.text === fixture(), `长度=${source.text.length}`)
+  await renderer.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 4, commands: ['selectAll'] })
+  const allSource = await evaluate(renderer, `(() => {
+    const el = document.getElementById('source-editor')
+    return el.selectionStart === 0 && el.selectionEnd === el.value.length && document.activeElement === el
+  })()`)
+  check('切换源码后全选只选编辑区', allSource, String(allSource))
+  await pressKey(renderer, '/', 'Slash', 191, 4)
+  const visual = await evaluate(renderer, `document.activeElement === document.querySelector('#editor .cm-content')`)
+  check('切回渲染后聚焦编辑区', visual, String(visual))
+  await evaluate(renderer, SELECT_ALL)
+  const copied = JSON.parse(await evaluate(renderer, COPY_PROBE))
+  check('切换往返后全选复制原文', copied.text === fixture(), `长度=${copied.text.length}`)
+  await evaluate(renderer, `document.querySelector('#editor .cm-content').dispatchEvent(new KeyboardEvent('keydown', {
+    key: '/', code: 'Slash', ctrlKey: true, bubbles: true, cancelable: true
+  }))`)
+  const ctrlSource = await evaluate(renderer, `document.getElementById('source-editor').classList.contains('visible')`)
+  check('Ctrl 源码快捷键接入切换', ctrlSource, String(ctrlSource))
+  if (ctrlSource) await pressKey(renderer, '/', 'Slash', 191, 4)
+  // 光标跟着切换走：两边是同一份字节，偏移应当一一对应，而不是落到文末或文首
+  const into = await evaluate(renderer, `(() => {
+    const view = document.querySelector('.cm-content').cmTile.root.view
+    const from = view.state.doc.toString().indexOf('二级标题')
+    view.dispatch({ selection: { anchor: from, head: from + 2 } })
+    view.focus()
+    return from
+  })()`)
+  await pressKey(renderer, '/', 'Slash', 191, 4)
+  const sourceCaret = await evaluate(renderer, `(() => {
+    const el = document.getElementById('source-editor')
+    return [el.selectionStart, el.selectionEnd]
+  })()`)
+  check('切到源码时保留光标位置', sourceCaret[0] === into && sourceCaret[1] === into + 2, JSON.stringify({ into, sourceCaret }))
+  const back = await evaluate(renderer, `(() => {
+    const el = document.getElementById('source-editor')
+    const at = el.value.indexOf('普通段落')
+    el.setSelectionRange(at, at)
+    return at
+  })()`)
+  await pressKey(renderer, '/', 'Slash', 191, 4)
+  const visualCaret = await evaluate(renderer, `(() => {
+    const main = document.querySelector('.cm-content').cmTile.root.view.state.selection.main
+    return [main.anchor, main.head]
+  })()`)
+  check('切回渲染时保留源码里的光标位置', visualCaret[0] === back && visualCaret[1] === back, JSON.stringify({ back, visualCaret }))
+}
+
 /** 图表退出源码后必须原地恢复，不能靠滚动重建视口才出现。 */
 async function checkMermaidRestoration(renderer) {
   await renderer.send('Emulation.setFocusEmulationEnabled', { enabled: true })
@@ -773,6 +829,7 @@ function main() {
       // mermaid 是异步画的，多等一会儿
       await sleep(2500)
 
+      await checkSourceShortcut(renderer)
       await checkMermaidRestoration(renderer)
       if (process.argv.includes('--mermaid-only')) {
         reportChecks()
