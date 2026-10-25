@@ -21,7 +21,7 @@ import { runFormatCommand as runFormat, type FormatCommandId } from './format-co
 import { isChinese } from '../ui-language'
 import { headingAnchorLine } from './heading-anchor'
 import { isDiagramZoomed } from './mermaid-bridge'
-import { copiedMarkdown, enclosingForHTML } from './copy-markdown'
+import { copiedMarkdown, enclosingForHTML, richCopyFrom } from './copy-markdown'
 
 // katex 的样式表仍要引，公式 widget 里渲出来的 HTML 靠它排版。
 import 'katex/dist/katex.min.css'
@@ -416,8 +416,9 @@ function selectionRendered(view: EditorView): boolean {
 
 /** 选区对应的 DOM 区间。位置从文档坐标换算，所以只要那些行在 DOM 里就能取到。 */
 function selectionRange(view: EditorView, ranges: readonly SelectionRange[]): Range {
-  const start = view.domAtPos(ranges[0].from)
-  const end = view.domAtPos(ranges[ranges.length - 1].to)
+  const to = ranges[ranges.length - 1].to
+  const start = view.domAtPos(richCopyFrom(view.state, ranges[0].from, to))
+  const end = view.domAtPos(to)
   const range = document.createRange()
   range.setStart(start.node, start.offset)
   range.setEnd(end.node, end.offset)

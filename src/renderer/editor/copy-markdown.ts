@@ -32,7 +32,7 @@ const OUTER_MARKS = new Set(['cm-md-highlight', 'cm-md-link'])
  * 从实际的装饰里认出行内格式：一段格式文字加上紧挨着它、确实被藏起来的两个定界符。
  * 以装饰为准而不是重新解析，藏了什么就补什么，和屏幕上看到的一致。
  */
-function inlineSpans(state: EditorState, from: number, to: number): Span[] {
+function spansIn(state: EditorState, from: number, to: number): Span[] {
   const decorations = state.field(livePreviewField, false)
   if (!decorations) return []
   const marks: { from: number; to: number; inner: boolean }[] = []
@@ -62,6 +62,19 @@ function inlineSpans(state: EditorState, from: number, to: number): Span[] {
     }
   }
   return spans
+}
+
+/**
+ * 只有选区两端切开的格式要补标记，端点也只会被挪到包住它的格式外侧，所以只看两端所在的行。
+ * 整行收集而不是只取端点：端点停在 `==`、`](url)` 里时，格式文字并不在选区里。
+ * 全选大文档时装饰随文档线性增长，逐个配对会变成平方级。
+ */
+function inlineSpans(state: EditorState, from: number, to: number): Span[] {
+  const first = state.doc.lineAt(from), last = state.doc.lineAt(to)
+  if (last.from <= first.to + 1) return spansIn(state, first.from, last.to)
+  // 跨行的格式两头都会收到一次，只留一份，否则切口处的标记会补两遍。
+  const head = spansIn(state, first.from, first.to)
+  return head.concat(spansIn(state, last.from, last.to).filter((span) => !head.some((other) => other.from === span.from && other.to === span.to)))
 }
 
 /**
@@ -157,6 +170,18 @@ function fenceParts(state: EditorState, fence: SyntaxNode) {
   return { open, closeLine, mark: mark ? state.sliceDoc(mark.from, mark.to) : '```' }
 }
 
+/** 围栏开头那一行的容器前缀，换成续行与收尾围栏用的写法：列表标记换成等宽空格，`>` 照留。 */
+function continuationPrefix(state: EditorState, tree: Tree, from: number, to: number): string {
+  let prefix = ''
+  let pos = from
+  tree.iterate({ from, to, enter: (node) => {
+    if (node.name !== 'ListMark' || node.from < pos || node.to > to) return
+    prefix += state.sliceDoc(pos, node.from) + ' '.repeat(node.to - node.from)
+    pos = node.to
+  } })
+  return prefix + state.sliceDoc(pos, to)
+}
+
 /** 整段选区都在里面的块（由外到内），以及选区是不是整个在代码里。 */
 function enclosingBlocks(tree: Tree, from: number, to: number): { enclosing: SyntaxNode[]; insideCode: boolean } {
   let common: SyntaxNode | null = tree.resolveInner(from, 1)
@@ -190,6 +215,24 @@ export function enclosingForHTML(state: EditorState, from: number, to: number): 
   }
 }
 
+/**
+ * 富文本从哪里起取：起点所在那一行一个字也没选时从下一行起，代码块只剩收尾围栏时整块不带。
+ * 与原文口味的规则一致，否则粘出空的列表项、标题、引用或代码块。
+ */
+export function richCopyFrom(state: EditorState, from: number, to: number): number {
+  const tree = syntaxTree(state)
+  for (;;) {
+    if (from === state.doc.lineAt(from).to && from < to) {
+      from += 1
+      continue
+    }
+    const fence = ancestor(tree, from, 1, /^FencedCode$/)
+    const closeLine = fence && fenceParts(state, fence).closeLine
+    if (!fence || !closeLine || from < closeLine.from || fence.to >= to) return from
+    from = fence.to
+  }
+}
+
 /** 一段选区要交给 Markdown 去处的原文。 */
 export function copiedMarkdown(state: EditorState, range: SelectionRange): string {
   const spans = inlineSpans(state, range.from, range.to)
@@ -199,23 +242,26 @@ export function copiedMarkdown(state: EditorState, range: SelectionRange): strin
   if (from >= to) return state.sliceDoc(range.from, range.to)
 
   const tree = ensureSyntaxTree(state, state.doc.lineAt(to).to, 50) ?? syntaxTree(state)
-  // 整段选区都在里面的块：它们的前缀不复制
-  const { enclosing, insideCode } = enclosingBlocks(tree, from, to)
   const inFront = from < (frontmatterRange(state.doc.toString())?.to ?? 0)
+  // 整段选区都在里面的块：它们的前缀不复制。属性区是 YAML，`# ` 是注释，不是标题。
+  const { enclosing, insideCode } = inFront ? { enclosing: [], insideCode: false } : enclosingBlocks(tree, from, to)
   const lineBody = (pos: number) => bodyStart(state, tree, pos, enclosing)
 
-  // 代码块被切开：补上缺的那一道围栏。容器前缀（引用的 `>`、列表的缩进）照开头那一行补。
+  // 代码块被切开：补上缺的那一道围栏。容器前缀（引用的 `>`、列表的缩进）照开头那一行的续行写法补。
   let fenceHead = ''
   let fenceTail = ''
   const startFence = insideCode ? null : ancestor(tree, from, 1, /^FencedCode$/)
   if (startFence && startFence.from < from) {
-    const { open } = fenceParts(state, startFence)
+    const { open, closeLine } = fenceParts(state, startFence)
+    // 从代码行尾起选，这一行一个字也没选，从下一行算起；只剩收尾围栏时整块都没选中。
+    if (from > open.to && from === state.doc.lineAt(from).to) from += 1
     if (from <= open.to) from = startFence.from
+    else if (closeLine && from >= closeLine.from) from = startFence.to
     else {
       const lead = lineBody(open.from)
       fenceHead = state.sliceDoc(lead, open.to) + '\n'
       // 从代码行中间起选，这一行自己的前缀没在选区里，照开头那一行补上
-      if (from > contentStart(state, tree, lineBody(from))) fenceHead += state.sliceDoc(lead, startFence.from)
+      if (from > contentStart(state, tree, lineBody(from))) fenceHead += continuationPrefix(state, tree, lead, startFence.from)
       else from = lineBody(from)
     }
   }
@@ -229,7 +275,7 @@ export function copiedMarkdown(state: EditorState, range: SelectionRange): strin
       toInCode = true
       const toLine = state.doc.lineAt(to)
       if (to > toLine.from && to <= contentStart(state, tree, lineBody(to))) to = toLine.from
-      fenceTail = (to === state.doc.lineAt(to).from ? '' : '\n') + state.sliceDoc(lineBody(open.from), endFence.from) + mark
+      fenceTail = (to === state.doc.lineAt(to).from ? '' : '\n') + continuationPrefix(state, tree, lineBody(open.from), endFence.from) + mark
     }
   }
 
@@ -243,7 +289,8 @@ export function copiedMarkdown(state: EditorState, range: SelectionRange): strin
     if (!insideCode && !inFront) {
       const content = contentStart(state, tree, base)
       if (from <= content) start = base
-      else blockHead = state.sliceDoc(base, content)
+      // 从行尾起选，这一行一个字也没选，不补它的前缀（否则粘贴出空的列表项、标题）
+      else if (from < firstLine.to) blockHead = state.sliceDoc(base, content)
     }
   }
 
