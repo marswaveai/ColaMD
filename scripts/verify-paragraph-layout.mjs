@@ -91,6 +91,16 @@ try {
       bottom:rect.bottom-parseFloat(s.paddingBottom)-parseFloat(s.borderBottomWidth),height:rect.height,
       blank:el.textContent.trim()===''}
   })`)
+  for (const backward of [true, false]) {
+    await reset('a\nx\n\nb', backward ? 3 : 2)
+    await key(backward ? 'Backspace' : 'Delete')
+    const name = backward ? '退格' : '向前删除'
+    check(name + ' 删除末字保留分隔字节', await text(), 'a\n\n\nb')
+    check(name + ' 空段收起后光标方向及关联正确',
+      await evaluate('[v.state.selection.main.head,v.state.selection.main.assoc]'), backward ? [1,-1] : [4,1])
+    await send('Input.insertText', { text: 'Z' })
+    check(name + ' 后继续输入留在正确段落', await text(), backward ? 'aZ\n\n\nb' : 'a\n\n\nZb')
+  }
   const spacingDoc = '第一段\n\n第二段\n\n## 二级\n\n二级正文\n\n### 三级\n\n三级正文\n\n#### 四级\n\n四级正文'
   for (const theme of ['light', 'dark', 'elegant', 'sepia', 'notion', 'bear', 'writer', 'solarized-dark', 'nord', 'gruvbox', 'dracula', 'midnight']) {
     await evaluate(`document.body.className='theme-${theme}'`)
@@ -173,7 +183,23 @@ try {
   await key('ArrowUp')
   check('标题向上直接到正文', await head() <= 2)
   await at(3)
-  check('程序定位不落隐藏空行', [2, 8].includes(await head()))
+  check('程序定位保留调用方的精确位置', await head(), 3)
+  for (const userEvent of ['select.search', 'undo', 'redo', 'input']) {
+    await at(8)
+    await evaluate(`v.dispatch({selection:{anchor:3},userEvent:${JSON.stringify(userEvent)},scrollIntoView:true})`)
+    check(userEvent + ' 定位不被段落过滤器改写', await head(), 3)
+  }
+  await evaluate(`v.setState(v.state.constructor.create({
+    doc:'前段\\n\\n### 标题\\n\\n后段',
+    selection:v.state.selection.constructor.create([
+      v.state.selection.constructor.cursor(0),v.state.selection.constructor.cursor(10)
+    ],1),
+    extensions:[v.state.config.base,v.state.constructor.allowMultipleSelections.of(true)]
+  }));v.dispatch({selection:v.state.selection.constructor.create([
+    v.state.selection.constructor.cursor(3),v.state.selection.constructor.cursor(6)
+  ],1),userEvent:'select'});void 0`)
+  check('多光标各自保留原始落点和主范围', await evaluate('[...v.state.selection.ranges.map(r=>r.head),v.state.selection.mainIndex]'), [3,6,1])
+  await reset('前段\n\n### 标题\n\n后段')
   await evaluate('v.dispatch({selection:{anchor:2,head:9}})')
   check('非空选区保留原始字节范围', await evaluate('[v.state.selection.main.from,v.state.selection.main.to]'), [2, 9])
   await at(0)

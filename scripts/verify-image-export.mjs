@@ -8,32 +8,33 @@
 // 用法: npm run verify:image-export（先 npm run build）
 // 窗口一律放在屏幕外，测试不占用屏幕。
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { tmpdir } from 'node:os'
 
 import { assertBuildFresh } from './build-freshness.mjs'
 import { stopVerifyApp, verifyWorkdir } from './verify-workdir.mjs'
 
 const APP = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
-assertBuildFresh()
-const { dir: WORK } = verifyWorkdir('image-export')
+let WORK
+let EVIDENCE
 
 // 短的应导出成一张连续长图，长的应退回编号页；两个阅读宽度走的是同一套逻辑
 const CASES = [
   { name: 'short', preset: 'desktop', width: 1200, rows: 60, expect: 'single' },
-  // 段落排版收起分隔空行后，130 行已能放进一张图；180 行仍跨过捕获上限。
-  { name: 'long', preset: 'desktop', width: 1200, rows: 180, expect: 'pages' },
+  { name: 'long', preset: 'desktop', width: 1200, expect: 'pages' },
   { name: 'mobile-short', preset: 'mobile', width: 414, rows: 30, expect: 'single' },
-  { name: 'mobile-long', preset: 'mobile', width: 414, rows: 180, expect: 'pages' }
+  { name: 'mobile-long', preset: 'mobile', width: 414, expect: 'pages' }
 ]
 
-// 行号编码成颜色：base 7 的三个通道，相邻行至少差 30，取色不会有歧义
+// 行号编码成颜色：base 16 的三个通道，相邻行至少差 12，取色不会有歧义
 function colorOf(index) {
-  const level = (value) => 40 + value * 30
+  const level = (value) => 32 + value * 12
   return [
-    level(index % 7),
-    level(Math.floor(index / 7) % 7),
-    level(Math.floor(index / 49) % 7)
+    level(index % 16),
+    level(Math.floor(index / 16) % 16),
+    level(Math.floor(index / 256) % 16)
   ]
 }
 
@@ -134,13 +135,13 @@ function analyseCode(paths, rows) {
 async function runCase(testCase) {
   const port = 9500 + Math.floor(Math.random() * 400)
   const inspect = port + 1000
-  const dir = join(WORK, testCase.name)
+  const dir = join(EVIDENCE, testCase.name)
   mkdirSync(dir, { recursive: true })
   const fixture = join(dir, `${testCase.name}.md`)
   const out = join(dir, `${testCase.name}.png`)
   writeFileSync(fixture, document(testCase.rows), 'utf8')
 
-  const child = spawn('npx', ['electron', 'scripts/offscreen-window.cjs', fixture, `--user-data-dir=${join(dir, 'udd')}`,
+  const child = spawn('npx', ['electron', 'scripts/offscreen-window.cjs', fixture, `--user-data-dir=${join(WORK, testCase.name, 'udd')}`,
     // sRGB：macOS 的显示色彩管理会把取色值整体挪动，验证要在确定的色彩空间里做
     '--force-color-profile=srgb',
     `--remote-debugging-port=${port}`, `--inspect=${inspect}`
@@ -155,7 +156,9 @@ async function runCase(testCase) {
 
     // 测试不许占用屏幕：连上就藏好，并且别让导出流程把窗口叫回来
     await evaluate(main, `(() => {
-      const { BrowserWindow, dialog } = require('electron')
+      const { BrowserWindow, dialog, shell } = require('electron')
+      globalThis.__exportDone = false
+      shell.showItemInFolder = () => { globalThis.__exportDone = true }
       BrowserWindow.prototype.show = function () {}
       BrowserWindow.prototype.focus = function () {}
       BrowserWindow.getAllWindows().forEach((win) => { win.setPosition(-4000, -4000) })
@@ -171,6 +174,11 @@ async function runCase(testCase) {
       await sleep(250)
     }
 
+    const dpr = await evaluate(renderer, 'window.devicePixelRatio')
+    if (!(dpr > 0)) throw new Error(`无效 DPR ${dpr}`)
+    if (testCase.expect === 'pages' && testCase.rows * 40 * dpr <= 16384) {
+      throw new Error(`夹具未跨过真实捕获上限：${testCase.rows} 行，DPR ${dpr}`)
+    }
     await evaluate(main, `(() => {
       const { BrowserWindow } = require('electron')
       BrowserWindow.getAllWindows()[0].webContents.send('menu-export-image', ${JSON.stringify(testCase.preset)})
@@ -178,12 +186,12 @@ async function runCase(testCase) {
     })()`)
 
     for (let i = 0; i < 480; i++) {
-      if (existsSync(out)) break
+      if (await evaluate(main, 'globalThis.__exportDone')) break
       const failure = await evaluate(main, 'globalThis.__exportError && JSON.stringify(globalThis.__exportError)')
       if (failure) throw new Error(`导出报错 ${failure}`)
       await sleep(250)
     }
-    if (!existsSync(out)) throw new Error('120s 内没有产出文件')
+    if (!await evaluate(main, 'globalThis.__exportDone') || !existsSync(out)) throw new Error('120s 内没有完成全部图片写入')
 
     const base = `${testCase.name}.png`
     const pages = readdirSync(dir)
@@ -194,7 +202,7 @@ async function runCase(testCase) {
     const analysed = await evaluate(main, analyseCode(pages, testCase.rows))
     renderer.close()
     main.close()
-    return { pages, analysed }
+    return { pages, analysed, dpr }
   } finally {
     stopVerifyApp(WORK)
     await sleep(300)
@@ -211,78 +219,69 @@ function runs(sequence) {
   return out.filter((run) => run.index >= 0)
 }
 
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)]
-}
-
-function check(testCase, { pages, analysed }) {
+export function check(testCase, { pages, analysed, dpr }) {
   const problems = []
   const shape = pages.length === 1 ? 'single' : 'pages'
   if (shape !== testCase.expect) problems.push(`导出形态是 ${shape}，期望 ${testCase.expect}`)
-
-  const perPage = analysed.map((page) => runs(page.sequence))
-  const interior = perPage.flatMap((page) => page.slice(1, -1))
-  const rowHeight = median(interior.map((run) => run.length))
-  const dpr = analysed[0].size.width / testCase.width
-
-  if (pages.length === 1) {
-    const all = perPage[0]
-    for (let i = 0; i < all.length; i++) {
-      if (all[i].index !== i) { problems.push(`第 ${i} 条色带是行 ${all[i].index}，序号对不上`); break }
+  const totals = Array(testCase.rows).fill(0)
+  const order = []
+  for (const [pageIndex, page] of analysed.entries()) {
+    if (Math.abs(page.size.width - testCase.width * dpr) > 1 || page.size.height <= 0) {
+      problems.push(`第 ${pageIndex + 1} 页尺寸异常：${JSON.stringify(page.size)}，DPR ${dpr}`)
     }
-    if (all.length !== testCase.rows) problems.push(`还原出 ${all.length} 行，应为 ${testCase.rows} 行`)
-  } else {
-    const head = perPage[0][0]
-    if (!head || head.index !== 0) problems.push('第一页不是从第 0 行开始')
-    const tail = perPage[perPage.length - 1]
-    const lastIndex = tail.length ? tail[tail.length - 1].index : -1
-    if (lastIndex !== testCase.rows - 1) problems.push(`最后一页收在第 ${lastIndex} 行，应为第 ${testCase.rows - 1} 行`)
-    for (let i = 1; i < perPage.length; i++) {
-      const previous = perPage[i - 1]
-      const current = perPage[i]
-      if (!previous.length || !current.length) { problems.push(`第 ${i + 1} 页没有还原出任何行`); continue }
-      const gap = current[0].index - previous[previous.length - 1].index
-      // 0 表示这一行正好横跨页边界，1 表示接上了；更大是丢行，更小是重复
-      if (gap !== 0 && gap !== 1) {
-        problems.push(`第 ${i + 1} 页接缝错位：上一页末行 ${previous[previous.length - 1].index}，本页首行 ${current[0].index}`)
-      }
+    const bands = runs(page.sequence)
+    if (!bands.length) problems.push(`第 ${pageIndex + 1} 页没有正文色带`)
+    for (const band of bands) {
+      totals[band.index] += band.length
+      if (order.at(-1) !== band.index) order.push(band.index)
     }
   }
-
-  // 每条色带的高度必须和它的邻居一致：接缝处被压扁或切掉就靠这一条抓出来
-  const squashed = []
-  for (const page of perPage) {
-    for (const run of page.slice(1, -1)) {
-      if (Math.abs(run.length - rowHeight) > 4) {
-        squashed.push(`行 ${run.index} 高 ${Math.round(run.length * 2 / dpr)} 设备像素，同图其它行是 ${Math.round(rowHeight * 2 / dpr)}`)
-      }
-    }
+  if (order.length !== testCase.rows || order.some((row, index) => row !== index)) {
+    problems.push(`色带缺失、重复或顺序错误：${JSON.stringify(order)}`)
   }
-  problems.push(...squashed.slice(0, 5))
-
+  // CSS 边界到设备像素网格取整，两个端点的差最多 1 设备像素。
+  // 跨页仍累计整行，首尾与仅剩 1px 的残行都不再豁免。
+  for (const [row, total] of totals.entries()) {
+    if (Math.abs(total - 40 * dpr) > 1) problems.push(`行 ${row} 累计 ${total} 设备像素，应为 ${40 * dpr}±1`)
+  }
   const sizes = analysed.map((page) => `${page.size.width}x${page.size.height}`)
-  return { problems, sizes, pageCount: pages.length }
+  return { problems, sizes, pageCount: pages.length, totals }
 }
 
-console.log(`验证目录 ${WORK}`)
-let failed = 0
-for (const testCase of CASES) {
-  try {
-    const result = await runCase(testCase)
-    const { problems, sizes, pageCount } = check(testCase, result)
-    const shape = pageCount === 1 ? '一张连续长图' : `${pageCount} 张编号页`
-    if (problems.length) {
-      failed++
-      console.log(`✗ ${testCase.name} ${shape} ${sizes.join(' ')}`)
-      for (const problem of problems) console.log(`    ${problem}`)
-    } else {
-      console.log(`✓ ${testCase.name} ${shape} ${sizes.join(' ')}：${testCase.rows} 行全部到位、无重复、无压扁`)
+async function main() {
+  assertBuildFresh()
+  WORK = verifyWorkdir('image-export').dir
+  // profile 可清理，原始图片和失败分析不得随退出消失。
+  EVIDENCE = mkdtempSync(join(tmpdir(), 'colamd-image-export-evidence-'))
+    console.log(`证据目录 ${EVIDENCE}`)
+    let measuredDpr = 1
+    let failed = 0
+    for (const testCase of CASES) {
+      try {
+        // 每条 40 CSS px；上一档真实窗口的 DPR 决定长度，当前窗口再验证确实越界。
+        if (testCase.expect === 'pages') testCase.rows = Math.ceil(16384 / measuredDpr / 40) + 2
+        const result = await runCase(testCase)
+        measuredDpr = result.dpr
+        const checked = check(testCase, result)
+        writeFileSync(join(EVIDENCE, `${testCase.name}-analysis.json`), JSON.stringify({ testCase, ...result, ...checked }, null, 2))
+        const { problems, sizes, pageCount } = checked
+        const shape = pageCount === 1 ? '一张连续长图' : `${pageCount} 张编号页`
+        if (problems.length) {
+          failed++
+          console.log(`✗ ${testCase.name} ${shape} ${sizes.join(' ')}`)
+          for (const problem of problems) console.log(`    ${problem}`)
+        } else {
+          console.log(`✓ ${testCase.name} ${shape} ${sizes.join(' ')}：${testCase.rows} 行全部到位、无重复、无压扁`)
+        }
+      } catch (error) {
+        failed++
+        writeFileSync(join(EVIDENCE, `${testCase.name}-error.txt`), error.stack ?? String(error))
+        console.log(`✗ ${testCase.name} ${error.message}`)
+      }
     }
-  } catch (error) {
-    failed++
-    console.log(`✗ ${testCase.name} ${error.message}`)
-  }
+    console.log(failed ? `失败 ${failed} 项` : '全部通过')
+    process.exitCode = failed ? 1 : 0
 }
-console.log(failed ? `失败 ${failed} 项` : '全部通过')
-process.exit(failed ? 1 : 0)
+
+// 可从 Node 契约探针导入像素 oracle，不启动应用、不清理其他测试 profile。
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()

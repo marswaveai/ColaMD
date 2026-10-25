@@ -1,6 +1,6 @@
 // 段落分隔只参与排版，不改源码。真正的空段落仍有正常行高。
 // 跨行替换必须由 StateField 提供；光标同时把这些区间当作原子，避免盲打。
-import { EditorSelection, EditorState, Prec, StateField, type Extension } from '@codemirror/state'
+import { EditorSelection, EditorState, Prec, StateField, Transaction, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { decorationsRefreshEffect } from './live-preview'
@@ -154,10 +154,14 @@ const paragraphLayoutField = StateField.define<Layout>({
   provide: field => EditorView.decorations.from(field, value => value.decorations),
 })
 
-// atomicRanges 管方向键；搜索、模式切换等程序化定位也不能停在隐藏分隔里。
-// 有长度的选区仍保留原始范围，复制、删除与撤销都按用户选中的字节处理。
+// atomicRanges 管方向键；这里只修正直接交互产生的单光标落点。
+// 程序定位、历史恢复和多选区的精确位置由调用方负责，不能按主光标猜方向。
 const visibleSelection = EditorState.transactionFilter.of(tr => {
   if (!tr.selection && !tr.docChanged) return tr
+  const event = tr.annotation(Transaction.userEvent)
+  if (!(event === 'select' || event === 'select.pointer' || event === 'input.type'
+    || event === 'input.paste' || event === 'input.drop' || tr.isUserEvent('delete'))
+    || tr.startState.selection.ranges.length !== 1 || tr.newSelection.ranges.length !== 1) return tr
   const { cursorRanges } = tr.state.field(paragraphLayoutField)
   let changed = false
   const ranges = tr.newSelection.ranges.map(range => {
@@ -165,7 +169,10 @@ const visibleSelection = EditorState.transactionFilter.of(tr => {
     const gap = cursorRanges.find(item => range.head > item.from && range.head < item.to)
     if (!gap) return range
     changed = true
-    return EditorSelection.cursor(range.head < tr.startState.selection.main.head ? gap.from : gap.to)
+    const previous = tr.changes.mapPos(tr.startState.selection.main.head)
+    // 删除会把旧光标映到新落点；两者相等时仍须保留退格的向后方向。
+    const backward = range.head < previous || (range.head === previous && tr.isUserEvent('delete.backward'))
+    return EditorSelection.cursor(backward ? gap.from : gap.to, backward ? -1 : 1)
   })
   return changed ? [tr, { sequential: true, selection: EditorSelection.create(ranges, tr.newSelection.mainIndex) }] : tr
 })

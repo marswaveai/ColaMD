@@ -1271,6 +1271,8 @@ ipcMain.handle('export-pdf', async (event) => {
         @page { margin: 20mm 18mm; background: ${background}; }
         html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; }
         #editor { margin: 0 !important; padding: 0 !important; }
+        /* 编辑器底部为继续输入预留的空间不是正文，不能单独撑出空白末页。 */
+        #editor .cm-content { padding-bottom: 0 !important; }
         /* 光标与选区是编辑器的东西，不是文档的内容。 */
         .cm-cursor, .cm-cursorLayer, .cm-selectionLayer, .cm-selectionBackground { display: none !important; }
         /* A cell has to break a long token (JSON, a URL) instead of forcing the

@@ -151,7 +151,7 @@ async function captureWholeDocument(
     )
     const size = image.getSize()
     await resizeAndSettle(win, dimensions.width, viewportHeight)
-    if (size.width === 0 || size.height < dimensions.height) return null
+    if (size.width < dimensions.width || size.height < dimensions.height) return null
     return image.toPNG()
   } catch (error) {
     // A document the surface refuses to paint is still exportable as pages, so
@@ -181,6 +181,11 @@ async function captureReadingPage(
     CAPTURE_TIMEOUT_MS,
     'capturePage'
   )
+  const size = image.getSize()
+  // 与整图使用同一 DIP 尺寸契约；不读取像素，避免把空图或被截短的页写成成功。
+  if (size.width < dimensions.width || size.height < height) {
+    throw new Error(`分页截图尺寸不足：${size.width}x${size.height}，需要 ${dimensions.width}x${height}`)
+  }
   return image.toPNG()
 }
 
