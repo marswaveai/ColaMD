@@ -294,6 +294,31 @@ async function run(win, files) {
     }
   }
 
+  // 与 main 的图表导出修复组合：图表沿用代码围栏类，但不能被复制层当成空代码块删掉。
+  const diagramDoc = '前文\n\n```mermaid\ngraph TD\n A-->B\n```\n\n末文'
+  await reset(diagramDoc, 0, 0)
+  for (let i = 0; i < 100; i++) {
+    if (await ev(`!!document.querySelector('.cm-md-mermaid-ready svg')`)) break
+    await delay(100)
+  }
+  const diagram = await ev(`(() => {
+    const svg=document.querySelector('.cm-md-mermaid-ready svg');
+    const html=window.__colamdExportDocumentHTML();
+    return {ready:!!svg,preserved:!!svg&&html.includes(svg.outerHTML),html,text:v.state.doc.toString()}
+  })()`)
+  check('最新 main 的 Mermaid SVG 在整篇 HTML 导出中保留', () => {
+    assert.ok(diagram.ready, '图表必须真实完成渲染')
+    assert.ok(diagram.preserved, diagram.html)
+    assert.equal(diagram.text, diagramDoc)
+  })
+  await ev('v.dispatch({selection:{anchor:0,head:v.state.doc.length}})')
+  const diagramCopy = await copy()
+  check('跨图表复制保留 SVG、围栏源码及选区', () => {
+    assert.equal(diagramCopy.text, diagramDoc)
+    assert.ok(diagramCopy.html.includes('<svg'), diagramCopy.html)
+    assert.ok(diagramCopy.unchanged)
+  })
+
   // 富文本颜色看重新插入 HTML 后的计算样式，不能只断言字符串里有 style。
   const inspectHTML = (html, labels) => ev(`(() => {
     const host=document.createElement('div');host.style.cssText='position:absolute;left:-100000px;color:rgb(1,2,3)';
