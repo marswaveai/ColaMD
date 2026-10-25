@@ -57,6 +57,16 @@ function pushBlockLines(
     ranges.push({ from: lineFrom, to: lineFrom, deco: BLOCK(className) })
   }
 }
+/** 列表首行的复制信息独立添加，与整项的逐行样式合并。 */
+function pushListItemStart(state: EditorState, node: SyntaxNode, ranges: DecorationRange[]): void {
+  const mark = node.getChild('ListMark')
+  const number = mark && node.parent?.name === 'OrderedList' ? Number.parseInt(state.doc.sliceString(mark.from, mark.to), 10) : NaN
+  const from = state.doc.lineAt(node.from).from
+  ranges.push({ from, to: from, deco: Decoration.line({
+    class: `cm-md-li-start${Number.isFinite(number) ? ' cm-md-li-ordered' : ''}`,
+    attributes: Number.isFinite(number) ? { 'data-list-number': String(number) } : undefined,
+  }) })
+}
 /**
  * 列表项：只给它**自己那一行**加类，不给它子列表里的行加。
  *
@@ -1103,6 +1113,7 @@ function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Ran
       // CM6 没有 ul/ol/li 元素，缩进只能自己算；层级来自语法的嵌套深度。
       case 'ListItem': {
         pushListItemLines(state, node.node, ranges)
+        pushListItemStart(state, node.node, ranges)
         break
       }
       case 'FencedCode': {
