@@ -247,20 +247,30 @@ function joinHeadingForward(view: EditorView): boolean {
 }
 
 // moveVertically 落进隐藏区间时按移动方向整段跳过：下移越过行尾会跳到下一段，
-// 上移到标题行首会退回上一段，中间那一行被整个略过。落点停在区间端点、
-// 而区间另一端所在的那一行夹在起点和落点之间时，改落到那一行的可见边界。
+// 上移到标题行首会退回上一段，中间那一行被整个略过；跳过之后的光标还丢了目标列。
+// 落点停在区间端点上时自己落位：区间另一端单独占着起点与落点之间的那一行，就落到那一端。
 function moveLine(view: EditorView, forward: boolean): boolean {
   const { state } = view
   const range = state.selection.main
   if (!range.empty || state.selection.ranges.length !== 1) return false
   const next = view.moveVertically(range, forward)
   const item = state.field(paragraphLayoutField).cursorRanges.find(gap => next.head === (forward ? gap.to : gap.from))
+  // 没停在隐藏区间端点上就没有经过跳转，交回默认按键和其他扩展处理。
+  if (!item) return false
   const start = view.coordsAtPos(range.head, range.assoc || 1)
-  const skipped = item && view.coordsAtPos(forward ? item.from : item.to, forward ? -1 : 1)
-  if (!skipped || !start || (forward ? skipped.top < start.bottom : skipped.bottom > start.top)) return false
-  // 其余情况交回默认按键和其他扩展处理。
+  const landed = view.coordsAtPos(next.head, forward ? 1 : -1)
+  const skipped = view.coordsAtPos(forward ? item.from : item.to, forward ? -1 : 1)
+  // 只有隐藏 # 的标题，区间两端在同一行，不算跳过。
+  const between = !!(start && landed && skipped) && (forward
+    ? skipped.top >= start.bottom && skipped.bottom <= landed.top
+    : skipped.bottom <= start.top && skipped.top >= landed.bottom)
+  // 目标列按 moveVertically 的算法记下，连续移动才不会往行首漂。
+  const goal = range.goalColumn ?? (start ? start.left - view.contentDOM.getBoundingClientRect().left : undefined)
   view.dispatch({
-    selection: EditorSelection.cursor(forward ? item.from : item.to, forward ? -1 : 1, undefined, next.goalColumn),
+    // 要传 EditorSelection：单个 SelectionRange 会被当成 {anchor, head}，关联方向和目标列都丢掉。
+    selection: EditorSelection.create([between
+      ? EditorSelection.cursor(forward ? item.from : item.to, forward ? -1 : 1, undefined, goal)
+      : EditorSelection.cursor(next.head, next.assoc, undefined, goal)]),
     scrollIntoView: true, userEvent: 'select',
   })
   return true

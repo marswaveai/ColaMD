@@ -124,6 +124,26 @@ try {
   await reset('甲段\n\n## 标题\n\n乙段', 7)
   await key('ArrowDown')
   check('标题下移照常到下一段', await head(), 11)
+  // 只有隐藏 # 的标题，区间两端在同一行，不算跳过了一行
+  await reset('\n## 乙', 0)
+  await key('ArrowDown')
+  await send('Input.insertText', { text: 'Z' })
+  check('空行下移进标题输入落在标题文字', await text(), '\n## Z乙')
+  await reset('---\na: 1\n---\n\n## 乙', 13)
+  await key('ArrowDown')
+  await send('Input.insertText', { text: 'Z' })
+  check('属性区后空行下移进标题输入落在标题文字', await text(), '---\na: 1\n---\n\n## Z乙')
+  // 跨过分隔的上下移要记住目标列，连续移动不往行首漂
+  await reset('1234567890\n甲\n\n1234567890', 9)
+  await key('ArrowDown')
+  await key('ArrowDown')
+  await send('Input.insertText', { text: 'Z' })
+  check('连续下移经过短行保持目标列', await text(), '1234567890\n甲\n\n123456789Z0')
+  await reset('1234567890\n\n甲\n\n1234567890', 24)
+  await key('ArrowUp')
+  await key('ArrowUp')
+  await send('Input.insertText', { text: 'Z' })
+  check('连续上移经过短行保持目标列', await text(), '123456789Z0\n\n甲\n\n1234567890')
   await reset('甲段\n\n乙段', 0)
   const beyondEnd = await evaluate(`(()=>{
     const line=[...v.contentDOM.children].find(el=>el.textContent==='甲段'),r=line.getBoundingClientRect(),c=v.contentDOM.getBoundingClientRect();
