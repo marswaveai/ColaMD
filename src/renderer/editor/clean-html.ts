@@ -7,6 +7,8 @@
 // 所以这里做一次翻译：行 → `<p>`，连续的同类行合并成 `<ul>`/`<ol>`/`<blockquote>`/`<pre>`，
 // 装饰类 → 语义标签。**只读**：它不改编辑器里的任何东西，改的是要交出去的那份拷贝。
 
+import { cleanStyle } from './html-sanitize'
+
 /** 元素上的装饰类 → 语义标签。没登记的类原样透传（KaTeX、mermaid、图片要保住）。 */
 const INLINE_TAGS: Record<string, string> = {
   'cm-md-strong': 'strong',
@@ -41,20 +43,22 @@ function escapeAttribute(value: string): string {
 
 function lineKind(line: HTMLElement, includeList = true): LineKind {
   const classes = line.classList
+  // 引用排在最前：引用里的标题、列表、代码由 renderGroup 剥掉引用后再按块翻译
+  if (classes.contains('cm-md-blockquote')) return 'quote'
   for (let level = 1; level <= 6; level++) {
     if (classes.contains(`cm-md-atxheading${level}`)) return `h${level}` as LineKind
   }
   // 图表沿用围栏行的代码块类，已有 SVG 时不能再按代码围栏删掉。
   if (line.querySelector('.cm-md-mermaid svg')) return 'p'
   if (classes.contains('cm-md-codeblock')) return 'code'
-  if (classes.contains('cm-md-blockquote')) return 'quote'
   if (classes.contains('cm-md-hr')) return 'hr'
   if (line.querySelector('.cm-md-table-widget')) return 'table'
   if (classes.contains('cm-md-frontmatter')) return 'empty'
   if (includeList) for (let depth = 0; depth <= 6; depth++) {
     if (classes.contains(`cm-md-li-${depth}`)) return 'li'
   }
-  if ((line.textContent ?? '').trim() === '' && line.querySelector('img') === null) return 'empty'
+  // cm-widgetBuffer 是 CodeMirror 在隐藏区间旁边垫的占位图，不是内容（引用里的空行 `>` 就带着它）
+  if ((line.textContent ?? '').trim() === '' && line.querySelector('img:not(.cm-widgetBuffer)') === null) return 'empty'
   return 'p'
 }
 
@@ -68,11 +72,25 @@ function listDepth(line: HTMLElement): number {
 
 /** 这一行是不是有序列表（`1.` 这种序号是用户写的，会留在行里）。 */
 function isOrdered(line: HTMLElement): boolean {
+  // 选区从第一项的文字起选时，序号不在选区里，行上的类还在
+  if (line.classList.contains('cm-md-li-ordered')) return true
   const mark = line.querySelector('.cm-md-listmark')
   return !!mark && /^\s*\d+[.)]/.test(mark.textContent ?? '')
 }
 
-function inlineHTML(node: Node): string {
+/** 行内样式沿用显示 HTML 时的白名单，语义标签补齐继承的文字颜色。 */
+function inlineStyleAttribute(node: HTMLElement, inheritedColor = ''): string {
+  let style = cleanStyle(node.getAttribute('style') ?? '')
+  if (inheritedColor && !node.style.color) style += `${style ? '; ' : ''}color: ${inheritedColor}`
+  return style ? ` style="${escapeAttribute(style)}"` : ''
+}
+
+function withInlineStyle(node: HTMLElement, html: string): string {
+  const attribute = inlineStyleAttribute(node)
+  return attribute ? `<span${attribute}>${html}</span>` : html
+}
+
+function inlineHTML(node: Node, inheritedColor = ''): string {
   if (node.nodeType === Node.TEXT_NODE) return escapeText(node.textContent ?? '')
   if (!(node instanceof HTMLElement)) return ''
 
@@ -80,17 +98,19 @@ function inlineHTML(node: Node): string {
   for (const dropped of DROP_CLASSES) {
     if (classes.contains(dropped)) return ''
   }
+  const color = node.style.color || inheritedColor
   // 属性区是文件的元数据，不属于正文
   if (classes.contains('cm-md-frontmatter')) return ''
   if (classes.contains('cm-md-html-block') || classes.contains('cm-md-html-inline')) {
-    return childrenHTML(node)
+    return withInlineStyle(node, childrenHTML(node, color))
   }
   if (classes.contains('cm-md-link')) {
     const href = node.getAttribute('data-href') ?? ''
-    return `<a href="${escapeAttribute(href)}">${childrenHTML(node)}</a>`
+    // 为 a、mark 补齐继承的文字颜色，避免浏览器默认色覆盖。
+    return `<a href="${escapeAttribute(href)}"${inlineStyleAttribute(node, inheritedColor)}>${childrenHTML(node, color)}</a>`
   }
   if (classes.contains('cm-md-footnote-ref')) {
-    return `<sup>${escapeText(node.textContent ?? '')}</sup>`
+    return `<sup${inlineStyleAttribute(node)}>${escapeText(node.textContent ?? '')}</sup>`
   }
   // 公式（KaTeX）、mermaid 图、图片：它们已经是能独立成立的 HTML，原样带走
   if (classes.contains('cm-md-math') || classes.contains('cm-md-mermaid')) {
@@ -104,14 +124,14 @@ function inlineHTML(node: Node): string {
   }
 
   for (const [className, tag] of Object.entries(INLINE_TAGS)) {
-    if (classes.contains(className)) return `<${tag}>${childrenHTML(node)}</${tag}>`
+    if (classes.contains(className)) return `<${tag}${inlineStyleAttribute(node, tag === 'mark' ? inheritedColor : '')}>${childrenHTML(node, color)}</${tag}>`
   }
-  // 其它（编辑器自己的行内 span 等）只保留里面的文字
-  return childrenHTML(node)
+  // 移除编辑器包装，保留行内内容和样式。
+  return withInlineStyle(node, childrenHTML(node, color))
 }
 
-function childrenHTML(node: Node): string {
-  return Array.from(node.childNodes).map(inlineHTML).join('')
+function childrenHTML(node: Node, inheritedColor = ''): string {
+  return Array.from(node.childNodes).map((child) => inlineHTML(child, inheritedColor)).join('')
 }
 
 /** 一行里的正文（去掉列表标记、复制按钮这些零件）。 */
@@ -127,7 +147,7 @@ function lineHTML(line: HTMLElement): string {
  */
 function listTag(line: HTMLElement, ordered: boolean): string {
   if (!ordered) return '<ul>'
-  const start = Number.parseInt(line.querySelector('.cm-md-listmark')?.textContent ?? '', 10)
+  const start = Number.parseInt(line.querySelector('.cm-md-listmark')?.textContent ?? line.dataset.listNumber ?? '', 10)
   return Number.isFinite(start) && start !== 1 ? `<ol start="${start}">` : '<ol>'
 }
 
@@ -147,6 +167,12 @@ function renderList(lines: HTMLElement[]): string {
   for (const line of lines) {
     const depth = listDepth(line)
     const ordered = isOrdered(line)
+    // 续行（一项里的第二行起）接在这一项后面，不是新的一项
+    if (!line.classList.contains('cm-md-li-start') && open.length > 0 && open[open.length - 1].depth === depth) {
+      const content = lineHTML(line).replace(/^\s+/, '')
+      if (content.trim() !== '') html += `<br>${content}`
+      continue
+    }
     while (open.length > 0 && open[open.length - 1].depth > depth) {
       html += `</li></${tagOf(open.pop()!.ordered)}>`
     }
@@ -211,6 +237,8 @@ function isCodeFenceEnd(line: HTMLElement): boolean {
 }
 
 function renderCode(lines: HTMLElement[]): string {
+  // 选区只伸进了开头的围栏行：一行代码也没选，不交出一个空代码块
+  if (lines.length === 1 && lines[0].classList.contains('cm-md-codeblock-first') && !lines[0].classList.contains('cm-md-codeblock-last')) return ''
   // 第一行是首行围栏，最后一行是收尾围栏；若选区只截取内部几行，则不截断内容
   let body = lines
   if (body.length > 0 && isCodeFenceStart(body[0])) {
@@ -227,7 +255,12 @@ function renderGroup(kind: LineKind, lines: HTMLElement[], ownerDepth = -1): str
   if (kind === 'code') return renderCode(lines)
   if (kind === 'li') return renderList(lines)
   if (kind === 'quote') {
-    return `<blockquote>${lines.map((line) => `<p>${lineHTML(line)}</p>`).join('')}</blockquote>`
+    const inner = lines.map(line => {
+      const clone = line.cloneNode(true) as HTMLElement
+      clone.classList.remove('cm-md-blockquote')
+      return clone
+    })
+    return `<blockquote>${blocksHTML(inner, ownerDepth)}</blockquote>`
   }
   if (kind === 'table') {
     const table = lines[0].querySelector<HTMLElement>('.cm-md-table-widget')
