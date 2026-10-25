@@ -76,6 +76,7 @@ function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): s
 interface PageDimensions {
   width: number
   height: number
+  contentBottom: number
 }
 
 // Measure without waiting for anything, for the case where the polite version
@@ -88,11 +89,13 @@ async function measureLayout(win: BrowserWindow): Promise<PageDimensions> {
     const contentBounds = content?.getBoundingClientRect()
     const editorStyle = editor ? getComputedStyle(editor) : null
     const paddingBottom = editorStyle ? Number.parseFloat(editorStyle.paddingBottom) || 0 : 0
+    const height = contentBounds && editorBounds
+      ? contentBounds.bottom - editorBounds.top + paddingBottom
+      : editor?.scrollHeight ?? document.documentElement.scrollHeight
     return {
       width: Math.ceil(editorBounds?.width ?? document.documentElement.scrollWidth),
-      height: Math.ceil(contentBounds && editorBounds
-        ? contentBounds.bottom - editorBounds.top + paddingBottom
-        : editor?.scrollHeight ?? document.documentElement.scrollHeight),
+      height: Math.ceil(height),
+      contentBottom: Math.max(0, height - paddingBottom),
     }
   })()`)
 }
@@ -111,11 +114,13 @@ async function waitForLayout(win: BrowserWindow): Promise<PageDimensions> {
     const contentBounds = content?.getBoundingClientRect()
     const editorStyle = editor ? getComputedStyle(editor) : null
     const paddingBottom = editorStyle ? Number.parseFloat(editorStyle.paddingBottom) || 0 : 0
+    const height = contentBounds && editorBounds
+      ? contentBounds.bottom - editorBounds.top + paddingBottom
+      : editor?.scrollHeight ?? document.documentElement.scrollHeight
     return {
       width: Math.ceil(editorBounds?.width ?? document.documentElement.scrollWidth),
-      height: Math.ceil(contentBounds && editorBounds
-        ? contentBounds.bottom - editorBounds.top + paddingBottom
-        : editor?.scrollHeight ?? document.documentElement.scrollHeight),
+      height: Math.ceil(height),
+      contentBottom: Math.max(0, height - paddingBottom),
     }
   })()`)
 }
@@ -135,12 +140,12 @@ async function resizeAndSettle(win: BrowserWindow, width: number, height: number
 async function captureWholeDocument(
   win: BrowserWindow,
   dimensions: PageDimensions,
-  viewportHeight: number
+  viewportHeight: number,
+  dpr: number
 ): Promise<Buffer | null> {
   // 判据必须换算成**设备像素**：同一个 CSS 高度在 2 倍屏上要的是两倍的表面。
   // 这里原本拿 CSS 像素直接比 16384，等于在 2 倍屏上允许到 32768——超过真实上限的
   // 文档会先报 UnknownVizError、再退回编号页，白等两次超时，而它本来就该直接走编号页。
-  const dpr = await devicePixelRatio(win)
   if (dimensions.height * dpr > MAX_CAPTURE_EDGE_PX || dimensions.width * dpr > MAX_CAPTURE_EDGE_PX) return null
   try {
     await resizeAndSettle(win, dimensions.width, dimensions.height)
@@ -151,7 +156,9 @@ async function captureWholeDocument(
     )
     const size = image.getSize()
     await resizeAndSettle(win, dimensions.width, viewportHeight)
-    if (size.width < dimensions.width || size.height < dimensions.height) return null
+    if (size.width <= 0 || size.height <= 0
+      || size.width < Math.ceil(dimensions.width * dpr) - 1
+      || size.height < Math.ceil(dimensions.height * dpr) - 1) return null
     return image.toPNG()
   } catch (error) {
     // A document the surface refuses to paint is still exportable as pages, so
@@ -169,7 +176,8 @@ async function captureReadingPage(
   win: BrowserWindow,
   dimensions: PageDimensions,
   offset: number,
-  height: number
+  height: number,
+  dpr: number
 ): Promise<Buffer> {
   await resizeAndSettle(win, dimensions.width, height)
   await win.webContents.executeJavaScript(`(() => {
@@ -182,9 +190,13 @@ async function captureReadingPage(
     'capturePage'
   )
   const size = image.getSize()
-  // 与整图使用同一 DIP 尺寸契约；不读取像素，避免把空图或被截短的页写成成功。
-  if (size.width < dimensions.width || size.height < height) {
-    throw new Error(`分页截图尺寸不足：${size.width}x${size.height}，需要 ${dimensions.width}x${height}`)
+  const expectedWidth = Math.ceil(dimensions.width * dpr)
+  const expectedHeight = Math.ceil(height * dpr)
+  // capturePage 的 NativeImage 尺寸是设备像素，必须先将 CSS 尺寸乘 DPR。
+  // DPR 来自浮点数，与 Chromium 的缩放取整最多容许 1 设备像素差；整图同理。
+  // 只查尺寸，不逐页读像素，也不把空图或明显截短的页写成成功。
+  if (size.width <= 0 || size.height <= 0 || size.width < expectedWidth - 1 || size.height < expectedHeight - 1) {
+    throw new Error(`分页截图尺寸不足：${size.width}x${size.height}，需要 ${expectedWidth}x${expectedHeight} 设备像素`)
   }
   return image.toPNG()
 }
@@ -224,15 +236,16 @@ export async function renderDocumentImages(
         return measureLayout(win)
       })
 
-    const single = await captureWholeDocument(win, dimensions, pageHeight)
+    const dpr = await devicePixelRatio(win)
+    const single = await captureWholeDocument(win, dimensions, pageHeight, dpr)
     if (single) return [single]
 
     const pages: Buffer[] = []
-    // 底部 padding 只能补在最后一页里，不能单独生成一张全是留白的图片。
-    const contentEnd = dimensions.height - PRESETS[preset].padding
-    for (let offset = 0; offset < contentEnd; offset += pageHeight) {
+    // 自定义主题可以用更高优先级覆盖预设 padding，正文终点必须来自实测布局。
+    // 不对正文边界取整，避免不足 1 CSS px 的内容被丢弃；真实底部留白仍留在末页里。
+    for (let offset = 0; offset < dimensions.contentBottom; offset += pageHeight) {
       const height = Math.min(pageHeight, dimensions.height - offset)
-      pages.push(await captureReadingPage(win, dimensions, offset, height))
+      pages.push(await captureReadingPage(win, dimensions, offset, height, dpr))
     }
     return pages
   } finally {

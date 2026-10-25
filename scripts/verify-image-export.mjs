@@ -8,7 +8,7 @@
 // 用法: npm run verify:image-export（先 npm run build）
 // 窗口一律放在屏幕外，测试不占用屏幕。
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, openSync, closeSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
@@ -22,10 +22,14 @@ let EVIDENCE
 
 // 短的应导出成一张连续长图，长的应退回编号页；两个阅读宽度走的是同一套逻辑
 const CASES = [
-  { name: 'short', preset: 'desktop', width: 1200, rows: 60, expect: 'single' },
+  { name: 'short', preset: 'desktop', width: 1200, expect: 'single' },
   { name: 'long', preset: 'desktop', width: 1200, expect: 'pages' },
-  { name: 'mobile-short', preset: 'mobile', width: 414, rows: 30, expect: 'single' },
-  { name: 'mobile-long', preset: 'mobile', width: 414, expect: 'pages' }
+  { name: 'mobile-short', preset: 'mobile', width: 414, expect: 'single' },
+  { name: 'mobile-long', preset: 'mobile', width: 414, expect: 'pages' },
+  ...['desktop', 'mobile'].flatMap(preset => [0, 200].map(padding => ({
+    name: `${preset}-padding-${padding}`, preset, width: preset === 'desktop' ? 1200 : 414,
+    padding, expect: 'pages'
+  })))
 ]
 
 // 行号编码成颜色：base 16 的三个通道，相邻行至少差 12，取色不会有歧义
@@ -38,13 +42,24 @@ function colorOf(index) {
   ]
 }
 
-function document(rows) {
+function bandsHTML(rows) {
   const blocks = []
   for (let i = 0; i < rows; i++) {
     const [r, g, b] = colorOf(i)
     blocks.push(`<div style="height:40px;background:rgb(${r},${g},${b})">&nbsp;</div>`)
   }
-  return `# 导出验证\n\n${blocks.join('\n\n')}\n`
+  return blocks.join('\n')
+}
+
+function document(rows) {
+  return `# 导出验证\n\n${bandsHTML(rows)}\n`
+}
+
+// 每个用例用自己的真实 DPR 选长度，不能依赖上一扇窗口的屏幕比例。
+export function fixtureRows(testCase, dpr) {
+  if (testCase.expect === 'pages') return Math.ceil(16384 / dpr / 40) + 2
+  // 给标题、外边距及块间距留足预算，最终仍由真实导出形态验证。
+  return Math.max(1, Math.min(testCase.preset === 'desktop' ? 60 : 30, Math.floor((16384 / dpr - 1024) / 80)))
 }
 
 function connect(url) {
@@ -71,6 +86,10 @@ function connect(url) {
       }
     })
     ws.addEventListener('error', () => reject(new Error(`连接不上 ${url}`)))
+    ws.addEventListener('close', () => {
+      for (const { rej } of pending.values()) rej(new Error(`调试连接已关闭：${url}`))
+      pending.clear()
+    })
   })
 }
 
@@ -139,13 +158,16 @@ async function runCase(testCase) {
   mkdirSync(dir, { recursive: true })
   const fixture = join(dir, `${testCase.name}.md`)
   const out = join(dir, `${testCase.name}.png`)
-  writeFileSync(fixture, document(testCase.rows), 'utf8')
+  writeFileSync(fixture, document(1), 'utf8')
 
+  const log = openSync(join(dir, 'electron.log'), 'a')
   const child = spawn('npx', ['electron', 'scripts/offscreen-window.cjs', fixture, `--user-data-dir=${join(WORK, testCase.name, 'udd')}`,
     // sRGB：macOS 的显示色彩管理会把取色值整体挪动，验证要在确定的色彩空间里做
     '--force-color-profile=srgb',
+    ...(process.env.COLAMD_VERIFY_DPR ? [`--force-device-scale-factor=${process.env.COLAMD_VERIFY_DPR}`] : []),
     `--remote-debugging-port=${port}`, `--inspect=${inspect}`
-  ], { cwd: APP, stdio: 'ignore', detached: true })
+  ], { cwd: APP, stdio: ['ignore', log, log], detached: true })
+  closeSync(log)
 
   try {
     const page = await waitTarget(port, (t) => t.type === 'page' && /index\.html/.test(t.url))
@@ -176,14 +198,42 @@ async function runCase(testCase) {
 
     const dpr = await evaluate(renderer, 'window.devicePixelRatio')
     if (!(dpr > 0)) throw new Error(`无效 DPR ${dpr}`)
+    testCase.rows = fixtureRows(testCase, dpr)
+    const markdown = document(testCase.rows)
+    writeFileSync(fixture, markdown, 'utf8')
+    await evaluate(main, `(() => {
+      const wc = require('electron').BrowserWindow.getAllWindows()[0].webContents
+      wc.send('file-opened', { path: ${JSON.stringify(fixture)}, content: ${JSON.stringify(markdown)} })
+      return true
+    })()`)
+    await evaluate(renderer, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
     if (testCase.expect === 'pages' && testCase.rows * 40 * dpr <= 16384) {
       throw new Error(`夹具未跨过真实捕获上限：${testCase.rows} 行，DPR ${dpr}`)
     }
-    await evaluate(main, `(() => {
-      const { BrowserWindow } = require('electron')
-      BrowserWindow.getAllWindows()[0].webContents.send('menu-export-image', ${JSON.stringify(testCase.preset)})
-      return true
-    })()`)
+    if (testCase.padding !== undefined) {
+      // 走应用真正的自定义主题入口，CSS 原样进入导出快照；只将正文换成精确的边界夹具。
+      await evaluate(main, `require('electron').BrowserWindow.getAllWindows()[0].webContents.send('set-custom-css', ${JSON.stringify(`body.theme-custom #editor { padding-bottom: ${testCase.padding}px !important; }`)})`)
+      const pageHeight = testCase.preset === 'desktop' ? 800 : 896
+      const paddingTop = testCase.preset === 'desktop' ? 64 : 28
+      // 0 padding 的尾行跨页且不足预设 padding；200 padding 的正文距边界 32px，留白不能另起一页。
+      const remainder = testCase.padding === 0 ? Math.min(32, paddingTop / 2) : pageHeight - 32
+      const spacer = ((remainder - paddingTop - testCase.rows * 40) % pageHeight + pageHeight) % pageHeight
+      const html = `<div style="height:${spacer}px"></div>${bandsHTML(testCase.rows)}`
+      await evaluate(renderer, `(async () => {
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        if (!document.body.classList.contains('theme-custom')) throw new Error('自定义主题未应用')
+        window.electronAPI.exportImage({
+          html: ${JSON.stringify(html)},
+          styles: Array.from(document.styleSheets).map(sheet => Array.from(sheet.cssRules).map(rule => rule.cssText).join('\\n')).join('\\n'),
+          bodyClass: document.body.className, background: '#ffffff'
+        }, ${JSON.stringify(testCase.preset)}).then(ok => { window.__imageResult = ok })
+      })()`)
+    } else {
+      await evaluate(main, `(() => {
+        require('electron').BrowserWindow.getAllWindows()[0].webContents.send('menu-export-image', ${JSON.stringify(testCase.preset)})
+        return true
+      })()`)
+    }
 
     for (let i = 0; i < 480; i++) {
       if (await evaluate(main, 'globalThis.__exportDone')) break
@@ -253,34 +303,30 @@ async function main() {
   WORK = verifyWorkdir('image-export').dir
   // profile 可清理，原始图片和失败分析不得随退出消失。
   EVIDENCE = mkdtempSync(join(tmpdir(), 'colamd-image-export-evidence-'))
-    console.log(`证据目录 ${EVIDENCE}`)
-    let measuredDpr = 1
-    let failed = 0
-    for (const testCase of CASES) {
-      try {
-        // 每条 40 CSS px；上一档真实窗口的 DPR 决定长度，当前窗口再验证确实越界。
-        if (testCase.expect === 'pages') testCase.rows = Math.ceil(16384 / measuredDpr / 40) + 2
-        const result = await runCase(testCase)
-        measuredDpr = result.dpr
-        const checked = check(testCase, result)
-        writeFileSync(join(EVIDENCE, `${testCase.name}-analysis.json`), JSON.stringify({ testCase, ...result, ...checked }, null, 2))
-        const { problems, sizes, pageCount } = checked
-        const shape = pageCount === 1 ? '一张连续长图' : `${pageCount} 张编号页`
-        if (problems.length) {
-          failed++
-          console.log(`✗ ${testCase.name} ${shape} ${sizes.join(' ')}`)
-          for (const problem of problems) console.log(`    ${problem}`)
-        } else {
-          console.log(`✓ ${testCase.name} ${shape} ${sizes.join(' ')}：${testCase.rows} 行全部到位、无重复、无压扁`)
-        }
-      } catch (error) {
+  console.log(`证据目录 ${EVIDENCE}`)
+  let failed = 0
+  for (const testCase of CASES.filter(testCase => !process.env.COLAMD_VERIFY_CASE || testCase.name.includes(process.env.COLAMD_VERIFY_CASE))) {
+    try {
+      const result = await runCase(testCase)
+      const checked = check(testCase, result)
+      writeFileSync(join(EVIDENCE, `${testCase.name}-analysis.json`), JSON.stringify({ testCase, ...result, ...checked }, null, 2))
+      const { problems, sizes, pageCount } = checked
+      const shape = pageCount === 1 ? '一张连续长图' : `${pageCount} 张编号页`
+      if (problems.length) {
         failed++
-        writeFileSync(join(EVIDENCE, `${testCase.name}-error.txt`), error.stack ?? String(error))
-        console.log(`✗ ${testCase.name} ${error.message}`)
+        console.log(`✗ ${testCase.name} ${shape} ${sizes.join(' ')}`)
+        for (const problem of problems) console.log(`    ${problem}`)
+      } else {
+        console.log(`✓ ${testCase.name} ${shape} ${sizes.join(' ')}：${testCase.rows} 行全部到位、无重复、无压扁，DPR ${result.dpr}`)
       }
+    } catch (error) {
+      failed++
+      writeFileSync(join(EVIDENCE, `${testCase.name}-error.txt`), error.stack ?? String(error))
+      console.log(`✗ ${testCase.name} ${error.message}`)
     }
-    console.log(failed ? `失败 ${failed} 项` : '全部通过')
-    process.exitCode = failed ? 1 : 0
+  }
+  console.log(failed ? `失败 ${failed} 项` : '全部通过')
+  process.exitCode = failed ? 1 : 0
 }
 
 // 可从 Node 契约探针导入像素 oracle，不启动应用、不清理其他测试 profile。

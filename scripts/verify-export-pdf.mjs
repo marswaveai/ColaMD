@@ -8,7 +8,7 @@
 // 用法: npm run verify:export-pdf（先 npm run build）
 // 窗口放在屏幕外，测试不占用屏幕。
 import { spawn, execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, openSync, closeSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -64,6 +64,10 @@ function connect(url) {
       }
     })
     ws.addEventListener('error', () => reject(new Error(`连接不上 ${url}`)))
+    ws.addEventListener('close', () => {
+      for (const { rej } of pending.values()) rej(new Error(`调试连接已关闭：${url}`))
+      pending.clear()
+    })
   })
 }
 
@@ -131,10 +135,12 @@ async function runCase(testCase) {
 
   const port = 9900 + Math.floor(Math.random() * 60)
   const inspect = port + 1000
-  const child = spawn('npx', ['electron', 'scripts/offscreen-window.cjs', source, `--user-data-dir=${udd}`,
+  const log = openSync(join(EVIDENCE, `${testCase.name}-electron.log`), 'a')
+  spawn('npx', ['electron', 'scripts/offscreen-window.cjs', source, `--user-data-dir=${udd}`,
     '--force-color-profile=srgb',
     `--remote-debugging-port=${port}`, `--inspect=${inspect}`
-  ], { cwd: APP, stdio: 'ignore', detached: true })
+  ], { cwd: APP, stdio: ['ignore', log, log], detached: true })
+  closeSync(log)
 
   try {
     const page = await waitTarget(port, (t) => t.type === 'page' && /index\.html/.test(t.url))
@@ -164,6 +170,11 @@ async function runCase(testCase) {
       const lines = await evaluate(renderer, `document.querySelectorAll('#editor .cm-line').length`)
       if (Number(lines) > 5) break
       await sleep(250)
+    }
+
+    if (testCase.themeCSS) {
+      await evaluate(main, `require('electron').BrowserWindow.getAllWindows()[0].webContents.send('set-custom-css', ${JSON.stringify(testCase.themeCSS)})`)
+      await evaluate(renderer, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
     }
 
     if (testCase.name !== 'long') {
@@ -225,7 +236,12 @@ for (const testCase of [
   // 让真实文字行落到下一页。只多 1px 的行盒尾隙是空白，并非正文越界；
   // 图像的精确 ±1px 切片边界另由 verify-image-export-contract 覆盖。
   { name: 'boundary-after', delta: 40, expectedPages: 2 },
-  { name: 'padding-only', delta: -20, keepPadding: true, expectedPages: 1 }
+  { name: 'padding-only', delta: -20, keepPadding: true, expectedPages: 1 },
+  ...['#editor', '#editor .cm-content'].flatMap(selector => ['padding-bottom', 'margin-bottom'].map(property => ({
+    name: `custom-${selector === '#editor' ? 'editor' : 'content'}-${property}`,
+    delta: -20, keepPadding: true, expectedPages: 1,
+    themeCSS: `body.theme-custom ${selector} { ${property}: 200px !important; }`
+  })))
 ]) {
   try { await runCase(testCase) }
   catch (error) {
