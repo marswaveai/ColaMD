@@ -80,7 +80,7 @@ try {
   const head = () => evaluate('v.state.selection.main.head')
   const at = pos => evaluate(`v.dispatch({selection:{anchor:${pos}}});v.focus()`)
   const key = async (key, code = key, modifiers = 0) => {
-    const windowsVirtualKeyCode = { Enter: 13, Backspace: 8, Delete: 46, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, KeyZ: 90 }[code]
+    const windowsVirtualKeyCode = { Enter: 13, Backspace: 8, Delete: 46, End: 35, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, KeyZ: 90 }[code]
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers, windowsVirtualKeyCode })
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode })
     await sleep(30)
@@ -101,6 +101,46 @@ try {
     await send('Input.insertText', { text: 'Z' })
     check(name + ' 后继续输入留在正确段落', await text(), backward ? 'aZ\n\n\nb' : 'a\n\n\nZb')
   }
+  // 分隔画在上一段的行尾：落到行尾的移动（End、越过行尾的上下移、点击行尾右侧）都要留在本段。
+  for (const [name, doc, expected] of [
+    ['正文后接正文', '甲段\n\n乙段', '甲段Z\n\n乙段'],
+    ['正文后接标题', '甲段\n\n## 乙标题', '甲段Z\n\n## 乙标题'],
+    ['两个空行', '甲段\n\n\n乙段', '甲段Z\n\n\n乙段'],
+    ['文末空段之前', '甲段\n\n', '甲段Z\n\n'],
+  ]) {
+    await reset(doc, 0)
+    await key('End')
+    await send('Input.insertText', { text: 'Z' })
+    check('End 后输入留在本段：' + name, await text(), expected)
+  }
+  await reset('上一行比较长的文字\n甲\n\n乙段', 9)
+  await key('ArrowDown')
+  await send('Input.insertText', { text: 'Z' })
+  check('越过行尾的下移留在本段', await text(), '上一行比较长的文字\n甲Z\n\n乙段')
+  await reset('甲段\n\n## 标题\n\n乙段', 11)
+  await key('ArrowUp')
+  await send('Input.insertText', { text: 'Z' })
+  check('从行首上移进标题行不跳过标题', await text(), '甲段\n\n## Z标题\n\n乙段')
+  await reset('甲段\n\n## 标题\n\n乙段', 7)
+  await key('ArrowDown')
+  check('标题下移照常到下一段', await head(), 11)
+  await reset('甲段\n\n乙段', 0)
+  const beyondEnd = await evaluate(`(()=>{
+    const line=[...v.contentDOM.children].find(el=>el.textContent==='甲段'),r=line.getBoundingClientRect(),c=v.contentDOM.getBoundingClientRect();
+    return {x:c.right-4,y:(r.top+r.bottom)/2}
+  })()`)
+  for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, ...beyondEnd, button: 'left', clickCount: 1 })
+  await send('Input.insertText', { text: 'Z' })
+  check('点击行尾右侧后输入留在本段', await text(), '甲段Z\n\n乙段')
+  await reset('甲段\n\n乙段', 0)
+  const intoNext = await evaluate(`(()=>{
+    const r=[...v.contentDOM.children].find(el=>el.textContent==='乙段').getBoundingClientRect();
+    return {x:r.left+1,y:(r.top+r.bottom)/2}
+  })()`)
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...beyondEnd, button: 'left', clickCount: 1 })
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...intoNext, button: 'left', buttons: 1 })
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...intoNext, button: 'left', clickCount: 1 })
+  check('从行尾右侧拖进下一段从行尾起选', await evaluate('[v.state.selection.main.anchor,v.state.selection.main.head]'), [2, 4])
   const spacingDoc = '第一段\n\n第二段\n\n## 二级\n\n二级正文\n\n### 三级\n\n三级正文\n\n#### 四级\n\n四级正文'
   for (const theme of ['light', 'dark', 'elegant', 'sepia', 'notion', 'bear', 'writer', 'solarized-dark', 'nord', 'gruvbox', 'dracula', 'midnight']) {
     await evaluate(`document.body.className='theme-${theme}'`)

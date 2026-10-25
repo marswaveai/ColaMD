@@ -162,15 +162,22 @@ const visibleSelection = EditorState.transactionFilter.of(tr => {
   if (!(event === 'select' || event === 'select.pointer' || event === 'input.type'
     || event === 'input.paste' || event === 'input.drop' || tr.isUserEvent('delete'))
     || tr.startState.selection.ranges.length !== 1 || tr.newSelection.ranges.length !== 1) return tr
-  const { cursorRanges } = tr.state.field(paragraphLayoutField)
+  const { cursorRanges, gaps } = tr.state.field(paragraphLayoutField)
   let changed = false
   const ranges = tr.newSelection.ranges.map(range => {
     if (!range.empty) return range
     const gap = cursorRanges.find(item => range.head > item.from && range.head < item.to)
     if (!gap) return range
     changed = true
+    if (!tr.docChanged) {
+      // 分隔画在上一段的行尾，End、点击行尾右侧都会落进来；按落点所在的视觉行取边界，
+      // 不按移动方向猜，否则 End 会把光标送到下一段。隐藏的 # 则属于标题那一行。
+      const sameLine = gaps.some(item => range.head > item.from && range.head <= item.to)
+      return EditorSelection.cursor(sameLine ? gap.from : gap.to, sameLine ? -1 : 1)
+    }
     const previous = tr.changes.mapPos(tr.startState.selection.main.head)
-    // 删除会把旧光标映到新落点；两者相等时仍须保留退格的向后方向。
+    // 编辑后的落点没有视觉行可依，沿编辑方向；删除会把旧光标映到新落点，
+    // 两者相等时仍须保留退格的向后方向。
     const backward = range.head < previous || (range.head === previous && tr.isUserEvent('delete.backward'))
     return EditorSelection.cursor(backward ? gap.from : gap.to, backward ? -1 : 1)
   })
@@ -239,13 +246,58 @@ function joinHeadingForward(view: EditorView): boolean {
   return true
 }
 
+// moveVertically 落进隐藏区间时按移动方向整段跳过：下移越过行尾会跳到下一段，
+// 上移到标题行首会退回上一段，中间那一行被整个略过。落点停在区间端点、
+// 而区间另一端所在的那一行夹在起点和落点之间时，改落到那一行的可见边界。
+function moveLine(view: EditorView, forward: boolean): boolean {
+  const { state } = view
+  const range = state.selection.main
+  if (!range.empty || state.selection.ranges.length !== 1) return false
+  const next = view.moveVertically(range, forward)
+  const item = state.field(paragraphLayoutField).cursorRanges.find(gap => next.head === (forward ? gap.to : gap.from))
+  const start = view.coordsAtPos(range.head, range.assoc || 1)
+  const skipped = item && view.coordsAtPos(forward ? item.from : item.to, forward ? -1 : 1)
+  if (!skipped || !start || (forward ? skipped.top < start.bottom : skipped.bottom > start.top)) return false
+  // 其余情况交回默认按键和其他扩展处理。
+  view.dispatch({
+    selection: EditorSelection.cursor(forward ? item.from : item.to, forward ? -1 : 1, undefined, next.goalColumn),
+    scrollIntoView: true, userEvent: 'select',
+  })
+  return true
+}
+
+// 点击行尾右侧时，鼠标选区把隐藏区间里的落点推到较近的一端；分隔只有一个换行宽时
+// 两端一样近，会推到下一段。单击落在上一段这一行时，起点直接定在上一段行尾。
+const lineEndClick = EditorView.mouseSelectionStyle.of((view, event) => {
+  if (event.button !== 0 || event.detail !== 1 || event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return null
+  const start = view.posAndSideAtCoords({ x: event.clientX, y: event.clientY }, false)
+  const gap = view.state.field(paragraphLayoutField).gaps.find(item => start.pos > item.from && start.pos <= item.to)
+  if (!gap) return null
+  let { from, to } = gap
+  return {
+    update(update) {
+      if (update.docChanged) [from, to] = [update.changes.mapPos(from, -1), update.changes.mapPos(to, 1)]
+    },
+    get(current) {
+      const { pos } = view.posAndSideAtCoords({ x: current.clientX, y: current.clientY }, false)
+      // 仍在同一处隐藏区间里就是单击；拖出去之后才成为从行尾开始的选区。
+      return EditorSelection.create([pos >= from && pos <= to
+        ? EditorSelection.cursor(from, -1)
+        : EditorSelection.range(from, pos)])
+    },
+  }
+})
+
 export const paragraphLayout: Extension = [
   paragraphLayoutField,
+  lineEndClick,
   EditorView.atomicRanges.of(view => view.state.field(paragraphLayoutField).atomic),
   visibleSelection,
   Prec.high(keymap.of([
     { key: 'Enter', run: newParagraph },
     { key: 'Backspace', run: headingBackspace },
     { key: 'Delete', run: joinHeadingForward },
+    { key: 'ArrowDown', run: view => moveLine(view, true) },
+    { key: 'ArrowUp', run: view => moveLine(view, false) },
   ])),
 ]
