@@ -210,8 +210,13 @@
   width: 0.8em;
 }
 
-/* 有序列表的序号。行首那个数被替换成了重排后的编号，它是内容，不是标记。 */
-.cm-content .cm-md-li .cm-md-listmark {
+/* 有序列表的序号。行首那个数被替换成了重排后的编号，它是内容，不是标记。
+ *
+ * 里面那个 `*` 不是随手写的：高亮层把 ListMark 当 processingInstruction 压成灰色，
+ * 那道 span **嵌在** cm-md-listmark 里面，只给外面这层设颜色盖不住它，屏幕上序号
+ * 还是灰的（2026-10-25 报的：「3 和 9 是黑色的，其他都是灰色」）。 */
+.cm-content .cm-md-li .cm-md-listmark,
+.cm-content .cm-md-li .cm-md-listmark * {
   color: var(--text-color);
 }
 

@@ -258,9 +258,20 @@ const MEASURE = `(() => {
       olTextColor: textColorOf('有序项一'),
       bulletColor: (() => { const b = q('.cm-md-li-bullet')[0]; return b ? getComputedStyle(b).color : null })(),
       markColor: (() => {
+        // 量序号那个**字**的颜色，不是外层的颜色：True 灰的是嵌在 cm-md-listmark
+        // 里面的高亮 span，外面那层一直是正文色（2026-10-25 又踩了一次）。
         const line = lines.find((l) => l.textContent.includes('有序项一'))
-        const mark = line && line.querySelector('.cm-md-listmark')
-        return mark ? getComputedStyle(mark).color : null
+        if (!line) return null
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+        let node
+        while ((node = walker.nextNode())) {
+          const raw = node.textContent.trim()
+          const digits = raw.slice(0, -1)
+          if (raw.endsWith('.') && digits.length > 0 && [...digits].every((c) => c >= '0' && c <= '9')) {
+            return getComputedStyle(node.parentElement).color
+          }
+        }
+        return null
       })()
     },
     table: {
