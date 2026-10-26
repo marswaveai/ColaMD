@@ -498,6 +498,13 @@ const CHEATSHEET_MEASURE = `(() => {
   }
   return JSON.stringify({
     lines: q('#editor .cm-line').length,
+    fullyRendered: (() => {
+      const content = document.querySelector('#editor .cm-content')
+      const view = content?.cmTile?.root?.view
+      const last = content?.lastChild
+      return !!(view && last && !q('#editor .cm-gap').length
+        && view.posAtDOM(last, last.childNodes.length) === view.state.doc.length)
+    })(),
     images: imgs.length,
     imageLoaded: imgs.length > 0 && imgs[0].naturalWidth > 0,
     imageSrc: imgs.length > 0 ? imgs[0].getAttribute('src') : null,
@@ -878,8 +885,8 @@ async function checkCheatsheet() {
       width: 1200, height: 3600, deviceScaleFactor: 1, mobile: false
     })
     for (let i = 0; i < 80; i++) {
-      const lines = await evaluate(renderer, `document.querySelectorAll('#editor .cm-line').length`)
-      if (Number(lines) > 100) break
+      const measured = JSON.parse(await evaluate(renderer, CHEATSHEET_MEASURE))
+      if (measured.fullyRendered && measured.headings >= 5) break
       await sleep(250)
     }
     // 图片和 Mermaid 是异步渲染的，机器忙的时候会晚一点。等它稳定再断言，
@@ -891,7 +898,7 @@ async function checkCheatsheet() {
       m = JSON.parse(await evaluate(renderer, CHEATSHEET_MEASURE))
     }
 
-    check('速查文档：整篇渲染', m.lines >= 100, `行数=${m.lines}`)
+    check('速查文档：整篇渲染', m.fullyRendered, `行数=${m.lines} 末尾已渲染=${m.fullyRendered}`)
     check('速查文档：图片加载', m.images >= 1 && m.imageLoaded === true,
       `图片=${m.images} 加载成功=${m.imageLoaded} src=${m.imageSrc}`)
     check('速查文档：公式渲染', m.katex >= 2, `katex=${m.katex}`)

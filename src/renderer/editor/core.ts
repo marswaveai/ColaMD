@@ -13,6 +13,7 @@ import { EditorState, RangeSet } from '@codemirror/state'
 import { EditorView, drawSelection, dropCursor, highlightSpecialChars, rectangularSelection, crosshairCursor, Decoration } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { undo, redo } from '@codemirror/commands'
+import { paragraphLayout } from './paragraph-layout'
 import { livePreview, setEditorFocus } from './live-preview'
 import { listInput } from './list-input'
 import { searchHighlightField } from './search-highlight'
@@ -106,6 +107,7 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     // 装饰层：把源码画成所见即所得。它只画不写，所以装在这里不会影响
     // 「没改过的字节不许变」这条纪律。
     livePreview,
+    paragraphLayout,
     // 焦点变化要重算装饰：只有**正在编辑**的那一行才显示源码（见 live-preview 的 setEditorFocus）。
     // 用 DOM 事件而不是 EditorView.focusChangeEffect，是因为后者在创建时就已带焦点的编辑器上
     // 不会触发；下面创建完 view 之后补了一次初始值。
