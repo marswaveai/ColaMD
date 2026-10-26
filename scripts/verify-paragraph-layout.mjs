@@ -4,11 +4,178 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import vm from 'node:vm'
+import ts from 'typescript'
 import { assertBuildFresh } from './build-freshness.mjs'
 import { verifyWorkdir, stopVerifyApp } from './verify-workdir.mjs'
 
 assertBuildFresh()
 const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
+
+let count = 0
+function check(name, actual, expected = true) {
+  assert.deepEqual(actual, expected, name)
+  console.log('✓ ' + name)
+  count++
+}
+
+// 直接加载产品源码，不导出测试专用接口。全量算法是增量更新的独立 oracle。
+const require = createRequire(import.meta.url)
+const { Compartment, EditorState, StateEffect, StateField, Text } = require('@codemirror/state')
+const { markdown } = require('@codemirror/lang-markdown')
+const { GFM } = require('@lezer/markdown')
+const { syntaxTree, ensureSyntaxTree } = require('@codemirror/language')
+const { BlockWrapper, EditorView } = require('@codemirror/view')
+const refresh = StateEffect.define()
+let mathScans = 0
+function loadSource(path, extra = '') {
+  const source = readFileSync(join(ROOT, path), 'utf8') + extra
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const exports = {}
+  vm.runInThisContext(`(function(require,exports){${code}\n})`)((name) => {
+    if (name === './live-preview') return { decorationsRefreshEffect: refresh }
+    if (name === './math-scan') {
+      const math = loadSource('src/renderer/editor/math-scan.ts')
+      return { ...math, scanMath: (...args) => { mathScans++; return math.scanMath(...args) } }
+    }
+    return require(name)
+  }, exports)
+  return exports
+}
+const { buildLayout, paragraphLayoutField, visibleSelection } = loadSource('src/renderer/editor/paragraph-layout.ts',
+  '\nexport { buildLayout, paragraphLayoutField, visibleSelection }')
+const language = markdown({ extensions: [GFM] })
+function snapshot(layout) {
+  const ranges = set => {
+    const result = []
+    for (let c = set.iter(); c.value; c.next()) {
+      const { widget, ...spec } = c.value.spec
+      result.push([c.from, c.to, spec, widget ? [widget.constructor.name, widget.heading ?? null] : null])
+    }
+    return result.sort((a, b) => a[0] - b[0] || a[1] - b[1] || JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  }
+  return JSON.parse(JSON.stringify({ decorations: ranges(layout.decorations), atomic: ranges(layout.atomic),
+    gaps: layout.gaps, blocks: layout.blocks, protected: layout.protected, cursorRanges: layout.cursorRanges }))
+}
+function equivalent(state, label) {
+  assert.deepEqual(snapshot(state.field(paragraphLayoutField)), snapshot(buildLayout(state)), label)
+}
+const fence = '`'.repeat(3)
+const fixtures = [
+  '', '\n\n\n\n', '甲\n\n## 乙\n\n\n\n丙\n\n',
+  '---\ntitle: 属性\n---\n\n正文\n\n## 标题',
+  '前文\n\n$$\na\n\nb\n$$\n\n后文\n\n\\[x^2\\]\n\n末段',
+  '前文\n\n' + fence + 'md\n代码\n\n$$\n' + fence + '\n\n> 引用\n>\n> 下行\n\n- 列表\n\n- 另一项\n\n后文',
+  '## 标题\n\n| 甲 | 乙 |\n| --- | --- |\n| 值 | `$x$` |\n\n<div>HTML</div>\n\n[x]: /url\n\n末段\n',
+]
+let seed = 184
+const random = n => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % n }
+const inserts = ['字', 'x', '\n', '\n\n', ' ', '## ', '$$', '\\[', '\\]', fence, '- ', '> ', '[x]: /url', '|', '\t', '😀']
+for (const [index, fixture] of fixtures.entries()) {
+  let state = EditorState.create({ doc: fixture, extensions: [language, paragraphLayoutField] })
+  equivalent(state, '初始 ' + index)
+  for (let step = 0; step < 180; step++) {
+    const from = random(state.doc.length + 1), to = Math.min(state.doc.length, from + random(8))
+    const changes = [{ from, to, insert: inserts[random(inserts.length)] }]
+    if (step % 9 === 0 && to < state.doc.length) changes.push({ from: to + 1, insert: '\n### 新块\n\n' })
+    state = state.update({ changes, filter: false }).state
+    equivalent(state, `随机序列 ${index}/${step}`)
+    if (step % 13 === 0) {
+      state = state.update({ effects: refresh.of(null) }).state
+      equivalent(state, `刷新 ${index}/${step}`)
+    }
+  }
+  check('增量与全量对拍：编辑序列 ' + index, true)
+}
+let withMath = EditorState.create({ doc: '前段正文没有公式\n\n$$\nx^2\n$$\n\n后段正文', extensions: [language, paragraphLayoutField] })
+mathScans = 0
+withMath = withMath.update({ changes: { from: 2, insert: '字' } }).state
+check('公式之外的普通文字编辑只映射保护区', mathScans, 0)
+equivalent(withMath, '公式保护区映射')
+
+for (const fixture of ['前段正文\n\n后段正文', '前段正文\n\n$$\nx^2\n$$\n\n后段正文']) {
+  const state = EditorState.create({ doc: fixture, extensions: [language, paragraphLayoutField] })
+  const tr = state.update({ changes: { from: 2, insert: '字' }, filter: false }), doc = tr.newDoc
+  const toString = Text.prototype.toString
+  let reads = 0
+  Text.prototype.toString = function () {
+    if (this === doc || this === state.doc) reads++
+    return toString.call(this)
+  }
+  try { tr.state.field(paragraphLayoutField) } finally { Text.prototype.toString = toString }
+  check('普通正文编辑不拼接全文：' + (fixture.includes('$') ? '含公式' : '无公式'), reads, 0)
+  equivalent(tr.state, '不拼接全文的增量结果')
+}
+
+// 确认懒解析确实推进了树，而不是只发一个无效刷新事务。
+let partial = EditorState.create({ doc: ('正文 **加粗**\n\n## 标题\n\n').repeat(5000), extensions: [language, paragraphLayoutField] })
+const previousTree = syntaxTree(partial)
+ensureSyntaxTree(partial, partial.doc.length, 5000)
+partial = partial.update({}).state
+check('无文档变更的解析推进实际更换语法树', syntaxTree(partial) !== previousTree)
+equivalent(partial, '后台解析推进')
+check('后台解析推进与全量对拍', true)
+const retainedLayout = partial.field(paragraphLayoutField)
+const retained = retainedLayout.parts[10].layout
+partial = partial.update({ effects: refresh.of(null) }).state
+check('刷新效果保留未变块的装饰集合', partial.field(paragraphLayoutField).parts[10].layout === retained)
+equivalent(partial, '刷新效果')
+check('同树刷新直接复用整份布局', partial.field(paragraphLayoutField) === retainedLayout)
+const wrapperCompartment = new Compartment()
+let wrappedTable = EditorState.create({ doc: '前文\n\n| 甲 | 乙 |\n| --- | --- |\n| 值 | 数 |',
+  extensions: [language, paragraphLayoutField, wrapperCompartment.of([])] })
+const tableSpace = state => snapshot(state.field(paragraphLayoutField)).decorations.find(item => item[3]?.[0] === 'BlockSpace')[2].block
+const tableNode = syntaxTree(wrappedTable).topNode.lastChild
+const wrapper = BlockWrapper.set([BlockWrapper.create({ tagName: 'div' }).range(tableNode.from, tableNode.to)])
+wrappedTable = wrappedTable.update({ effects: wrapperCompartment.reconfigure(EditorView.blockWrappers.of(wrapper)) }).state
+check('加入行包装后留白保持独立', tableSpace(wrappedTable))
+equivalent(wrappedTable, '加入行包装')
+wrappedTable = wrappedTable.update({ effects: wrapperCompartment.reconfigure([]) }).state
+check('撤去行包装后恢复共用行盒', !tableSpace(wrappedTable))
+equivalent(wrappedTable, '撤去行包装')
+
+// 普通编辑的过滤器直接复用事务，不应把已经求值的状态再构建一次。
+let stateUpdates = 0
+const counter = StateField.define({ create: () => 0, update: value => { stateUpdates++; return value + 1 } })
+let ordinary = EditorState.create({ doc: '前段正文\n\n后段正文', selection: { anchor: 2 },
+  extensions: [language, paragraphLayoutField, visibleSelection, counter] })
+for (const spec of [
+  { changes: { from: 2, insert: '字' }, selection: { anchor: 3 }, userEvent: 'input.type' },
+  { changes: { from: 2, to: 3 }, selection: { anchor: 2 }, userEvent: 'delete.backward' },
+]) {
+  stateUpdates = 0
+  ordinary = ordinary.update(spec).state
+  check('普通正文事务只更新一次状态 ' + spec.userEvent, stateUpdates, 1)
+}
+
+// 直接交互的选区也和旧的全量过滤规则对拍。
+for (const fixture of fixtures) {
+  const state = EditorState.create({ doc: fixture, extensions: [language, paragraphLayoutField, visibleSelection] })
+  for (let step = 0; step < 120; step++) {
+    const from = random(fixture.length + 1), to = Math.min(fixture.length, from + random(6))
+    const insert = ['', '字', '\n', '\n\n', ' '][random(5)]
+    const head = from + insert.length
+    const event = step % 2 ? 'input.type' : 'delete.backward'
+    const spec = { changes: { from, to, insert }, selection: { anchor: head }, userEvent: event }
+    const unfiltered = state.update({ ...spec, filter: false })
+    const full = buildLayout(unfiltered.state)
+    const gap = full.cursorRanges.find(item => head > item.from && head < item.to)
+    const before = unfiltered.changes.mapPos(state.selection.main.head)
+    const backward = unfiltered.docChanged ? head < before || head === before && event === 'delete.backward'
+      : full.gaps.some(item => head > item.from && head <= item.to)
+    const expected = gap ? [backward ? gap.from : gap.to, backward ? -1 : 1] : [head, 0]
+    const actual = state.update(spec).state.selection.main
+    assert.deepEqual([actual.head, actual.assoc], expected, JSON.stringify({ fixture, spec, full: snapshot(full) }))
+  }
+}
+check('编辑选区与全量过滤对拍：840 次', true)
+
+if (process.argv.includes('--state-only')) {
+  console.log(`段落状态对拍通过：${count} 项。`)
+  process.exit(0)
+}
+
 const { dir, udd } = verifyWorkdir('paragraph-layout')
 const fixture = join(dir, '段落排版.md')
 writeFileSync(fixture, '# 段落排版\n\n测试正文。\n')
@@ -21,12 +188,7 @@ const app = spawn(join(ROOT, 'node_modules/.bin/electron'), [
 ], { cwd: ROOT, env, stdio: 'ignore' })
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 let socket
-let count = 0
-function check(name, actual, expected = true) {
-  assert.deepEqual(actual, expected, name)
-  console.log('✓ ' + name)
-  count++
-}
+
 async function connect() {
   let page
   for (let i = 0; i < 120 && !page; i++) {
@@ -344,6 +506,25 @@ try {
   await sleep(80)
   check('模式往返逐字保真', await text(), full)
 
+  // 留白不能让相邻表格的实测高度在正文编辑时退回估算值。
+  const heightDoc = '前文\n\n| 甲 | 乙 |\n| --- | --- |\n' + '| 值 | 数 |\n'.repeat(25) + '\n后文'
+  await reset(heightDoc, 1)
+  await evaluate("window.tableHeight=v.lineBlockAt(v.state.doc.toString().indexOf('|')).height")
+  const retainedHeight = await evaluate(`(() => {
+    v.dispatch({ changes: { from: 1, insert: '字' }, selection: { anchor: 2 }, userEvent: 'input.type' })
+    return Math.abs(v.lineBlockAt(v.state.doc.toString().indexOf('|')).height-tableHeight)<1
+  })()`)
+  check('正文编辑保留相邻表格实测行高', retainedHeight)
+
+  const tableDoc = '前文\n\n| 甲 | 乙 |\n| --- | --- |\n| 值 | 数 |\n\n后文'
+  await reset(tableDoc, 1)
+  await send('Input.insertText', { text: '字' })
+  await evaluate("window.savedTable=[...v.contentDOM.querySelectorAll('.cm-md-table-widget')].find(el=>el.querySelector('th,[role=columnheader]'));void 0")
+  const headerPoint = await evaluate("(()=>{const r=savedTable.querySelector('th,[role=columnheader]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()")
+  for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, ...headerPoint, button: 'left', clickCount: 1 })
+  const tableHead = await head()
+  check('正文位移后点击表头落到当前源码', tableHead >= tableDoc.indexOf('|') + 1 && tableHead <= tableDoc.indexOf('\n| ---') + 1)
+
   // 与复杂块相邻的分隔会收起，但块内部的结构、源码和光标不动。
   for (const block of ['> 引用甲\n>\n> 引用乙', '- 列表甲\n\n- 列表乙', codeDoc, '| 甲 |\n| --- |\n| 乙 |', '<div>HTML</div>']) {
     const doc = '### 节名\n\n' + block + '\n\n末段'
@@ -358,7 +539,14 @@ try {
   check('放大字号后标题间距跟随字号', Math.abs(large[largeIndex].top - large[largeIndex - 1].bottom - 30) < 1)
   await evaluate("v.contentDOM.style.removeProperty('--editor-font-size')")
   // 等待已有用户输入的自动保存落盘，再用外部修改驱动真实的文件监听。
-  await sleep(800)
+  const savedText = await text()
+  for (let i = 0; i < 100; i++) {
+    if (readFileSync(fixture, 'utf8') === savedText && await evaluate("!document.querySelector('.tab-entry.active.dirty')")) break
+    await sleep(100)
+  }
+  check('外部写入前自动保存已完成', readFileSync(fixture, 'utf8'), savedText)
+  // 主进程保存后会重建 watcher，FSEvents 历史事件的抑制窗口为 300ms。
+  await sleep(350)
   const externallyWritten = '外部第一段\n\n### 外部标题\n\n外部正文\n'
   writeFileSync(fixture, externallyWritten)
   for (let i = 0; i < 60 && await text() !== externallyWritten; i++) await sleep(100)
