@@ -86,9 +86,11 @@ function indentListItem(view: EditorView, direction: 1 | -1): boolean {
     const change = freshSublist(state, line, lead)
       ? { from: line.from, to: line.from + self.lead + self.digits.length, insert: `${' '.repeat(lead)}1` }
       : { from: line.from, insert: ' '.repeat(lead - self.lead) }
+    const changes = state.changes(change)
     view.dispatch({
-      changes: change,
-      selection: { anchor: range.head + (lead - self.lead) },
+      changes,
+      // 新子列表会把多位序号改成 1，光标要按整笔替换映射，不能只加缩进宽度。
+      selection: { anchor: changes.mapPos(range.head, 1) },
       scrollIntoView: true,
       userEvent: 'input',
     })

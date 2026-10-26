@@ -1749,6 +1749,25 @@ function main() {
         orderedBack === orderedBefore,
         `退回后=${JSON.stringify(orderedBack)} 期望=${JSON.stringify(orderedBefore)}`)
 
+      // 多位序号缩进成 `1.` 时序号变短，光标要留在原来那个字前面，接着打字不能错位。
+      const caretDoc = '9. 父项\n10. 子项\n'
+      await evaluate(renderer, `(() => {
+        window.__caretView = document.querySelector('#editor .cm-content').cmTile.root.view
+        window.__caretState = __caretView.state
+        __caretView.setState(__caretState.constructor.create({ doc: ${JSON.stringify(caretDoc)}, extensions: __caretState.config.base }))
+        __caretView.dispatch({ selection: { anchor: ${caretDoc.indexOf('子项') + 1} } })
+        __caretView.focus()
+      })()`)
+      try {
+        await pressKey(renderer, 'Tab', 'Tab', 9)
+        await renderer.send('Input.insertText', { text: 'X' })
+        await sleep(200)
+        const caretText = await evaluate(renderer, '__caretView.state.doc.toString()')
+        check('多位序号缩进后打字仍落在原位置', caretText === '9. 父项\n   1. 子X项\n', JSON.stringify(caretText))
+      } finally {
+        await evaluate(renderer, `__caretView.setState(__caretState); delete window.__caretView; delete window.__caretState`)
+      }
+
       // 深色主题下选中文字不能被选区色盖住（2026-10-04 报的）。
       await clickLine(renderer, '待办未完成')
       await pressKey(renderer, 'Home', 'Home', 36)
