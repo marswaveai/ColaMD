@@ -12,6 +12,7 @@
 import { type EditorState, type SelectionRange } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { createEditorCore, getEditorHandle, type EditorHandle } from './core'
+import { finishTableComposition } from './table-editing'
 import { footnoteDefinitions } from './footnotes'
 import { selectionHTMLFrom } from './clean-html'
 import { renderWholeDocument, restoreViewport } from '../print-layout'
@@ -254,24 +255,6 @@ function installEditorInteractions(root: HTMLElement, view: EditorView): void {
     })
   })
 
-  // 表格：按点到的那一格落光标（#153）。
-  //
-  // 必须挂在 mousedown 并在**捕获阶段**拦下来。挂 click 不行：mousedown 时 CM6 先把
-  // 光标放到块开头，isBlockActive 一看光标已经在块里，整块退回源码，widget 随即从
-  // DOM 上摘掉；等 click 事件到达时，它的 target 已经不在树上，算不出点到哪一格
-  // （实测连跑三轮都是这样：源码退回了，打的字却落在表格开头）。
-  root.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return
-    const widget = tableWidgetOf(e.target)
-    if (!widget) return
-    const anchor = tableCellAnchor(view, widget, e)
-    if (anchor === null) return
-    e.preventDefault()
-    e.stopPropagation()
-    view.dispatch({ selection: { anchor }, scrollIntoView: true })
-    view.focus()
-  }, true)
-
   // 点一下被替换掉的块（公式、图片、图、HTML），把光标放进它的源码里就地改。
   //
   // 曾经只有公式有这么一条路，而且点一下会弹一个编辑框，框里还得再填一次公式（而且填的
@@ -279,7 +262,6 @@ function installEditorInteractions(root: HTMLElement, view: EditorView): void {
   // #138 报上来：换内核之后表格、图、图片都点不进去了，而 2.6 是可以改的。
   // 现在每个替换块都带着自己的源码区间（见 live-preview 的 withSourceRange），
   // 一个处理器管全部；块级 widget 的光标落点有 isBlockActive 兜着，光标进去就露源码。
-  // 表格不在这里：它按点到的那一格落光标，走上面那条 mousedown。
   root.addEventListener('click', (e) => {
     // 图上的缩放控件、以及放大态下的图，都是控件自己的地盘：点一下就把光标送进源码，
     // 图当场没了，正在看的局部也就白缩了（控件由 mermaid-bridge 的 attachDiagramZoom 装）。
@@ -298,71 +280,6 @@ function installEditorInteractions(root: HTMLElement, view: EditorView): void {
     view.dispatch({ selection: { anchor: from }, scrollIntoView: true })
     view.focus()
   })
-}
-
-/** 事件目标所在的表格 widget。 */
-function tableWidgetOf(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof HTMLElement)) return null
-  return target.closest('.cm-md-table-widget')
-}
-
-/**
- * 点在表格的哪一格，就把光标放到源码里那一格的开头（#153）。
- *
- * 表格是整块替换渲染的，光标落进块里才会露源码，所以在点到之前，落在哪儿全靠算。
- * 一律落在块开头的话，点第三行却在表头打字，第一个字就把表格拆散了：渲染好的表格
- * 会整块退回 markdown 源码（#153 报的）。
- *
- * 行从点到的 `<tr>` 数，列从点到的 `<td>` 数，再按源码里未转义的 `|` 对齐；
- * 拆法与 live-preview 的 parseTable 保持一致（`\|` 不算分隔符）。
- */
-function tableCellAnchor(view: EditorView, widget: HTMLElement, e: MouseEvent): number | null {
-  const target = e.target
-  if (!(target instanceof HTMLElement)) return null
-  const row = target.closest('tr')
-  if (!row) return null
-  const rowIndex = [...widget.querySelectorAll('tr')].indexOf(row)
-  if (rowIndex < 0) return null
-  const cell = target.closest('th, td')
-  const cellIndex = cell ? [...row.children].indexOf(cell) : 0
-
-  const doc = view.state.doc
-  const header = doc.lineAt(Number(widget.dataset.sourceFrom))
-  // 源码里表头下面还有一行分隔行，所以正文行比渲染出来的行号多一
-  const sourceLine = rowIndex === 0 ? header.number : header.number + rowIndex + 1
-  if (sourceLine > doc.lines) return null
-  const line = doc.line(sourceLine)
-  return tableCellStart(line.text, line.from, Math.max(0, cellIndex))
-}
-
-/** 表格源码行里第 index 格的起始位置。 */
-function tableCellStart(text: string, from: number, index: number): number {
-  const trimmed = text.trimStart()
-  const leadingSpaces = text.length - trimmed.length
-  const hasLeadingPipe = trimmed.startsWith('|')
-
-  const starts: number[] = []
-  let i = 0
-
-  if (hasLeadingPipe) {
-    const firstPipe = text.indexOf('|')
-    i = firstPipe + 1
-    starts.push(from + i)
-  } else {
-    starts.push(from + leadingSpaces)
-    i = leadingSpaces
-  }
-
-  for (; i < text.length; i++) {
-    if (text[i] === '\\' && text[i + 1] === '|') {
-      i++
-      continue
-    }
-    if (text[i] === '|') {
-      starts.push(from + i + 1)
-    }
-  }
-  return starts[Math.min(index, starts.length - 1)]
 }
 
 /** 写剪贴板。`navigator.clipboard` 在个别环境下会被拒，退回 execCommand。 */
@@ -628,6 +545,11 @@ export function getEditorView(): EditorView | null {
   return handle?.getView() ?? null
 }
 
+/** 换主题后调用：主题只换了 body 上的类，CodeMirror 自己察觉不到字体变了。 */
+export function remeasureEditor(): void {
+  handle?.remeasure()
+}
+
 /**
  * 编辑器的滚动容器。
  *
@@ -650,6 +572,12 @@ export function focusEditor(): void {
 // （renderer/slideshow.ts）；这是第二道锁，万一有键漏过来，也落不到没人看得见的页面上。
 export function setEditorEditable(editable: boolean): void {
   handle?.setEditable(editable)
+}
+
+// 在外壳保存标签或切换模式之前结束组字，仍由表格扩展负责保护原文。
+export function finishEditorComposition(): void {
+  const view = handle?.getView()
+  if (view) finishTableComposition(view)
 }
 
 // 多个标签共用一个编辑器实例。编辑器状态带着文档、选区和撤销栈，

@@ -38,7 +38,7 @@
   font-style: normal;
 }
 
-#editor .cm-content .cm-md-table-widget th,
-#editor .cm-content .cm-md-table-widget td {
+#editor .cm-content .cm-md-table-header .cm-md-table-cell,
+#editor .cm-content .cm-md-table-row:not(.cm-md-table-header) .cm-md-table-cell {
   font-size: 0.9em;
 }

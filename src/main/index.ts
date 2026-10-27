@@ -1191,8 +1191,9 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
   if (!win || (preset !== 'desktop' && preset !== 'mobile') || !snapshot || typeof snapshot !== 'object') return false
   win.show()
   win.focus()
-  const { html, styles, bodyClass, background } = snapshot as { html?: unknown; styles?: unknown; bodyClass?: unknown; background?: unknown }
+  const { html, styles, bodyClass, background, tableLayout } = snapshot as { tableLayout?: unknown; html?: unknown; styles?: unknown; bodyClass?: unknown; background?: unknown }
   if (typeof html !== 'string' || typeof styles !== 'string' || typeof bodyClass !== 'string' || typeof background !== 'string') return false
+  if (tableLayout !== undefined && (typeof tableLayout !== 'string' || !/^\d*$/.test(tableLayout))) return false
   const baseName = suggestFileName(win) ?? 'untitled'
   const suffix = preset === 'desktop' ? 'desktop' : 'mobile'
   const result = await dialog.showSaveDialog(win, {
@@ -1205,7 +1206,7 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
   if (result.canceled || !result.filePath) return false
   try {
     const { renderDocumentImages } = await import('./image-export')
-    const pages = await renderDocumentImages({ html, styles, bodyClass, background }, preset)
+    const pages = await renderDocumentImages({ html, styles, bodyClass, background, tableLayout: tableLayout as string | undefined }, preset)
     if (pages.length === 0) throw new Error('没有可导出的内容')
 
     const extension = extname(result.filePath)
@@ -1274,7 +1275,7 @@ ipcMain.handle('export-pdf', async (event) => {
            the table cannot go below, and the last column ends up cut off at the
            paper's edge (#108). The table already carries width: 100% in the
            theme; this is what lets it actually shrink to that width. */
-        #editor .cm-content th, #editor .cm-content td { overflow-wrap: anywhere !important; word-break: break-word !important; }
+        #editor .cm-md-table-cell { overflow-wrap: anywhere !important; word-break: break-word !important; }
       }`
     )
     try {

@@ -10,6 +10,12 @@ export interface EditorFontPrefs {
 }
 
 const STORE_KEY = 'colamd-editor-font'
+const fontListeners = new Set<() => void>()
+
+/** 字体应用完毕后通知布局使用者：只换字体族时编辑器尺寸不变，自己察觉不到字宽变了。 */
+export function onEditorFontChange(listener: () => void): void {
+  fontListeners.add(listener)
+}
 
 function isZh(): boolean {
   return isChinese()
@@ -49,6 +55,7 @@ export function applyEditorFont(prefs: EditorFontPrefs | null): void {
   else body.style.removeProperty('--editor-font')
   if (size) body.style.setProperty('--editor-font-size', `${size}px`)
   else body.style.removeProperty('--editor-font-size')
+  fontListeners.forEach(listener => listener())
 }
 
 export function persistEditorFont(prefs: EditorFontPrefs): void {

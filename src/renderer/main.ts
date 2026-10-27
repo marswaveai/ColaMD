@@ -1,4 +1,4 @@
-import { createEditor, focusEditor, getMarkdown, getEditorView, getEditorScroller, onEditorJumpPhase, setMarkdown, setEditorEditable, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, jumpToLine, jumpToHeading, setCleanExport, setDocumentFileUrl, type FormatCommandId } from './editor/editor'
+import { createEditor, finishEditorComposition, focusEditor, getMarkdown, getEditorView, getEditorScroller, onEditorJumpPhase, setMarkdown, setEditorEditable, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, jumpToLine, jumpToHeading, setCleanExport, setDocumentFileUrl, remeasureEditor, type FormatCommandId } from './editor/editor'
 import { markdownForWord } from './editor/mermaid-export'
 import { withDiagramZoomPaused } from './editor/mermaid-bridge'
 import { jumpToSourceLine, sourcePositionTop } from './editor/source-line'
@@ -8,9 +8,9 @@ import { isPresenting, startSlideshow, stopSlideshow } from './slideshow'
 import { enterPrintLayout, exitPrintLayout } from './slides-export'
 import { enterPaperLayout, exitPaperLayout } from './print-layout'
 import { SearchPanel } from './editor/search-panel'
-import { applyTheme, loadSavedTheme } from './themes/theme-manager'
+import { applyTheme, loadSavedTheme, onThemeChange } from './themes/theme-manager'
 import { setUiLanguage, isChinese, type UiLanguage } from './ui-language'
-import { applyEditorFont, clearEditorFont, loadSavedEditorFont, resetEditorFontSize, showFontSettingsModal, stepEditorFontSize } from './editor/font-settings'
+import { applyEditorFont, clearEditorFont, loadSavedEditorFont, onEditorFontChange, resetEditorFontSize, showFontSettingsModal, stepEditorFontSize } from './editor/font-settings'
 import './themes/base.css'
 import './themes/premium.css'
 import './themes/editor-preview.css'
@@ -310,7 +310,8 @@ function tabLabel(tab: DocumentTab): string {
 
 // Read the live state back into the active tab's record. Called before every
 // switch, close and bar render, so the records and the screen cannot disagree.
-function captureActiveTab(): void {
+function captureActiveTab(commitInput = false): void {
+  if (commitInput) finishEditorComposition()
   const tab = activeTab()
   if (!tab) return
   // The path is the tab's identity and only changes where a document is really
@@ -553,7 +554,7 @@ function ensureTab(): DocumentTab {
 
 async function openNewTab(): Promise<void> {
   const previous = activeTab()
-  captureActiveTab()
+  captureActiveTab(true)
   if (!await saveTabForLeaving(previous)) return
   const tab: DocumentTab = {
     id: `tab-${nextTabId++}`,
@@ -607,7 +608,7 @@ async function activateTab(id: string): Promise<void> {
   const target = tabs.find((tab) => tab.id === id)
   if (!target) return
   const previous = activeTab()
-  captureActiveTab()
+  captureActiveTab(true)
   if (!await saveTabForLeaving(previous)) return
   switchingTab = true
   try {
@@ -678,7 +679,7 @@ async function closeTab(id: string): Promise<void> {
   if (index < 0) return
   const tab = tabs[index]
   if (tab.id === activeTabId) {
-    captureActiveTab()
+    captureActiveTab(true)
     if (!await saveTabForLeaving(tab)) return
     if (tab.dirty && !tab.filePath && !confirmDiscardUntitled()) return
   } else if (tab.dirty) {
@@ -1046,6 +1047,7 @@ function caretViewportOffset(fraction: number, height: number, lineHeight: numbe
 }
 
 function toggleSourceMode(): void {
+  finishEditorComposition()
   if (sourceModeActive) {
     const ta = sourceEl()
     const { selectionStart, selectionEnd, selectionDirection } = ta
@@ -1688,6 +1690,7 @@ function getExportSnapshot(content: string): {
   styles: string
   bodyClass: string
   background: string
+  tableLayout: string
 } {
   let styles = ''
   for (const sheet of Array.from(document.styleSheets)) {
@@ -1705,6 +1708,7 @@ function getExportSnapshot(content: string): {
     // 图片与 PDF 导出要的是「和屏幕上一模一样」，所以仍旧交编辑器那份 DOM；
     // HTML 导出交的是**一篇文档**：语义标签，没有编辑器自己的类名和行结构。
     html: editorRoot?.innerHTML ?? '',
+    tableLayout: editorRoot?.dataset.tableLayout ?? '',
     document: editorRoot ? documentHTMLFrom(editorRoot) : '',
     styles,
     bodyClass: Array.from(document.body.classList)
@@ -1854,6 +1858,9 @@ async function init(): Promise<void> {
   const language = await api.getLanguage()
   fileManagerName = await api.getFileManagerName()
   setUiLanguage(language)
+  // 主题和字体设置只换 body 上的类和样式，编辑器察觉不到字宽变了，要外壳告诉它
+  onThemeChange(remeasureEditor)
+  onEditorFontChange(remeasureEditor)
   const savedTheme = loadSavedTheme()
   if (savedTheme.startsWith('custom:')) {
     // Load before applying: a newly opened window must not briefly paint the
@@ -1915,7 +1922,7 @@ async function init(): Promise<void> {
 
   // Main asks for an authoritative snapshot before any close or quit.
   api.onRequestDocumentState(async (requestId) => {
-    captureActiveTab()
+    captureActiveTab(true)
     // Report every tab that still has unsaved content. The main process writes
     // the ones with a path and refuses to close on the untitled ones, so a
     // background tab can never be dropped silently.

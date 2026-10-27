@@ -299,15 +299,25 @@ LLM 生成的 Markdown 常常在段落之间留一串空行，读起来松垮。
 
 **Status:** Candidate, not scheduled. 参考实现是现成的（mdnice / markdown-nice 那一路：Markdown → 行内样式 HTML）。按项目里「参考老前辈的决策」的原则，先研究它们的样式表怎么定，再决定我们的做法，不自己发明一套。
 
-### Selectable text inside a rendered block (#141, #153)
+### Direct table cell editing (#153, #162)
 
-**Source:** [#141](https://github.com/marswaveai/ColaMD/issues/141), [#153](https://github.com/marswaveai/ColaMD/issues/153)
+**Source:** [#153](https://github.com/marswaveai/ColaMD/issues/153), [#162](https://github.com/marswaveai/ColaMD/issues/162)
 
-A rendered block (table, diagram, image, formula, raw HTML) is a replacement widget, so its own text never enters the selection model: dragging across a rendered table selects nothing, and the same holds for a diagram's labels.
+**Status:** In progress. Table cells stay editable in the rendered layout. The Markdown buffer remains the source of truth: decorations hide the pipes and separator row. Column widths use the contents of the whole table and stay fixed during cell edits and scrolling; structure, alignment, font or available-width changes recalculate them. Rows outside the viewport still unload. Tab moves between cells and adds a row at the end; Enter moves down, Mod+Enter inserts a row, and Shift+Enter inserts a line break. Pasted tab-separated data can extend the table. No toolbar is added.
 
-2026-10-15 changed what a click does (#153): block widgets reveal their Markdown while the caret is inside, and clicking a table cell lands the caret in that cell of the source (`isBlockActive` in `live-preview.ts`, `tableCellAnchor` in `editor.ts`). The reported problem, that typing after clicking a table destroyed it, is gone with that.
+**导航决定（2026-10-22）：** 方向键在文首、文末离开表格只移动可见光标，不新增文件字节。外面没有现成正文时提供临时输入位置，实际输入确认后才用一笔可撤销事务创建段落。取消输入、点击别处或返回表格不写文件。
 
-Still open: editing and selecting text inside the rendered block itself, without stepping into the source. The document is text and rendering is a layer of decoration over it (`docs/editor-architecture.md`), so that is a structural change rather than a styling fix: the rendered table would have to stay real text, with the pipes hidden and the cells padded so the columns line up. Undecided.
+**审阅决定（2026-10-22）：** 普通数据行文字编辑只更新该行装饰，结构变化保留完整重建；主题应用入口统一通知编辑器重测行高和表格列宽，覆盖自定义主题之间的切换。表格外框中的独立留白片段按普通块显示，虚拟行占位继续保留表格布局。
+
+**代码格与查找替换决定（2026-10-22）：** 按用户确认采用 Typora 式表格代码规则：完整行内代码里的竖线不分格，反斜杠原样显示、逐个删除。通过 Lezer 的公开扩展接入，共享规则覆盖编辑器与 Word；保存仍原样写回源码，不迁移旧文件。这会改变旧 GFM 文件中代码转义竖线的显示，文档拿到严格 GFM 环境可能显示不同。渲染查找替换限定单元格文字，普通竖线自动转义，代码竖线原样保留，同格多匹配按一笔事务处理；源码模式继续支持直接修改结构。界面不增加常驻提示或开关。
+
+**合并后清理：** #184 单独合并时仍需要 `.cm-line:has(> .cm-md-table-widget)` 这条旧表格选择器，因此本次不修改 #184。只有 #184 与直接编辑表格的结构都进入 main 后，才删除其中的表格选择器分支，保留同组 Mermaid、公式及 HTML 块规则；第二个 PR 合并前 rebase 时复核留白、引用和退出表格的交互。
+
+### Selectable text inside other rendered blocks (#141)
+
+**Source:** [#141](https://github.com/marswaveai/ColaMD/issues/141)
+
+Diagrams, images, formulas and raw HTML remain replacement widgets. Selecting their rendered text without entering the source is still undecided; table editing does not change those blocks.
 
 ### XDG data directories on Linux (#142)
 

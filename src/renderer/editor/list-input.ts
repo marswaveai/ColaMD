@@ -7,6 +7,8 @@
 // 一个刻意的限制：**只在光标位于行尾时接管**。光标在行中间按回车，用户是在断句，
 // 不是在开新的一条，这时候插标记就是自作聪明。
 
+import { insertNewlineContinueMarkup } from '@codemirror/lang-markdown'
+import { syntaxTree } from '@codemirror/language'
 import { EditorView, keymap } from '@codemirror/view'
 import { Prec, type EditorState, type Extension } from '@codemirror/state'
 
@@ -176,6 +178,15 @@ function parentItem(
 // 同一个 keymap facet 里先出现的先试，所以不加优先级的话，Enter 永远先被
 // defaultKeymap 的 insertNewlineAndIndent 接走，下面这段代码一行都不会跑。
 export const listInput: Extension = Prec.high(keymap.of([
+  { key: 'Enter', run: view => {
+    const { state } = view
+    const line = state.doc.lineAt(state.selection.main.head)
+    if (!/^[ \t]*>/.test(line.text)) return false
+    // 只在语法归属确为引用时续标记，围栏代码里的 `>` 是普通字符。
+    let node = syntaxTree(state).resolveInner(Math.min(line.to, line.from + line.text.indexOf('>') + 1), 1)
+    while (node && node.name !== 'Blockquote') node = node.parent!
+    return !!node && insertNewlineContinueMarkup(view)
+  } },
   { key: 'Enter', run: continueList },
   { key: 'Tab', run: (view) => indentListItem(view, 1) },
   { key: 'Shift-Tab', run: (view) => indentListItem(view, -1) },

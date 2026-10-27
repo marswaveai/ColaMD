@@ -11,19 +11,20 @@
 import { EditorState, Compartment, type Extension } from '@codemirror/state'
 import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands'
 import { commonmarkLanguage, markdown } from '@codemirror/lang-markdown'
-import { GFM, type MarkdownParser } from '@lezer/markdown'
+import type { MarkdownParser } from '@lezer/markdown'
 import { languages } from '@codemirror/language-data'
 import { indentOnInput, bracketMatching, syntaxHighlighting, Language } from '@codemirror/language'
 import { keymap } from '@codemirror/view'
 import { markdownHighlightStyle } from './source-theme'
 import { frontmatterRange } from './math-scan'
 import { renumberLists } from './list-renumber'
+import { tableMarkdown } from '../../shared/markdown-tables'
 
 /** 可编辑性放在一个 compartment 里，方便运行时切换而不重建编辑器。 */
 export const editableCompartment = new Compartment()
 
 /**
- * 基准语法：CommonMark 加 GFM，就这些。
+ * 基准语法：CommonMark 加 GFM，表格的代码跨度保留原文（与 Typora 一致）。
  *
  * 为什么不用 `@codemirror/lang-markdown` 直接给的 `markdownLanguage`：它比 GFM 还多
  * 带三个扩展（Subscript、Superscript、Emoji），而这三个节点这个软件一个都不渲染，
@@ -33,7 +34,7 @@ export const editableCompartment = new Compartment()
  *
  * 保留 GFM，因为表格、删除线、任务列表、裸链接都是要渲染的。
  */
-const markdownParser: MarkdownParser = (commonmarkLanguage.parser as MarkdownParser).configure([GFM])
+const markdownParser: MarkdownParser = (commonmarkLanguage.parser as MarkdownParser).configure(tableMarkdown)
 
 const markdownBase = new Language(
   commonmarkLanguage.data,

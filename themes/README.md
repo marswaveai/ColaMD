@@ -79,7 +79,7 @@ The hooks available are:
 | `.cm-md-link`, `.cm-md-url` | Link text and the address behind it |
 | `.cm-md-blockquote` | Quote lines |
 | `.cm-md-codeblock` | Code block lines (the first and last also carry `-first` / `-last`, which is where the rounding goes) |
-| `.cm-md-table-widget th`, `.cm-md-table-widget td` | Table cells |
+| `.cm-md-table-header .cm-md-table-cell`, `.cm-md-table-row:not(.cm-md-table-header) .cm-md-table-cell` | Table cells |
 | `.cm-md-hr` | Horizontal rule |
 | `.cm-md-li-0` ... `.cm-md-li-6` | List indentation by depth |
 

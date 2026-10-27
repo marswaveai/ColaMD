@@ -14,6 +14,15 @@
 // 参数布局和 `electron . <文件>` 一致（主进程取的是 process.argv.slice(2)）。
 const { app } = require('electron')
 const { join } = require('path')
+const { mkdirSync } = require('fs')
+
+// user-data-dir 不隔离 app.getPath('home')；验收的最近文件与主题也必须独立。
+const profile = process.argv.find(arg => arg.startsWith('--user-data-dir='))?.slice('--user-data-dir='.length)
+if (profile) {
+  const verificationHome = join(profile, 'isolated-home')
+  mkdirSync(verificationHome, { recursive: true })
+  app.setPath('home', verificationHome)
+}
 
 const FAR_AWAY = -100000
 

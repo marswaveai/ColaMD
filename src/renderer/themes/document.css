@@ -120,10 +120,13 @@
   margin: 1em 0;
   border-collapse: collapse;
   width: 100%;
+  table-layout: fixed;
 }
 
 .colamd-document th,
 .colamd-document td {
+  overflow-wrap: anywhere;
+  word-break: normal;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
 }

@@ -134,6 +134,8 @@ const CASES = [
   ['table', '| a | b |\n| --- | --- |\n| 1 | 2 |\n'],
   ['table alignment', '| a | b | c |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |\n'],
   ['table with inline format', '| a | b |\n| --- | --- |\n| **x** | `y` |\n'],
+  ...[0, 1, 2, 3, 4].map(count => ['table code pipes and '+count+' slashes', '| a | b |\n| --- | --- |\n| `x'+'\\'.repeat(count)+'|y` | z |\n']),
+  ['table code pipe header', '| `a|b` | c |\n|---|---|\n| x | y |\n'],
   ['table with math', '| 公式 | 价格 |\n| --- | --- |\n| $x$ | $5 |\n'],
 
   // 换行风格与边界

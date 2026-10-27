@@ -1493,7 +1493,6 @@ body.presenting #editor .cm-content > * {
 }
 
 body.presenting #editor .cm-content .cm-md-table-widget {
-  display: block;
   overflow-x: auto;
 }
 
