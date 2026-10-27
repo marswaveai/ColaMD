@@ -1,3 +1,6 @@
+import katex from 'katex'
+import { scanMath } from './math-scan'
+
 // 把编辑器画出来的 DOM 翻译成一篇干净的 HTML。
 //
 // 编辑器里的 DOM 是给**编辑**用的：每一行是一个 `<div class="cm-line">`，加粗是
@@ -91,6 +94,10 @@ function inlineHTML(node: Node): string {
   }
   if (classes.contains('cm-md-footnote-ref')) {
     return `<sup>${escapeText(node.textContent ?? '')}</sup>`
+  }
+  // 正在编辑的完整行内公式也要交成渲染结果；局部复制保留所选原文。
+  if (classes.contains('cm-md-math-source')) {
+    return mathSourceHTML(node.textContent ?? '')
   }
   // 公式（KaTeX）、mermaid 图、图片：它们已经是能独立成立的 HTML，原样带走
   if (classes.contains('cm-md-math') || classes.contains('cm-md-mermaid')) {
@@ -339,6 +346,16 @@ function blocksHTML(nodes: Node[], ownerDepth = -1): string {
 /** 这一行是不是编辑器画出来的行（选区完整盖住的行）。 */
 function isLineElement(node: Node): node is HTMLElement {
   return node instanceof HTMLElement && node.classList.contains('cm-line')
+}
+
+/** 与普通行内样式翻译分开，公式内部的颜色由 KaTeX 保留，外层颜色自然继承。 */
+function mathSourceHTML(source: string): string {
+  const range = scanMath(source)[0]
+  if (range?.from === 0 && range.to === source.length) {
+    try { return katex.renderToString(range.code, { displayMode: false, throwOnError: true, trust: false }) }
+    catch { /* 无效公式保留源码，不能丢字。 */ }
+  }
+  return escapeText(source)
 }
 
 /** 选中的一段 → 干净的 HTML。复制用它。 */

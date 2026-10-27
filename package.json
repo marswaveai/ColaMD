@@ -24,6 +24,7 @@
     "build:web": "vite build --config vite.web.config.ts",
     "preview:web": "vite preview --config vite.web.config.ts",
     "check:theme-colors": "node scripts/check-theme-colors.mjs",
+    "verify:inline-math": "node scripts/verify-inline-math.mjs",
     "verify:markdown": "node scripts/verify-markdown.mjs",
     "verify:links": "node scripts/verify-links.mjs",
     "verify:features": "node scripts/verify-features.mjs",

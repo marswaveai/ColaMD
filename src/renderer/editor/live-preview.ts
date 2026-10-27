@@ -21,12 +21,13 @@
 // 表现为「整个界面错乱」。StateField + provide 提供的是装饰集本身，不是函数，
 // 跨行替换与块级 widget 才被允许。
 
-import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
-import { EditorState, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state'
+import { Decoration, EditorView, keymap, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import { EditorSelection, EditorState, Prec, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state'
 import { forceParsing, syntaxTree } from '@codemirror/language'
 import type { SyntaxNode, SyntaxNodeRef } from '@lezer/common'
 import katex from 'katex'
 import { scanMath, excludedRanges, frontmatterRange, type Excluded } from './math-scan'
+import { inlineMathClickOffset } from './inline-math-click'
 import { renderMermaid, attachDiagramZoom, detachDiagramZoom, isDiagramZoomed } from './mermaid-bridge'
 import { sanitizeHTML, cleanStyle } from './html-sanitize'
 import { footnoteDefinitions, footnoteNumbers, FOOTNOTE_REF_RE } from './footnotes'
@@ -364,7 +365,7 @@ function isBlockActive(state: EditorState, from: number, to: number): boolean {
  * 行内公式用 Widget 覆盖原文，而不是把 `$x$` 藏起来再插一段渲染结果：
  * 两者视觉相同，覆盖的写法不必分别处理两个定界符的位置。
  *
- * 光标所在行照旧退回原文，用户可以就地改。渲染失败时显示 `$...$` 源码。
+ * 行内公式只有选区严格落在节点内部才展开；边界和跨节点选区保持原子渲染。
  *
  * widget 上带着源码区间（`data-math-from` / `data-math-to`）：点它要能就地编辑，
  * 而 DOM 里除了这里没有别的地方知道这段公式在缓冲区里的位置。
@@ -381,6 +382,10 @@ class MathWidget extends WidgetType {
 
   eq(other: MathWidget): boolean {
     return other.code === this.code && other.block === this.block && other.from === this.from && other.to === this.to
+  }
+
+  ignoreEvent(event: Event): boolean {
+    return this.block || event.type !== 'mousedown'
   }
 
   toDOM(): HTMLElement {
@@ -430,29 +435,119 @@ function listDepth(node: SyntaxNode): number {
   return depth
 }
 
-/** 扫描公式并压入装饰。 */
+/** 严格内部：触碰外边界或跨过节点的选区都不展开。 */
+function isInlineMathActive(state: EditorState, from: number, to: number): boolean {
+  return !exportingCleanly(state) && state.selection.ranges.some(sel => sel.from > from && sel.to < to)
+}
+
+/** 扫描公式并压入装饰。源码区间同时供导航与 atomicRanges 使用。 */
 function collectMath(state: EditorState, ranges: DecorationRange[]): void {
   const text = state.doc.toString()
-
-  // 排除区：属性区、代码块、行内代码、行内 HTML。
-  // 这些地方里的 `$x$` 不该渲染成公式——代码就是代码，Obsidian 也是这么处理的。
   const excluded: Excluded[] = excludedRanges(text, syntaxTree(state))
-
-  for (const range of scanMath(text, excluded)) {
-    // 块公式：光标落进去就退回源码，就地改（行内公式的判据见上，保持不露）
-    if (isActiveLine(state, range.from) || (range.block && isBlockActive(state, range.from, range.to))) {
-      const delim = range.block ? 2 : 1
+  const math = scanMath(text, excluded)
+  if (!math.length) return
+  // 外层格式可以恰好只包住公式。它不是公式内部的 Markdown 装饰；边界要包住
+  // 整个替换 widget，也要排在同范围的源码 mark 外面，复制时才能自然继承样式。
+  const inlineEnds = new Map(math.filter(range => !range.block).map(range => [range.from, range.to]))
+  const enclosingMarks = new Set<DecorationRange>()
+  for (const item of ranges) {
+    if (!item.deco.point && inlineEnds.get(item.from) === item.to) {
+      item.deco = MARK({ ...item.deco.spec, inclusive: true })
+      enclosingMarks.add(item)
+    }
+  }
+  for (const range of math) {
+    const delim = text.startsWith('$$', range.from) || text[range.from] === '\\' ? 2 : 1
+    const inlineMath = range.block ? undefined : { delim }
+    if (!exportingCleanly(state) && (range.block ? isBlockActive(state, range.from, range.to)
+        : isInlineMathActive(state, range.from, range.to))) {
+      // 公式源码不能再被 Markdown 的强调、链接等行内装饰遮住。
+      if (!range.block) for (let i = ranges.length - 1; i >= 0; i--) {
+        const item = ranges[i]
+        if (item.from >= range.from && item.to <= range.to && item.from !== item.to &&
+            !enclosingMarks.has(item) && !item.deco.spec.class?.includes('cm-md-table-')) ranges.splice(i, 1)
+      }
+      if (!range.block) ranges.push({ from: range.from, to: range.to, deco: MARK({ class: 'cm-md-math-source', inclusive: true, inlineMath }) })
       ranges.push({ from: range.from, to: range.from + delim, deco: MARK({ class: 'cm-md-marker' }) })
       ranges.push({ from: range.to - delim, to: range.to, deco: MARK({ class: 'cm-md-marker' }) })
-      continue
+    } else {
+      ranges.push({ from: range.from, to: range.to,
+        deco: Decoration.replace({ widget: new MathWidget(range.code, range.block, range.from, range.to), inlineMath }) })
     }
-    ranges.push({
-      from: range.from,
-      to: range.to,
-      deco: Decoration.replace({ widget: new MathWidget(range.code, range.block, range.from, range.to) }),
-    })
+  }
+  if (enclosingMarks.size) {
+    // CM 把同范围、同 startSide 的后一个 mark 放外层。源码 wrapper 必须在格式
+    // 里面，否则清洁复制读取源码 textContent 时会越过被包在里面的颜色/链接。
+    let kept = 0
+    for (const item of ranges) if (!enclosingMarks.has(item)) ranges[kept++] = item
+    ranges.length = kept
+    for (const item of enclosingMarks) ranges.push(item)
   }
 }
+
+/** 只查当前位置附近已计算的装饰，不为每个方向键重新扫描文档。 */
+function enterInlineMath(view: EditorView, direction: -1 | 1): boolean {
+  if (view.composing || !view.state.selection.main.empty || view.state.selection.ranges.length !== 1 || exportingCleanly(view.state)) return false
+  const head = view.state.selection.main.head
+  let anchor: number | undefined
+  view.state.field(livePreviewField).between(head, head, (from, to, value) => {
+    if (!value.spec.inlineMath || !(value.spec.widget instanceof MathWidget)) return
+    if (direction === 1 && from === head) anchor = from + value.spec.inlineMath.delim
+    if (direction === -1 && to === head) anchor = to - value.spec.inlineMath.delim
+  })
+  if (anchor === undefined) return false
+  view.dispatch({ selection: EditorSelection.create([EditorSelection.cursor(anchor, direction)]), scrollIntoView: true, userEvent: 'select' })
+  return true
+}
+
+const inlineMathNavigation = [
+  // 在表格、列表自己的导航前处理公式边界，其余按键交还原来的规则。
+  Prec.highest(keymap.of([
+    { key: 'ArrowRight', run: view => enterInlineMath(view, 1) },
+    { key: 'ArrowLeft', run: view => enterInlineMath(view, -1) },
+    { key: 'Delete', run: view => enterInlineMath(view, 1) },
+    { key: 'Backspace', run: view => enterInlineMath(view, -1) },
+  ])),
+  Prec.highest(EditorView.domEventHandlers({
+    mousedown(event, view) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || view.composing) return false
+      const widget = (event.target as HTMLElement).closest<HTMLElement>('.cm-md-math-inline')
+      if (!widget || exportingCleanly(view.state)) return false
+      const from = Number(widget.dataset.sourceFrom), to = Number(widget.dataset.sourceTo)
+      const rect = widget.getBoundingClientRect()
+      if (event.clientX < rect.left || event.clientX > rect.right) return false
+      const delim = view.state.sliceDoc(from, from + 2) === '$$' || view.state.sliceDoc(from, from + 1) === '\\' ? 2 : 1
+      const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+      let anchor = from + delim + Math.round(ratio * (to - from - 2 * delim))
+      if (!event.shiftKey) {
+        const contentFrom = from + delim
+        const offset = inlineMathClickOffset(widget, event.target as Element, view.state.sliceDoc(contentFrom, to - delim),
+          event.clientX, event.clientY, anchor - contentFrom)
+        if (offset !== undefined) anchor = contentFrom + offset
+      }
+      // 不把 UTF-16 代理对劈开。
+      if (anchor > from + delim && /[\uDC00-\uDFFF]/.test(view.state.sliceDoc(anchor, anchor + 1))) anchor--
+      event.preventDefault()
+      const selection = event.shiftKey
+        ? EditorSelection.single(view.state.selection.main.anchor, ratio < 0.5 ? from : to)
+        : EditorSelection.create([EditorSelection.cursor(anchor)])
+      view.dispatch({ selection, userEvent: 'select.pointer' })
+      view.contentDOM.focus({ preventScroll: true })
+      return true
+    },
+  })),
+]
+
+const inlineMathAtoms = new WeakMap<DecorationSet, DecorationSet>()
+const inlineMathAtomicRanges = EditorView.atomicRanges.of(view => {
+  const decorations = view.state.field(livePreviewField)
+  let atoms = inlineMathAtoms.get(decorations)
+  if (!atoms) {
+    atoms = decorations.update({ filter: (_from, _to, value) => !!value.spec.inlineMath && value.spec.widget instanceof MathWidget })
+    inlineMathAtoms.set(decorations, atoms)
+  }
+  return atoms
+})
 
 // ─── 高亮 `==文字==` ─────────────────────────────────────────────────────────
 //
@@ -1394,5 +1489,7 @@ export const livePreview: Extension = [
   cleanExportField,
   documentFileUrlField,
   livePreviewField,
+  inlineMathAtomicRanges,
+  inlineMathNavigation,
   parseRefresh,
 ]

@@ -23,6 +23,10 @@ import { stopVerifyApp, verifyWorkdir } from './verify-workdir.mjs'
 const APP = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 assertBuildFresh()
 const { dir: WORK, udd } = verifyWorkdir('features')
+const launcher = process.env.COLAMD_VERIFY_VISIBLE === '1' ? join(WORK, 'launch.cjs') : 'scripts/offscreen-window.cjs'
+if (process.env.COLAMD_VERIFY_VISIBLE === '1') {
+  writeFileSync(launcher, `const {app}=require('electron');const {join}=require('path');const {mkdirSync}=require('fs');const profile=process.argv.find(argument=>argument.startsWith('--user-data-dir=')).slice('--user-data-dir='.length);const verificationHome=join(profile,'isolated-home');mkdirSync(verificationHome,{recursive:true});app.setPath('home',verificationHome);app.on('browser-window-created',(_event,window)=>window.webContents.setBackgroundThrottling(false));require(${JSON.stringify(join(APP, 'dist/main/index.js'))})`)
+}
 
 /** 1×1 透明 PNG，用来验证本地图片能不能画出来。 */
 const PIXEL_PNG = Buffer.from(
@@ -866,7 +870,7 @@ async function checkCodeCursor(renderer) {
 async function checkCheatsheet() {
   const source = join(APP, 'resources', 'templates', 'cheatsheet.md')
   const port = 9990 + Math.floor(Math.random() * 9)
-  const child = spawn('npx', ['electron', 'scripts/offscreen-window.cjs', source, `--user-data-dir=${join(WORK, 'udd-cheatsheet')}`,
+  const child = spawn('npx', ['electron', launcher, source, `--user-data-dir=${join(WORK, 'udd-cheatsheet')}`,
     `--remote-debugging-port=${port}`
   ], { cwd: APP, stdio: 'ignore', detached: true })
 
@@ -1138,10 +1142,11 @@ function main() {
     writeFileSync(join(WORK, 'pixel.png'), PIXEL_PNG)
 
     const port = 9960 + Math.floor(Math.random() * 30)
-    const child = spawn('npx', ['electron', 'scripts/offscreen-window.cjs', source, `--user-data-dir=${udd}`,
+    const child = spawn('npx', ['electron', launcher, source, `--user-data-dir=${udd}`,
       `--remote-debugging-port=${port}`
     ], { cwd: APP, stdio: 'ignore', detached: true })
 
+    let fullChecksComplete = false
     try {
       const page = await waitTarget(port, (t) => t.type === 'page' && /index\.html/.test(t.url))
       const renderer = await connect(page.webSocketDebuggerUrl)
@@ -1697,8 +1702,6 @@ function main() {
       // 正文之间。不写成断言，是因为它需要向编辑器里插字符再撤销，而夹具里的
       // 那几行在视口外时 clickLine 定位不到，稳定性不如人看一遍。
 
-      await checkCheatsheet()
-
       // 列表缩进：Tab 把这一行缩进一级，Shift+Tab 退回来。
       // 判据分两层：光标在行上时看**源码文本**（多/少两个空格），移开光标后看**渲染层级**
       // （`cm-md-li-1` 有没有出现），后者证明这不只是空格变多了。
@@ -1847,11 +1850,18 @@ function main() {
 
       await checkListTableExport(renderer)
       await checkSelectionVisibility(renderer)
-      reportChecks()
+      fullChecksComplete = true
     } finally {
       stopVerifyApp(udd)
       await sleep(300)
-      rmSync(WORK, { recursive: true, force: true })
+      try {
+        if (fullChecksComplete) {
+          await checkCheatsheet()
+          reportChecks()
+        }
+      } finally {
+        rmSync(WORK, { recursive: true, force: true })
+      }
     }
   })()
 }
