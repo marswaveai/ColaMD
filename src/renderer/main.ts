@@ -1582,6 +1582,88 @@ function renderFileList(files: import('../preload/index').SiblingFile[]): void {
   }
 }
 
+function showRenameDialog(path: string): void {
+  if (document.querySelector('.rename-dialog')) return
+  const dialog = document.createElement('dialog')
+  dialog.className = 'rename-dialog'
+  const form = document.createElement('form')
+  const label = document.createElement('label')
+  label.textContent = isChinese() ? '重命名文件' : 'Rename file'
+  label.htmlFor = 'rename-file-name'
+  const input = document.createElement('input')
+  input.id = 'rename-file-name'
+  input.type = 'text'
+  input.value = path.split(/[\\/]/).pop() ?? ''
+  input.required = true
+  input.autocomplete = 'off'
+  input.spellcheck = false
+  const error = document.createElement('p')
+  error.className = 'rename-error'
+  error.setAttribute('role', 'alert')
+  const actions = document.createElement('div')
+  actions.className = 'rename-actions'
+  const cancel = document.createElement('button')
+  cancel.type = 'button'
+  cancel.textContent = isChinese() ? '取消' : 'Cancel'
+  const submit = document.createElement('button')
+  submit.type = 'submit'
+  submit.textContent = isChinese() ? '重命名' : 'Rename'
+  actions.append(cancel, submit)
+  form.append(label, input, error, actions)
+  dialog.append(form)
+  document.body.append(dialog)
+  dialog.setAttribute('aria-labelledby', 'rename-file-label')
+  label.id = 'rename-file-label'
+  dialog.addEventListener('close', () => dialog.remove())
+  cancel.addEventListener('click', () => dialog.close())
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault()
+    if (submit.disabled) return
+    submit.disabled = true
+    input.readOnly = true
+    cancel.disabled = true
+    let failure = ''
+    try {
+      await saveQueue
+      if (path === currentFilePath && dirty && !await saveCurrent()) {
+        error.textContent = isChinese() ? '请先处理当前文档的保存问题。' : 'Please resolve the pending save first.'
+        return
+      }
+      await enqueueSave(async () => {
+        const result = await window.electronAPI.renameFile(path, input.value)
+        failure = result.error ?? ''
+        return result.path ?? null
+      })
+      if (!failure) {
+        dialog.close()
+        return
+      }
+      error.textContent = failure === 'EEXIST'
+        ? (isChinese() ? '已有同名文件，请换一个名称。' : 'A file with this name already exists.')
+        : failure === 'EINVAL'
+          ? (isChinese() ? '文件名不能包含路径或特殊字符，请保留原扩展名。' : 'Use a valid filename and keep the original extension.')
+          : failure === 'ENOENT'
+            ? (isChinese() ? '文件已被移动或删除，请刷新后重试。' : 'The file was moved or deleted. Refresh and try again.')
+            : (isChinese() ? '无法重命名，请检查文件权限及所在磁盘是否支持此操作。' : 'Cannot rename. Check file permissions and filesystem support.')
+    } catch {
+      error.textContent = isChinese() ? '重命名失败，原文件已保留。' : 'Rename failed. The original file was preserved.'
+    } finally {
+      submit.disabled = false
+      input.readOnly = false
+      cancel.disabled = false
+      if (dialog.isConnected) input.focus()
+    }
+  })
+  // Escape may cancel before a write starts, but never dismiss an operation
+  // already being committed by the main process.
+  dialog.addEventListener('cancel', (event) => { if (submit.disabled) event.preventDefault() })
+  hideTip()
+  dialog.showModal()
+  input.focus()
+  const dot = input.value.lastIndexOf('.')
+  input.setSelectionRange(0, dot > 0 ? dot : input.value.length)
+}
+
 async function refreshSiblings(): Promise<void> {
   const files = await window.electronAPI.listSiblings()
   if (files) renderFileList(files)
@@ -1992,6 +2074,21 @@ async function init(): Promise<void> {
   // by sections passed along the way (review on #68).
   onEditorJumpPhase((phase) => (phase === 'start' ? beginOutlineJump() : endOutlineJump()))
 
+  api.onRequestRenameFile(showRenameDialog)
+  api.onFileRenamed(({ oldPath, newPath, fileUrl }) => {
+    for (const tab of tabs) {
+      if (tab.filePath === oldPath) tab.filePath = newPath
+    }
+    if (currentFilePath === oldPath) {
+      currentFilePath = newPath
+      applyDocumentFileUrl(fileUrl)
+      updateFileTitle()
+      if (dirty) scheduleAutosave()
+    }
+    panelChildren.clear()
+    renderTabBar()
+    void refreshSiblings()
+  })
   api.onSiblingsChanged((files) => {
     // A watcher refresh can change any directory that is open, so drop the
     // cached levels and let the expanded ones read themselves again.

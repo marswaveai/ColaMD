@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'url'
 import { appendFile, readFile, writeFile, readdir, copyFile, mkdir, stat } from 'fs/promises'
 import { watch, FSWatcher, existsSync, readdirSync, readFileSync, writeFileSync, statSync } from 'fs'
 import { resolveMarkdownLink } from './markdown-link'
+import { renameDocument } from './rename-file'
 
 const startupStartedAt = performance.now()
 const startupTraceEnabled = process.env.COLAMD_STARTUP_TRACE === '1'
@@ -916,6 +917,10 @@ ipcMain.handle('entry-context-menu', (event, targetPath: unknown, kind: unknown)
         win.webContents.send('open-in-new-tab', targetPath)
       }
     })
+    items.push({
+      label: zh ? '重命名…' : 'Rename…',
+      click: () => win.webContents.send('request-rename-file', targetPath)
+    })
     items.push({ type: 'separator' })
   }
   items.push({ label: zh ? '复制路径' : 'Copy path', click: () => copyToClipboard(targetPath) })
@@ -927,6 +932,44 @@ ipcMain.handle('entry-context-menu', (event, targetPath: unknown, kind: unknown)
     click: () => shell.showItemInFolder(targetPath)
   })
   Menu.buildFromTemplate(items).popup({ window: win })
+})
+
+ipcMain.handle('rename-file', (event, source: unknown, name: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof source !== 'string' || typeof name !== 'string') return { error: 'EINVAL' }
+  // Insert one barrier into every window's write queue. An autosave captured
+  // before this rename must finish first; a stale one queued after it must fail
+  // its existing sourcePath check instead of recreating the old filename.
+  const states = BrowserWindow.getAllWindows().map((window) => ({ window, state: getState(window) }))
+  const pending = states.map(({ state }) => state.writeQueue)
+  const operation = Promise.all(pending).then(async () => {
+    try {
+      const target = await renameDocument(source, name)
+      if (target === source) return { path: target }
+      for (const { window, state } of states) {
+        if (window.isDestroyed()) continue
+        state.tabFiles = state.tabFiles.map((path) => path === source ? target : path)
+        state.pendingTabFiles = state.pendingTabFiles.map((path) => path === source ? target : path)
+        if (state.filePath === source) {
+          if (state.debounceTimer) clearTimeout(state.debounceTimer)
+          if (state.siblingsTimer) clearTimeout(state.siblingsTimer)
+          state.filePath = target
+          watchFile(window, state)
+          updateTitle(window)
+        }
+        window.webContents.send('file-renamed', { oldPath: source, newPath: target, fileUrl: pathToFileURL(target).href })
+      }
+      recentStore.recent = [...new Set(recentStore.recent.map((path) => path === source ? target : path))]
+      persistRecentStore()
+      if (process.platform === 'darwin') app.addRecentDocument(target)
+      else buildMenu()
+      return { path: target }
+    } catch (error) {
+      return { error: (error as NodeJS.ErrnoException).code ?? 'UNKNOWN' }
+    }
+  })
+  for (const { state } of states) state.writeQueue = operation.then(() => undefined, () => undefined)
+  return operation
 })
 
 ipcMain.handle('reveal-file', (event) => {

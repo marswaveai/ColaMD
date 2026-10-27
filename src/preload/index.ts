@@ -30,6 +30,9 @@ export interface ElectronAPI {
   getFileManagerName: () => Promise<FileManagerName>
   revealFile: () => Promise<boolean>
   showEntryContextMenu: (path: string, kind: 'file' | 'directory') => Promise<void>
+  renameFile: (path: string, name: string) => Promise<{ path?: string; error?: string }>
+  onRequestRenameFile: (callback: (path: string) => void) => void
+  onFileRenamed: (callback: (data: { oldPath: string; newPath: string; fileUrl: string }) => void) => void
   showTabContextMenu: (payload: { tabId: string; filePath: string | null; canCloseOthers: boolean; canCloseRight: boolean }) => Promise<void>
   onTabMenuAction: (callback: (payload: { action: string; tabId: string }) => void) => void
   listSiblings: () => Promise<SiblingFile[] | null>
@@ -111,6 +114,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFileManagerName: () => ipcRenderer.invoke('get-file-manager-name') as Promise<FileManagerName>,
   revealFile: () => ipcRenderer.invoke('reveal-file') as Promise<boolean>,
   showEntryContextMenu: (path: string, kind: 'file' | 'directory') => ipcRenderer.invoke('entry-context-menu', path, kind) as Promise<void>,
+  renameFile: (path: string, name: string) => ipcRenderer.invoke('rename-file', path, name),
+  onRequestRenameFile: (callback: (path: string) => void) => {
+    ipcRenderer.on('request-rename-file', (_event, path: string) => callback(path))
+  },
+  onFileRenamed: (callback: (data: { oldPath: string; newPath: string; fileUrl: string }) => void) => {
+    ipcRenderer.on('file-renamed', (_event, data) => callback(data))
+  },
   showTabContextMenu: (payload: { tabId: string; filePath: string | null; canCloseOthers: boolean; canCloseRight: boolean }) => ipcRenderer.invoke('tab-context-menu', payload) as Promise<void>,
   onTabMenuAction: (callback: (payload: { action: string; tabId: string }) => void) => {
     ipcRenderer.on('tab-menu-action', (_event, payload: { action: string; tabId: string }) => callback(payload))
