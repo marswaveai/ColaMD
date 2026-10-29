@@ -95,6 +95,8 @@ function fixture() {
     // #161：格子里的单词含下划线时，两个相邻单词之间的那一对 `_` 曾经被当斜体吃掉。
     '| 甲二 | local_upload / external_api / excel_upload |',
     '| *真斜体* | snake_case_name |',
+    // #197：格子里的行内公式要画成公式，不能留下字面的美元符号。
+    '| 甲三 | Bansal 等的 $\\delta$ 窗口 |',
     '',
     '行内公式 $a^2+b^2=c^2$ 与价格 $349。',
     '',
@@ -273,6 +275,9 @@ const MEASURE = `(() => {
       imgs: q('.cm-md-table-widget td img').length,
       // #161：只有真正的星号斜体该成斜体，词中下划线不能
       ems: q('.cm-md-table-widget em').map((e) => e.textContent),
+      // #197：格子里的行内公式要画成公式，不能留下字面的美元符号
+      math: q('.cm-md-table-widget td .katex').length,
+      mathErrors: q('.cm-md-table-widget td .cm-md-math-error').length,
       cellTexts: q('.cm-md-table-widget td').map((td) => td.textContent)
     },
     quote: {
@@ -1209,6 +1214,11 @@ function main() {
         `表格=${m.table.tables} 真 table=${m.table.realTables} cells=${m.table.cells}`)
       check('表格格子里的 <br/> 画成换行', m.table.brs >= 1, `<br> 个数=${m.table.brs}`)
       check('表格格子里的图片画出来', m.table.imgs >= 1, `格子里 img 个数=${m.table.imgs}`)
+      // #197：格子里的 `$\delta$` 要画成公式，不能把美元符号留在字上
+      check('表格格子里的公式渲染（#197）',
+        m.table.math >= 1 && m.table.mathErrors === 0
+          && !(m.table.cellTexts ?? []).some((t) => t.includes('$')),
+        `格子 katex=${m.table.math} 失败=${m.table.mathErrors} 格子=${JSON.stringify((m.table.cellTexts ?? []).filter((t) => t.includes('$')))}`)
       // #161：CommonMark 里 `_` 不能跨在词中间生效。`local_upload / external_api`
       // 是两个普通单词，不能被读成一句斜体，连下划线都不能丢。
       const ems = m.table.ems ?? []
