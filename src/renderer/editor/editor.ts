@@ -424,6 +424,16 @@ function selectionRange(view: EditorView, ranges: readonly SelectionRange[]): Ra
   return range
 }
 
+/**
+ * 富文本口味要先把整篇渲染出来，文档大到一定程度就不值得了。
+ *
+ * 渲染整篇是把 CodeMirror 的视口开关关掉、让它给**每一行**建 DOM：小文档 35ms 上下，
+ * 接近 1MB 的文档要好几秒，中间整个界面是冻的（#201 报的「选一段复制，机器直接卡死」，
+ * 而且大文档更容易）。超过这个字符数就只给纯文本口味：markdown 原文一个字节都不少，
+ * 粘到 Typora、聊天框里照样能接着编辑，只是粘到 Word 里没有排版。
+ */
+const MAX_RICH_COPY_CHARS = 200_000
+
 function selectionHTML(view: EditorView, ranges: readonly SelectionRange[]): string {
   return selectionHTMLFrom(selectionRange(view, ranges).cloneContents())
 }
@@ -484,6 +494,8 @@ function setupRichCopy(root: HTMLElement): void {
       if (html) event.clipboardData?.setData('text/html', html)
       return
     }
+    // 文档太大就不追富文本口味了：纯文本上面已经放好了，返回就是它。
+    if (view.state.doc.length > MAX_RICH_COPY_CHARS) return
     // 选区伸到了还没渲染的行上。CodeMirror 只为视口建 DOM，所以此刻拿不到完整的 HTML。
     // 富文本口味只能在事件之后补：先同步给出纯文本口味（它来自文档本身，总是完整的），
     // 再把整篇渲染出来、取 HTML，两个口味一起写回剪贴板。

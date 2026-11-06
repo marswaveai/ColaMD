@@ -232,9 +232,20 @@ function renderGroup(kind: LineKind, lines: HTMLElement[], ownerDepth = -1): str
   if (kind === 'table') {
     const table = lines[0].querySelector<HTMLElement>('.cm-md-table-widget')
     if (!table) return ''
-    // 表格本身是语义标签，只有那个类名是编辑器自己的
+    // 表格本身是语义标签，编辑器自己的东西只有类名和定位属性。
+    // 单元格里的行内公式外面还套着一层 `<span class="cm-md-math">`，整棵克隆会
+    // 把它带出去（#198 合进来之后暴露的），所以先拆外壳再剥类名。
     const clone = table.cloneNode(true) as HTMLElement
-    clone.classList.remove('cm-md-table-widget')
+    for (const shell of Array.from(clone.querySelectorAll<HTMLElement>('.cm-md-math, .cm-md-mermaid-ready'))) {
+      shell.replaceWith(...Array.from(shell.childNodes))
+    }
+    for (const element of [clone, ...Array.from(clone.querySelectorAll<HTMLElement>('*'))]) {
+      element.classList.remove(...Array.from(element.classList).filter((name) => name.startsWith('cm-md-')))
+      element.removeAttribute('contenteditable')
+      for (const attribute of ['data-source-from', 'data-source-to', 'data-list-path', 'data-line']) {
+        element.removeAttribute(attribute)
+      }
+    }
     return clone.outerHTML
   }
   if (kind === 'hr') return '<hr>'
