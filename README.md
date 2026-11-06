@@ -73,6 +73,8 @@ ColaMD does not ask you to change your habits. It works well alongside Obsidian,
 | Windows  | `.exe` |
 | Linux    | `.AppImage` / `.deb` |
 
+On macOS the community-maintained Homebrew cask follows each release: `brew install --cask colamd`.
+
 ## Roadmap
 
 ColaMD will keep growing as a focused, free Markdown editor:
