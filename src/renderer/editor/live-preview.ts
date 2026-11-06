@@ -1080,6 +1080,12 @@ function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Ran
         break
       }
       case 'ListMark': {
+        // 缩进只由一处分派：样式表按层级给左内边距（cm-md-li-N），所以源码里那几个
+        // 空格在渲染模式下要藏起来。留着的话，排版是「CSS 缩进 + 源码空格」两份叠在
+        // 一起：实测二级 56px、三级 88px，比旧引擎（每层 24px）多出三成，越深越夸张
+        // （2026-11-07 橘子：「我不喜欢列表缩进那么多的排版…tab 之后，也太多了」）。
+        const lead = node.from - state.doc.lineAt(node.from).from
+        if (lead > 0) ranges.push({ from: node.from - lead, to: node.from, deco: hide(node.from - lead, node.from) })
         const raw = state.doc.sliceString(node.from, node.to).trim()
         // 待办项的圆点要去掉：它已经有复选框了，两个标记并排就是「• ☐ 文案」。
         const after = state.doc.sliceString(node.to, node.to + 4)

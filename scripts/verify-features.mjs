@@ -676,6 +676,17 @@ async function lineText(renderer, fragment) {
   })()`)
 }
 
+/**
+ * 文档里的那一行原文（含行首缩进）。
+ *
+ * 2026-11-07 起，列表行行首那几个空格在渲染模式下被藏起来了（缩进交给 CSS，不然
+ * 「CSS 缩进 + 源码空格」两份叠在一起，越深越夸张），所以量缩进不能再读 DOM 文字。
+ */
+async function docLine(renderer, fragment) {
+  const all = await evaluate(renderer, `document.querySelector('.cm-content').cmTile.root.view.state.doc.toString()`)
+  return String(all).split('\n').find((line) => line.includes(fragment)) ?? null
+}
+
 async function lineClass(renderer, fragment) {
   return await evaluate(renderer, `(() => {
     const line = [...document.querySelectorAll('#editor .cm-line')].find((l) => l.textContent.includes(${JSON.stringify(fragment)}))
@@ -1851,9 +1862,9 @@ function main() {
       await clickLine(renderer, '无序项二')
       // 光标在行上时看到的是**源码**（`- 无序项二`）；移开光标后这一行会被画成圆点，
       // 所以基准必须在点进去之后再取。
-      const beforeIndent = await lineText(renderer, '无序项二')
+      const beforeIndent = await docLine(renderer, '无序项二')
       await pressKey(renderer, 'Tab', 'Tab', 9)
-      const afterIndent = await lineText(renderer, '无序项二')
+      const afterIndent = await docLine(renderer, '无序项二')
       await clickLine(renderer, '无序项一')
       const nestedClass = await lineClass(renderer, '无序项二')
       check('Tab 缩进列表项',
@@ -1863,7 +1874,7 @@ function main() {
 
       await clickLine(renderer, '无序项二')
       await pressKey(renderer, 'Tab', 'Tab', 9, 8)
-      const backIndent = await lineText(renderer, '无序项二')
+      const backIndent = await docLine(renderer, '无序项二')
       await clickLine(renderer, '无序项一')
       const backClass = await lineClass(renderer, '无序项二')
       check('Shift+Tab 退回一级',
@@ -1881,15 +1892,15 @@ function main() {
       // 用「起点为五/六」这一组：外层起始编号是 5，缩进再退回去正好原地往返，
       // 不会把别的断言依赖的文本改掉。
       await clickLine(renderer, '起点为六')
-      const orderedBefore = await lineText(renderer, '起点为六')
+      const orderedBefore = await docLine(renderer, '起点为六')
       await pressKey(renderer, 'Tab', 'Tab', 9)
-      const orderedNested = await lineText(renderer, '起点为六')
+      const orderedNested = await docLine(renderer, '起点为六')
       const orderedClass = await lineClass(renderer, '起点为六')
       check('缩进进子列表时序号从 1 重新数',
         orderedNested === '   1. 起点为六' && (orderedClass ?? '').includes('cm-md-li-1'),
         `缩进前=${JSON.stringify(orderedBefore)} 缩进后=${JSON.stringify(orderedNested)}`)
       await pressKey(renderer, 'Tab', 'Tab', 9, 8)
-      const orderedBack = await lineText(renderer, '起点为六')
+      const orderedBack = await docLine(renderer, '起点为六')
       await clickLine(renderer, '起点为五')
       check('退回一级后序号跟着外层排好',
         orderedBack === orderedBefore,
