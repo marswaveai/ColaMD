@@ -31,7 +31,8 @@
     "verify:source-mode": "node scripts/verify-source-mode.mjs",
     "verify:image-export": "node scripts/verify-image-export.mjs",
     "verify:export-pdf": "node scripts/verify-export-pdf.mjs",
-    "verify:themes": "node scripts/verify-themes.mjs"
+    "verify:themes": "node scripts/verify-themes.mjs",
+    "verify:docx": "node scripts/verify-docx.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
