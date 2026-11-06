@@ -298,6 +298,33 @@ const MEASURE = `(() => {
       textColor: textColorOf('引用文字')
     },
     hr: { count: q('.cm-md-hr').length },
+    // #199：块级 widget 的上下外边距不能占位。CodeMirror 量块高时用的是
+    // getBoundingClientRect()，外边距不在 rect 里，但浏览器排版时又真占着，
+    // 于是 widget 下面每一行的实际位置都比 CodeMirror 记的偏低，点正文就落到下一行。
+    layout: (() => {
+      const view = document.querySelector('#editor .cm-content').cmTile.root.view
+      const content = view.contentDOM
+      const base = content.getBoundingClientRect().top + parseFloat(getComputedStyle(content).paddingTop) - view.scrollDOM.scrollTop
+      const rows = [...content.querySelectorAll('.cm-md-table-widget, .cm-md-mermaid, .cm-md-math-block, .cm-md-html-block')].map((el) => {
+        const from = Number(el.dataset.sourceFrom)
+        const style = getComputedStyle(el)
+        // 量它所在的那一行：屏幕上这一行在哪、多高，跟 CodeMirror 记的必须一样
+        const line = el.closest('.cm-line').getBoundingClientRect()
+        const block = Number.isFinite(from) ? view.lineBlockAt(from) : null
+        const round = (v) => Math.round(v * 10) / 10
+        return {
+          cls: el.className.split(' ')[0],
+          gap: block ? round(line.top - base - block.top) : null,
+          heightGap: block ? round(line.height - block.height) : null,
+          margin: style.marginTop + '/' + style.marginBottom,
+        }
+      })
+      return {
+        count: rows.length,
+        worst: rows.reduce((max, r) => Math.max(max, Math.abs(r.gap ?? 0), Math.abs(r.heightGap ?? 0)), 0),
+        rows,
+      }
+    })(),
     math: { katex: q('.katex').length, block: q('.cm-md-math-block').length, error: q('.cm-md-math-error').length },
     mermaid: { ready: q('.cm-md-mermaid-ready').length, svg: q('.cm-md-mermaid svg').length, failed: q('.cm-md-mermaid-failed').length },
     code: (() => {
@@ -1419,6 +1446,11 @@ function main() {
         m.exportHtml.code && m.exportHtml.table && m.exportHtml.quote && m.exportHtml.heading,
         `strong=${m.exportHtml.strong} em=${m.exportHtml.em} a=${m.exportHtml.anchor} ul=${m.exportHtml.list} pre=${m.exportHtml.code} table=${m.exportHtml.table} quote=${m.exportHtml.quote} h1=${m.exportHtml.heading}`)
       check('导出的 HTML 代码块不残留收尾反引号', m.exportHtml.codeFenceFree === true, 'pre code 里无 ``` 残留')
+      // #199：块级 widget 不能用上下外边距占位，且屏幕上每一行的位置必须等于 CodeMirror
+      // 记的位置，否则鼠标点正文时光标落到下一行。
+      check('块级 widget 的占位与光标定位一致（#199）',
+        m.layout.count >= 2 && m.layout.worst < 1 && m.layout.rows.every((r) => r.margin === '0px/0px'),
+        `widget=${m.layout.count} 最大偏差=${m.layout.worst}px ${m.layout.rows.map((r) => `${r.cls}:位置差=${r.gap}:高度差=${r.heightGap}`).join(' ')}`)
       check('导出的 HTML 不带编辑器结构',
         m.exportHtml.cmClass === false && m.exportHtml.cmLine === false && m.exportHtml.frontmatter === false,
         `cm-md 类名残留=${m.exportHtml.cmClass}[${m.exportHtml.cmClassNames}] cm-line 残留=${m.exportHtml.cmLine} 属性区残留=${m.exportHtml.frontmatter}`)

@@ -13,7 +13,7 @@ import { EditorState, RangeSet } from '@codemirror/state'
 import { EditorView, drawSelection, dropCursor, highlightSpecialChars, rectangularSelection, crosshairCursor, Decoration } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { undo, redo } from '@codemirror/commands'
-import { livePreview, setEditorFocus } from './live-preview'
+import { livePreview, setEditorFocus, setMeasureHost } from './live-preview'
 import { listInput } from './list-input'
 import { searchHighlightField } from './search-highlight'
 import { stateExtensions, editableCompartment, bodyStart } from './state'
@@ -141,6 +141,8 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     state: EditorState.create({ doc: options.doc ?? '', extensions: extension }),
     parent,
   })
+  // 异步画完的图会改块高，widget 拿不到 view，由这里记一份（见 live-preview 的 remeasureAfterDraw）
+  setMeasureHost(view)
 
   // 创建时就已经带焦点的编辑器不会触发 focus 事件（它一直是焦点），这里补一次初始值。
   // 不做这一步，用户一打开文件就打字，标记却不会显形。
@@ -177,6 +179,7 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     redo: () => { redo(view) },
     getView: () => view,
     destroy(): void {
+      setMeasureHost(null)
       view.destroy()
       handle = null
     },

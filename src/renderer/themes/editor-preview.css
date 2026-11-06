@@ -311,10 +311,15 @@
   font-size: 0.875em;
 }
 
+/* 
+ * 上下留白用 padding，不能用 margin。块级 widget 的高度是 CodeMirror 按
+ * getBoundingClientRect() 量的，外边距不算在 rect 里，可浏览器排版时又真的占位置，
+ * 于是它往后每一行的坐标都比 CodeMirror 记的偏低一截，点正文时光标落到下一行
+ * （#199，两张表叠起来就够错一行）。 */
 .cm-content .cm-md-table-widget {
   border-collapse: collapse;
   width: 100%;
-  margin: 0.25em 0;
+  padding: 0.25em 0;
 }
 
 .cm-content .cm-md-table-widget th,
@@ -415,8 +420,13 @@
  * 文件里的 HTML 照原样画出来（先过 html-sanitize 的闸）。
  * 自己的外观交给元素自身的属性，这里只给块级留一点呼吸。
  */
+/*
+ * 上下留白用 padding，不能用 margin（#199）。块级 widget 的高度是 CodeMirror 按
+ * getBoundingClientRect() 量的，外边距不算在 rect 里，浏览器排版时又真占位置，于是
+ * 它下面每一行的坐标都比 CodeMirror 记的偏低一截，点正文时光标落到下一行。
+ */
 .cm-content .cm-md-html-block {
-  margin: 0.4em 0;
+  padding: 0.4em 0;
 }
 
 .cm-content .cm-md-html-inline {
@@ -476,8 +486,7 @@
 .cm-content .cm-md-math-block {
   display: block;
   text-align: center;
-  padding: 8px;
-  margin: 0.25em 0;
+  padding: 12px 8px;
   border-radius: 6px;
   cursor: text;
 }

@@ -220,6 +220,39 @@ export function primeDocumentFileUrl(url: string | null): void {
   documentFileUrl = url
 }
 
+/**
+ * 异步画出来的东西（图、公式）会改变块级 widget 的高度，而这个高度是 CodeMirror 在
+ * 渲染那一刻量过就记住的。它变高之后，下面每一行屏幕上所在的位置都比 CodeMirror 记的
+ * 低，鼠标点正文时光标就落到下一行（#199 里那张图那一条）。画完让编辑器重新量一次。
+ *
+ * widget 拿不到 view（WidgetType 没有这个入口），所以创建 view 的时候记一份在这里。
+ */
+let measureHost: EditorView | null = null
+
+export function setMeasureHost(view: EditorView | null): void {
+  measureHost = view
+}
+
+function remeasureAfterDraw(): void {
+  if (!measureHost) return
+  const view = measureHost
+  try {
+    // 只喊 requestMeasure 不管用：CodeMirror 判断「内容要不要重新量」看的是内容元素
+    // 自己的高度变没变，而 `.cm-content` 带着它自带的 `min-height: 100%`，永远至少
+    // 一屏高，里面的块长高了它也不变。量之前先把这个下限撤掉，高度差异就露出来了；
+    // 量完（write 阶段）放回去，屏幕上什么也看不见。
+    const dom = view.contentDOM
+    dom.style.minHeight = '0'
+    view.requestMeasure({
+      write: () => {
+        dom.style.minHeight = ''
+      },
+    })
+  } catch {
+    // view 已经销毁了就什么也不用做
+  }
+}
+
 export const setDocumentFileUrlEffect = StateEffect.define<string | null>()
 
 export const documentFileUrlField = StateField.define<string | null>({
@@ -567,11 +600,14 @@ class MermaidWidget extends WidgetType {
         wrap.classList.add('cm-md-mermaid-ready')
         // 画不下的图（被 max-width 压窄了）才真出得来控件（#129）
         attachDiagramZoom(wrap)
+        // 图比占位高，块高变了：不重新量，下面几行的坐标就全偏（#199）
+        remeasureAfterDraw()
       })
       .catch(() => {
         // 画不出来就退回代码块，绝不吞掉用户的图
         wrap.textContent = '```mermaid\n' + this.code + '\n```'
         wrap.classList.add('cm-md-mermaid-failed')
+        remeasureAfterDraw()
       })
     return wrap
   }
