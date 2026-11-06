@@ -1,14 +1,22 @@
-// 列表的输入手感。
+// 列表与引用的输入手感。
 //
 // markdown 是纯文本，`- 文案` 就是一个减号加一段文字，渲染层只负责把它画成圆点。
-// 但「回车自动续下一条」是编辑器该做的事，跟渲染无关，所以放在这里：
-// 一个 Enter 的 keymap，命中列表就在新行补上同样的标记。
+// 但「回车自动续下一条」「在标记后面退格」是编辑器该做的事，跟渲染无关。
 //
-// 一个刻意的限制：**只在光标位于行尾时接管**。光标在行中间按回车，用户是在断句，
-// 不是在开新的一条，这时候插标记就是自作聪明。
-
+// 这两件事**不自己写**（2026-11-07 橘子：「不要自己写交互了啊，能不能参考下好的产品」）：
+// CodeMirror 的 markdown 语言包自带一对命令，退回它俩。
+//
+//   insertNewlineContinueMarkup  回车：续上 `- `/`1. `/`> ` 的标记；空条目上回车就退出列表
+//                                （官方默认会「在空条目上方插一个空行」，Obsidian 与
+//                                Typora 都是直接退出列表，所以 nonTightLists 关掉）
+//   deleteMarkupBackward         退格：光标紧贴标记时，先删标记/缩进，而不是把两行粘起来
+//
+// 以前自己写的那个版本，在列表行行首按退格会把上一行和这一行粘成 `- 乙- 丙`，
+// 再退一次变成 `- - 丙`（渲染成嵌套圆点）：文件被改坏了，看着就是「列表格式丢了」。
+//
 import { EditorView, keymap } from '@codemirror/view'
 import { Prec, type EditorState, type Extension } from '@codemirror/state'
+import { deleteMarkupBackward, insertNewlineContinueMarkupCommand } from '@codemirror/lang-markdown'
 
 /**
  * 列表行：缩进 + 标记 + 空白 + 可选的任务框。
@@ -16,42 +24,67 @@ import { Prec, type EditorState, type Extension } from '@codemirror/state'
  */
 const LIST_RE = /^([ \t]*)(?:([-*+])|(\d+)([.)]))([ \t]+)(\[[ xX]\][ \t]+)?/
 
-function continueList(view: EditorView): boolean {
+/**
+ * 行首退格：先拆标记，别把两行粘起来。
+ *
+ * 光标停在行首（标记之前）时，CodeMirror 默认的退格是把上一行和这一行接起来，
+ * 于是 `- 乙` + `- 丙` 粘成 `- 乙- 丙`，再退一次变成 `- - 丙`，渲染成嵌套圆点：
+ * 文件被改坏，看起来就是「列表格式丢了」（2026-11-07 报的）。
+ *
+ * 参照 Obsidian 与 Typora：行首退格先拆这一行的结构，拆到没结构了才并到上一行。
+ *   缩进列表项 → 退一级；列表标记 → 去掉标记变成普通段落；
+ *   标题 `#` → 变回段落；引用 `>` → 少一层引用。
+ *
+ * 这里只接「光标在行首」这一种情况；光标贴着标记之后的那种，交给语言包自带的
+ * deleteMarkupBackward（见下面的 keymap）。
+ */
+function deleteAtLineStart(view: EditorView): boolean {
   const { state } = view
   const range = state.selection.main
   if (!range.empty) return false
   const line = state.doc.lineAt(range.head)
-  if (range.head !== line.to) return false
+  if (range.head !== line.from) {
+    // 列表行：光标贴着标记之后的那种情况交给语言包（它会把标记换成空格）
+    if (!/^#{1,6}[ \t]?/.test(line.text) && !/^>[ \t]?/.test(line.text)) return false
+  }
 
-  const match = LIST_RE.exec(line.text)
-  if (!match) return false
-
-  const [, indent, bullet, number, delimiter, spacing, task] = match
-  const content = line.text.slice(match[0].length)
-
-  // 空条目上回车：结束列表。清掉标记，让这一行变成普通空行。
-  // （这也是 Obsidian 与 Typora 的行为：再按一次回车就退出列表。）
-  if (content.trim() === '') {
+  const self = listLine(line.text)
+  if (self) {
+    if (self.lead > 0) return indentListItem(view, -1)
+    const match = LIST_RE.exec(line.text)!
+    const marker = match[0].length
     view.dispatch({
-      changes: { from: line.from, to: line.to, insert: '' },
+      changes: { from: line.from, to: line.from + marker, insert: '' },
       selection: { anchor: line.from },
-      scrollIntoView: true,
-      userEvent: 'input',
+      userEvent: 'delete',
     })
     return true
   }
 
-  // 无序列表沿用同一个标记，有序列表序号加一
-  const marker = bullet ?? `${Number(number) + 1}${delimiter}`
-  // 任务项续一个未勾选的框：连续记待办是常见写法
-  const insert = `\n${indent}${marker}${spacing}${task ? '[ ] ' : ''}`
-  view.dispatch({
-    changes: { from: range.head, insert },
-    selection: { anchor: range.head + insert.length },
-    scrollIntoView: true,
-    userEvent: 'input',
-  })
-  return true
+  // 标题的 `#` 在渲染模式下是藏起来的，光标到不了真正的行首（Home 只能落在正文
+  // 第一个字前），所以「光标紧贴标记之后」也算行首：一次退格就把整个标记拆掉，
+  // 而不是先吃掉那个空格、留下 `#标题` 这种半截状态。
+  const head = /^#{1,6}[ \t]?/.exec(line.text)
+  if (head && head[0].length > 0 && range.head <= line.from + head[0].length) {
+    view.dispatch({
+      changes: { from: line.from, to: line.from + head[0].length, insert: '' },
+      selection: { anchor: line.from },
+      userEvent: 'delete',
+    })
+    return true
+  }
+
+  const quote = /^>[ \t]?/.exec(line.text)
+  if (quote && line.text.length > quote[0].length && range.head <= line.from + quote[0].length) {
+    view.dispatch({
+      changes: { from: line.from, to: line.from + quote[0].length, insert: '' },
+      selection: { anchor: line.from },
+      userEvent: 'delete',
+    })
+    return true
+  }
+
+  return false
 }
 
 /** 一级缩进的宽度。两个空格：`- ` 正好是两个字符，也和我们文档里的写法一致。 */
@@ -172,11 +205,14 @@ function parentItem(
   return null
 }
 
-// Prec.high 不是装饰：state.ts 里的 defaultKeymap 也绑了 Enter，而它在扩展表里排在前面。
-// 同一个 keymap facet 里先出现的先试，所以不加优先级的话，Enter 永远先被
-// defaultKeymap 的 insertNewlineAndIndent 接走，下面这段代码一行都不会跑。
+// Prec.high 不是装饰：state.ts 里的 defaultKeymap 也绑了 Enter 和 Backspace，而它在扩展表
+// 里排在前面。同一个 keymap facet 里先出现的先试，所以不加优先级的话，Enter 永远先被
+// defaultKeymap 的 insertNewlineAndIndent 接走，Backspace 也永远先被 deleteCharBackward
+// 接走（粘连两行），上面这两条一行都不会跑。
 export const listInput: Extension = Prec.high(keymap.of([
-  { key: 'Enter', run: continueList },
+  { key: 'Enter', run: insertNewlineContinueMarkupCommand({ nonTightLists: false }) },
+  { key: 'Backspace', run: deleteAtLineStart },
+  { key: 'Backspace', run: deleteMarkupBackward },
   { key: 'Tab', run: (view) => indentListItem(view, 1) },
   { key: 'Shift-Tab', run: (view) => indentListItem(view, -1) },
 ]))

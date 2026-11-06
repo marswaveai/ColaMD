@@ -1141,9 +1141,144 @@ async function checkListTableExport(renderer) {
   }
 }
 
+/**
+ * 打字手感：日常最常用的那几下手，量的是**按完之后屏幕上和文件里留下了什么**。
+ *
+ * 2026-11-07 橘子发过一场火：「输入 #xxx 的时候标题的格式就渲染了，我还没点空格呢，
+ * 而且点冒号的时候，后面的格式就丢了，还有列表格式，回车，删除，各种丢格式」。
+ * 这几条都是自己写的交互攒出来的，所以现在退回 CodeMirror 官方命令（lang-markdown
+ * 的 insertNewlineContinueMarkup / deleteMarkupBackward），只留「行首退格先拆标记」
+ * 这一层薄薄的外壳，并用下面的断言钉住。
+ *
+ * 单独一个窗口：打字会把文档改掉，不能和夹具那些静态断言挤在同一份文档里。
+ */
+async function checkTyping() {
+  const source = join(WORK, 'typing.md')
+  writeFileSync(source, '')
+  const port = 9995 + Math.floor(Math.random() * 4)
+  const child = spawn('npx', ['electron', 'scripts/offscreen-window.cjs', source,
+    `--user-data-dir=${join(WORK, 'udd-typing')}`, `--remote-debugging-port=${port}`
+  ], { cwd: APP, stdio: 'ignore', detached: true })
+
+  try {
+    const page = await waitTarget(port, (t) => t.type === 'page' && /index\.html/.test(t.url))
+    const renderer = await connect(page.webSocketDebuggerUrl)
+    await renderer.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+    await renderer.send('Page.bringToFront')
+    for (let i = 0; i < 60; i++) {
+      if (await evaluate(renderer, `!!document.querySelector('#editor .cm-content')`)) break
+      await sleep(250)
+    }
+    const box = JSON.parse(await evaluate(renderer, `(() => {
+      const r = document.querySelector('#editor .cm-content').getBoundingClientRect()
+      return JSON.stringify({ x: Math.round(r.left + 40), y: Math.round(r.top + 12) })
+    })()`))
+    let focused = false
+    for (let i = 0; i < 6 && !focused; i++) {
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await renderer.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: 1 })
+      }
+      await sleep(300)
+      focused = await evaluate(renderer, `document.activeElement === document.querySelector('#editor .cm-content')`)
+    }
+    check('打字窗口拿到焦点', focused === true, String(focused))
+
+    const docText = () => evaluate(renderer, `document.querySelector('.cm-content').cmTile.root.view.state.doc.toString()`)
+    const insert = async (text) => {
+      await renderer.send('Input.insertText', { text })
+      await sleep(260)
+    }
+    const clearDoc = async () => {
+      await pressKey(renderer, 'a', 'KeyA', 65, 4)
+      await pressKey(renderer, 'Backspace', 'Backspace', 8)
+      await pressKey(renderer, 'Backspace', 'Backspace', 8)
+    }
+    const lineClasses = () => evaluate(renderer, `JSON.stringify([...document.querySelectorAll('#editor .cm-line')].map((l) => l.className))`)
+    const textColorOf = (needle) => evaluate(renderer, `(() => {
+      const walker = document.createTreeWalker(document.querySelector('#editor .cm-content'), NodeFilter.SHOW_TEXT)
+      let node
+      while ((node = walker.nextNode())) {
+        if (node.textContent.includes(${JSON.stringify(needle)})) return getComputedStyle(node.parentElement).color
+      }
+      return null
+    })()`)
+
+    // 1. 空格没落下之前不该当标题（CommonMark 把孤零零一个 `#` 也算空标题）
+    await insert('#')
+    const hashClasses = await lineClasses()
+    check('只打一个 # 还不是标题', !hashClasses.includes('atxheading') && (await docText()) === '#',
+      `行类=${hashClasses} 文档=${JSON.stringify(await docText())}`)
+    await insert(' 一级')
+    check('打出空格才成为标题', (await lineClasses()).includes('atxheading1'),
+      `行类=${await lineClasses()} 文档=${JSON.stringify(await docText())}`)
+
+    // 2. 标题前一次退格变回普通段落（不要留下 `#标题` 这种半截状态）
+    await pressKey(renderer, 'Home', 'Home', 36)
+    await pressKey(renderer, 'Backspace', 'Backspace', 8)
+    check('标题前退格一次变回段落', (await docText()) === '一级', JSON.stringify(await docText()))
+
+    // 3. 引用里回车自动续 `> `（屏幕上是引用，文件里也得是）
+    await clearDoc()
+    await insert('> 引用')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    check('引用里回车自动续 >', (await docText()) === '> 引用\n> ', JSON.stringify(await docText()))
+    await clearDoc()
+
+    // 4. 列表行行首退格：拆标记，不要把上一行和这一行粘起来
+    await insert('- 甲')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await insert('乙')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await insert('丙')
+    await pressKey(renderer, 'Home', 'Home', 36)
+    await pressKey(renderer, 'Backspace', 'Backspace', 8)
+    check('列表行行首退格不把两行粘起来', (await docText()) === '- 甲\n- 乙\n丙', JSON.stringify(await docText()))
+    await clearDoc()
+
+    // 5. 有序列表：回车续号，行首退格不粘连
+    await insert('1. 甲')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await insert('乙')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await insert('丙')
+    check('有序列表回车自动续号', (await docText()) === '1. 甲\n2. 乙\n3. 丙', JSON.stringify(await docText()))
+    await pressKey(renderer, 'Home', 'Home', 36)
+    await pressKey(renderer, 'Backspace', 'Backspace', 8)
+    check('有序列表行首退格拆掉标记', (await docText()) === '1. 甲\n2. 乙\n丙', JSON.stringify(await docText()))
+    await clearDoc()
+
+    // 6. 空条目上再按一次回车：退出列表（官方命令默认会在空条目上方插一个空行，
+    //    Obsidian 与 Typora 都是直接退出，所以这里关掉了 nonTightLists）
+    await insert('- 甲')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    check('空列表项上回车退出列表', (await docText()) === '- 甲\n', JSON.stringify(await docText()))
+    await insert('正文')
+    check('退出列表后打的是普通段落', (await docText()) === '- 甲\n正文' && !(await lineClasses()).at(-1).includes('cm-md-li'),
+      `文档=${JSON.stringify(await docText())} 行类=${await lineClasses()}`)
+    await clearDoc()
+
+    // 7. 链接后面打中文冒号：后半行不能一起变成链接
+    await insert('看这个 https://example.com/a：后面还有 **粗体**')
+    const urlColor = await textColorOf('https://example')
+    const tailColor = await textColorOf('后面还有')
+    const bodyColor = await evaluate(renderer, `getComputedStyle(document.querySelector('#editor .cm-content')).color`)
+    check('链接后面打中文冒号，后半行保持正文色', tailColor === bodyColor && urlColor !== bodyColor,
+      `链接=${urlColor} 后半行=${tailColor} 正文=${bodyColor}`)
+  } finally {
+    stopVerifyApp(join(WORK, 'udd-typing'))
+    try { process.kill(child.pid, 'SIGKILL') } catch { /* 已退出 */ }
+  }
+}
+
 function main() {
   return (async () => {
     mkdirSync(WORK, { recursive: true })
+    if (process.argv.includes('--typing-only')) {
+      await checkTyping()
+      reportChecks()
+      return
+    }
     const source = join(WORK, 'features.md')
     writeFileSync(source, fixture(), 'utf8')
     writeFileSync(join(WORK, 'pixel.png'), PIXEL_PNG)
@@ -1858,6 +1993,7 @@ function main() {
 
       await checkListTableExport(renderer)
       await checkSelectionVisibility(renderer)
+      await checkTyping()
       reportChecks()
     } finally {
       stopVerifyApp(udd)

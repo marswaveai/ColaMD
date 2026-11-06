@@ -1132,7 +1132,10 @@ function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Ran
       }
       case 'QuoteMark': {
         // `>` 在光标不在这一行时藏起来（连它后面的空格），引用就该只看到竖线与文字
-        if (isActiveLine(state, node.from)) {
+        // 例外：这一行除了 `>` 别的什么都没有。刚打出一个 `>` 就把它藏掉，屏幕上什么
+        // 都不剩，得再打个空格才出现引用竖线（2026-11-07 与标题同一个毛病）。
+        const rest = state.doc.sliceString(node.to, state.doc.lineAt(node.to).to)
+        if (rest.trim() === '' || isActiveLine(state, node.from)) {
           ranges.push({ from: node.from, to: node.to, deco: MARK({ class: 'cm-md-quotemark' }) })
         } else {
           hideMarker(state, node.from, node.to, ranges)
@@ -1154,6 +1157,14 @@ function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Ran
 //   CodeMark         行内代码的反引号
 //   InlineCode       行内代码本体
 //   URL              链接地址
+/**
+ * 裸链接（GFM autolink）的终点：中日韩文字与全角标点。
+ *
+ * 解析器只把空白当断点，所以中文冒号、句号后面的话会被一起吞进 URL，整段染成链接色。
+ * 链接该在文字出现的地方结束。
+ */
+const URL_STOP = /[\u2E80-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3000-\u303F\uFF00-\uFFEF]/
+
 function collectInline(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
   iterateContent(state, front, (node) => {
       const from = node.from
@@ -1168,6 +1179,12 @@ function collectInline(state: EditorState, ranges: DecorationRange[], front: Ran
         case 'ATXHeading5':
         case 'ATXHeading6': {
           // 行装饰：标题的字号属于整行，加在行上才撑得住行高
+          // 只认「# + 空格」。CommonMark 把孤零零一个 `#` 也算成空标题，于是刚打出一个
+          // `#`、空格还没落下，整行就先变成标题、`#` 还被藏起来：看起来像字打丢了，
+          // 接着打字母又退回普通段落，一亮一灭（2026-11-07 报的「我还没点空格呢」）。
+          // Typora 与 Obsidian 都是等空格出现才开始当标题。
+          const head = state.doc.sliceString(from, state.doc.lineAt(from).to)
+          if (!/^#{1,6}[ \t]/.test(head)) return false
           pushBlockLines(state, from, to, `cm-md-${node.name.toLowerCase()}`, ranges)
           break
         }
@@ -1210,7 +1227,14 @@ function collectInline(state: EditorState, ranges: DecorationRange[], front: Ran
           break
         }
         case 'URL': {
-          ranges.push({ from, to, deco: MARK({ class: 'cm-md-url' }) })
+          // 解析器只把空白当断点，`https://example.com/a：后面还有` 整段都会被当成 URL。
+          // 一打中文冒号，后半行就染成链接色、格式看着像丢了（2026-11-07 报的「点冒号
+          // 的时候，后面的格式就丢了」）。Typora 与 Obsidian 都停在中文和全角标点处，
+          // 所以这里把链接切到第一个中日韩字符或全角标点之前。
+          const raw = state.doc.sliceString(from, to)
+          const stop = raw.search(URL_STOP)
+          const end = stop < 0 ? to : from + stop
+          if (end > from) ranges.push({ from, to: end, deco: MARK({ class: 'cm-md-url' }) })
           break
         }
         default:
@@ -1367,12 +1391,19 @@ const parseRefresh = ViewPlugin.fromClass(class {
     }
     this.later(update.view, viewportEnd)
   }
-  private later(view: EditorView, parseTo: number | null) {
+  private later(view: EditorView, parseTo: number | null, delay = 0) {
     if (this.pending) return
     this.pending = true
     setTimeout(() => {
       this.pending = false
       if (!view.dom.isConnected) return
+      // 中文输入法正在组字：这一笔装饰刷新会打断组字，候选框里的字就没了。
+      // 等组字结束再来，组字结束本身会让 CodeMirror 再走一次 update。
+      // （脚本里的 insertText 不走组字，所以验收覆盖不到这一条，只能靠这条守卫。）
+      if (view.composing) {
+        this.later(view, parseTo, 120)
+        return
+      }
       if (parseTo !== null) forceParsing(view, parseTo)
       view.dispatch({ effects: decorationsRefreshEffect.of(null) })
       // `forceParsing` 是有时间预算的：机器忙的时候一次推不到视口末尾，
@@ -1380,7 +1411,7 @@ const parseRefresh = ViewPlugin.fromClass(class {
       // 所以要一直补到铺满为止（次数封顶，避免文档本身有问题时空转）。
       if (syntaxTree(view.state).length < view.viewport.to && this.attempts < 40) {
         this.attempts += 1
-        this.later(view, view.viewport.to)
+        this.later(view, view.viewport.to, delay)
       }
     }, 0)
   }
