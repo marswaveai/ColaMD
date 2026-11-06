@@ -1266,7 +1266,6 @@ ipcMain.handle('export-pdf', async (event) => {
            warm or dark theme ends up with a bright frame around every page. */
         @page { margin: 20mm 18mm; background: ${background}; }
         html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; }
-        #editor { margin: 0 !important; padding: 0 !important; }
         /* 光标与选区是编辑器的东西，不是文档的内容。 */
         .cm-cursor, .cm-cursorLayer, .cm-selectionLayer, .cm-selectionBackground { display: none !important; }
         /* A cell has to break a long token (JSON, a URL) instead of forcing the
@@ -1277,7 +1276,17 @@ ipcMain.handle('export-pdf', async (event) => {
         #editor .cm-content th, #editor .cm-content td { overflow-wrap: anywhere !important; word-break: break-word !important; }
       }`
     )
+    let spacingCSSKey: string | undefined
     try {
+      // 底部输入留白不能另起一页；user !important 才能覆盖任意主题的 author !important。
+      // 只把间距放在 user origin：Chromium 不应用该 origin 的 @page，页边距须留在上面。
+      spacingCSSKey = await win.webContents.insertCSS(
+        `@media print {
+          #editor { margin: 0 !important; padding: 0 !important; }
+          #editor .cm-content { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+        }`,
+        { cssOrigin: 'user' }
+      )
       const pdfData = await win.webContents.printToPDF({
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
         printBackground: true,
@@ -1286,6 +1295,7 @@ ipcMain.handle('export-pdf', async (event) => {
       await writeFile(result.filePath, pdfData)
       return true
     } finally {
+      if (spacingCSSKey) await win.webContents.removeInsertedCSS(spacingCSSKey)
       await win.webContents.removeInsertedCSS(cssKey)
     }
   } catch {
