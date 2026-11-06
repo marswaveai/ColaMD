@@ -26,7 +26,7 @@ import { EditorState, RangeSetBuilder, StateEffect, StateField, type Extension }
 import { forceParsing, syntaxTree } from '@codemirror/language'
 import type { SyntaxNode, SyntaxNodeRef } from '@lezer/common'
 import katex from 'katex'
-import { scanMath, excludedRanges, frontmatterRange, type Excluded } from './math-scan'
+import { scanMath, excludedRanges, frontmatterRange, type Excluded, type MathRange } from './math-scan'
 import { renderMermaid, attachDiagramZoom, detachDiagramZoom, isDiagramZoomed } from './mermaid-bridge'
 import { sanitizeHTML, cleanStyle } from './html-sanitize'
 import { footnoteDefinitions, footnoteNumbers, FOOTNOTE_REF_RE } from './footnotes'
@@ -359,6 +359,31 @@ function isBlockActive(state: EditorState, from: number, to: number): boolean {
 // ─── 公式 ────────────────────────────────────────────────────────────────────
 
 /**
+ * 画一个公式。
+ *
+ * 两个调用点：正文里的 MathWidget，和表格单元格里的行内公式。表格是整块替换渲染的，
+ * 格子里的文字挂不上 CodeMirror 的装饰层，只能在拼 DOM 的时候自己画。
+ *
+ * 渲染失败时把源码原样放回去（`cm-md-math-error`），宁可难看也不丢字。
+ */
+function mathElement(code: string, block: boolean): HTMLElement {
+  const el = document.createElement(block ? 'div' : 'span')
+  el.className = block ? 'cm-md-math cm-md-math-block' : 'cm-md-math cm-md-math-inline'
+  try {
+    el.innerHTML = katex.renderToString(code, {
+      displayMode: block,
+      throwOnError: true,
+      // 公式里可能带用户写的 HTML，KaTeX 的 trust 默认关闭，保持关闭
+      trust: false,
+    })
+  } catch {
+    el.textContent = (block ? '$$' : '$') + code + (block ? '$$' : '$')
+    el.classList.add('cm-md-math-error')
+  }
+  return el
+}
+
+/**
  * 公式渲染。判定交给 math-scan.ts（照 Obsidian 的保守规则），这里只负责画。
  *
  * 行内公式用 Widget 覆盖原文，而不是把 `$x$` 藏起来再插一段渲染结果：
@@ -366,7 +391,7 @@ function isBlockActive(state: EditorState, from: number, to: number): boolean {
  *
  * 光标所在行照旧退回原文，用户可以就地改。渲染失败时显示 `$...$` 源码。
  *
- * widget 上带着源码区间（`data-math-from` / `data-math-to`）：点它要能就地编辑，
+ * widget 上带着源码区间（见 `withSourceRange`）：点它要能就地编辑，
  * 而 DOM 里除了这里没有别的地方知道这段公式在缓冲区里的位置。
  */
 class MathWidget extends WidgetType {
@@ -384,22 +409,7 @@ class MathWidget extends WidgetType {
   }
 
   toDOM(): HTMLElement {
-    const span = document.createElement(this.block ? 'div' : 'span')
-    span.className = this.block ? 'cm-md-math cm-md-math-block' : 'cm-md-math cm-md-math-inline'
-    withSourceRange(span, this.from, this.to)
-    try {
-      span.innerHTML = katex.renderToString(this.code, {
-        displayMode: this.block,
-        throwOnError: true,
-        // 公式里可能带用户写的 HTML，KaTeX 的 trust 默认关闭，保持关闭
-        trust: false,
-      })
-    } catch {
-      // 渲染不了就把源码原样放回去，宁可难看也不丢字
-      span.textContent = (this.block ? '$$' : '$') + this.code + (this.block ? '$$' : '$')
-      span.classList.add('cm-md-math-error')
-    }
-    return span
+    return withSourceRange(mathElement(this.code, this.block), this.from, this.to)
   }
 }
 
@@ -746,12 +756,16 @@ function alignOf(delimiter: string): string {
  *
  * 用 DOM 拼，不拼 innerHTML：单元格内容来自用户的文件，拼字符串等于把文件里的
  * `<img onerror=...>` 直接执行掉。这里只认粗体、斜体、行内代码、删除线、链接、
- * 图片和 `<br>`，认不出来的就当普通文字。
+ * 图片、行内公式和 `<br>`，认不出来的就当普通文字。
  *
  * `<br>` 与图片是 #138 补上的：Obsidian、Typora、GitHub 都把格子里的 `<br/>` 画成
  * 换行，把格子里的 `![](x.png)` 画成图片；2.6 也这样，换内核后这两样都退成了纯文字。
  * 行内 HTML 里只有 `<br>` 被认：它是最常跟表格一起用的一个，而其它标签（尤其是带
  * 事件或样式的）放进表格只会多一个要防的口子。
+ *
+ * 公式（#197）：判定照旧交给 math-scan.ts（和正文同一套规则），画由 mathElement
+ * 负责，格子里的 `$x$` 要画成公式。`$$...$$` 在格子里也按行内画：表格的行高由
+ * 单元格决定，一个块级公式会把整行撑开。
  *
  * 下划线强调要卡词边界（#161）。CommonMark 与 GFM 里 `_` 不能跨在词中间生效，
  * 所以 `local_upload / external_api` 是两个普通单词，`snake_case_name` 也一样；
@@ -760,22 +774,65 @@ function alignOf(delimiter: string): string {
  * 边界用 Unicode 字母与数字，中文也算词字符。
  */
 const INLINE_RE =
-  /\*\*(?<strong>.+?)\*\*|(?<![\p{L}\p{N}_])__(?<strongU>(?=\S).+?(?<=\S))__(?![\p{L}\p{N}_])|\*(?<em>.+?)\*|(?<![\p{L}\p{N}_])_(?<emU>(?=\S).+?(?<=\S))_(?![\p{L}\p{N}_])|`(?<code>[^`]+)`|~~(?<strike>.+?)~~|!\[(?<alt>[^\]]*)\]\(\s*(?<src><[^>]*>|[^)\s]+)[^)]*\)|\[(?<linkText>[^\]]*)\]\((?<href>[^)]*)\)|<br\s*\/?>/giu
+  /\*\*(?<strong>.+?)\*\*|(?<![\p{L}\p{N}_])__(?<strongU>(?=\S).+?(?<=\S))__(?![\p{L}\p{N}_])|\*(?<em>.+?)\*|(?<![\p{L}\p{N}_])_(?<emU>(?=\S).+?(?<=\S))_(?![\p{L}\p{N}_])|`(?<code>[^`]+)`|~~(?<strike>.+?)~~|!\[(?<alt>[^\]]*)\]\(\s*(?<src><[^>]*>|[^)\s]+)[^)]*\)|\[(?<linkText>[^\]]*)\]\((?<href>[^)]*)\)|<br\s*\/?>/giud
+
+/** 单元格里的行内代码区间：反引号里的 `$` 不是公式定界符。 */
+function codeSpanRanges(text: string): Excluded[] {
+  const out: Excluded[] = []
+  const re = /`[^`]+`/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text)) !== null) out.push({ from: match.index, to: match.index + match[0].length })
+  return out
+}
+
+/**
+ * 往单元格里写一段源码文字，其中的公式画成 KaTeX。
+ *
+ * `from` / `to` 是这段文字在整格源码里的下标：强调、链接里的文字也可能带公式，
+ * 所以按整格的下标取区间，而不是按切片的局部下标。
+ */
+function appendCellText(parent: HTMLElement, text: string, math: MathRange[], from: number, to: number): void {
+  let cursor = from
+  for (const range of math) {
+    // 只处理整段落在这一段里的公式；跨过边界的（`**$x**$` 这类）留着当普通文字
+    if (range.from < cursor || range.to > to) continue
+    if (range.from > cursor) parent.appendChild(document.createTextNode(text.slice(cursor, range.from)))
+    parent.appendChild(mathElement(range.code, false))
+    cursor = range.to
+  }
+  if (cursor < to) parent.appendChild(document.createTextNode(text.slice(cursor, to)))
+}
 
 function appendInline(parent: HTMLElement, text: string, base: string | null): void {
+  // 公式先定出来，免得公式里的 `*`、`_` 被当成强调吃掉
+  const math = scanMath(text, codeSpanRanges(text))
+  const write = (target: HTMLElement, from: number, to: number): void =>
+    appendCellText(target, text, math, from, to)
+
   INLINE_RE.lastIndex = 0
   let last = 0
   let match: RegExpExecArray | null
   while ((match = INLINE_RE.exec(text)) !== null) {
-    if (match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)))
+    // 落在公式里的标记只是公式的一部分：`$a*b*c$` 里的 `*b*` 不是斜体。
+    // 跳过它，把整段留到最后按公式画。
+    const index = match.index
+    const inside = math.find((range) => range.from <= index && index < range.to)
+    if (inside) {
+      INLINE_RE.lastIndex = inside.to
+      continue
+    }
+    if (match.index > last) write(parent, last, match.index)
     const g = match.groups ?? {}
+    const at = match.indices?.groups ?? {}
     if (g.strong !== undefined || g.strongU !== undefined) {
       const el = document.createElement('strong')
-      el.textContent = g.strong ?? g.strongU ?? ''
+      const [from, to] = at.strong ?? at.strongU ?? [0, 0]
+      write(el, from, to)
       parent.appendChild(el)
     } else if (g.em !== undefined || g.emU !== undefined) {
       const el = document.createElement('em')
-      el.textContent = g.em ?? g.emU ?? ''
+      const [from, to] = at.em ?? at.emU ?? [0, 0]
+      write(el, from, to)
       parent.appendChild(el)
     } else if (g.code !== undefined) {
       const el = document.createElement('code')
@@ -783,7 +840,8 @@ function appendInline(parent: HTMLElement, text: string, base: string | null): v
       parent.appendChild(el)
     } else if (g.strike !== undefined) {
       const el = document.createElement('s')
-      el.textContent = g.strike
+      const [from, to] = at.strike ?? [0, 0]
+      write(el, from, to)
       parent.appendChild(el)
     } else if (g.alt !== undefined) {
       const img = document.createElement('img')
@@ -792,7 +850,10 @@ function appendInline(parent: HTMLElement, text: string, base: string | null): v
       parent.appendChild(img)
     } else if (g.linkText !== undefined) {
       const el = document.createElement('a')
-      el.textContent = g.linkText || g.href || ''
+      const [from, to] = at.linkText ?? [0, 0]
+      // 空文字的空链接仍然把地址顶上来，否则格子里什么都看不见
+      if (to > from) write(el, from, to)
+      else el.textContent = g.href ?? ''
       const href = (g.href ?? '').trim()
       if (/^https?:\/\//i.test(href)) el.setAttribute('href', href)
       parent.appendChild(el)
@@ -801,7 +862,7 @@ function appendInline(parent: HTMLElement, text: string, base: string | null): v
     }
     last = match.index + match[0].length
   }
-  if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)))
+  if (last < text.length) write(parent, last, text.length)
 }
 
 function collectTables(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
