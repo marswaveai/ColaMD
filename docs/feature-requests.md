@@ -508,3 +508,17 @@ Two- and three-page reading layouts for ultrawide displays were declined. ColaMD
 ### Temporary same-directory document switcher
 
 **Superseded — do not build.** This was the 2026-09-01 direction for the same need as tabs ([#59](https://github.com/marswaveai/ColaMD/issues/59)): a quiet strip below the title bar holding up to three same-directory documents. The tab strip shipped in `v2.1.0` covers that need with an explicit model instead (open a tab when you want one, the file panel keeps replacing the current document), so the switcher is closed and the prototype in `temporary-document-switcher-prototype.html` is history rather than a plan.
+
+## Candidate
+
+### PDF outline bookmarks
+
+**Source:** [#200](https://github.com/marswaveai/ColaMD/issues/200)
+
+Worth doing, but it is not a flag. The PDF is printed from the editor's own DOM, whose headings are `div.cm-md-atxheadingN` lines rather than real `h1`–`h6` elements, and Chromium builds the outline from real heading elements only. Measured on 2026-11-07 with Electron 44: turning on `generateDocumentOutline` produced no bookmarks at all, not even for a test page that was nothing but `<h1>` (read back with `pypdf`: 0 items). So the work is an export pipeline that first converts the document to the semantic HTML we already produce for HTML export (`documentHTMLFrom`, which emits real `h` tags), then prints that. That is its own piece of work, not a release-day patch.
+
+### Collapsible outline sections
+
+**Source:** [#190](https://github.com/marswaveai/ColaMD/issues/190)
+
+The outline currently renders the whole document tree, so long documents mean scrolling the panel. Folding needs per-heading state that survives edits (headings move, text is inserted above them), which is the same problem tabs solved with an explicit model. Doable, but it adds state to a panel whose job is one glance, so it waits for a version with room for it.
