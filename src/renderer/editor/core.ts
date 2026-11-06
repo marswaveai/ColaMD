@@ -15,6 +15,7 @@ import { syntaxTree } from '@codemirror/language'
 import { undo, redo } from '@codemirror/commands'
 import { livePreview, setEditorFocus } from './live-preview'
 import { listInput } from './list-input'
+import { codeBlockSelectAll } from './code-select'
 import { searchHighlightField } from './search-highlight'
 import { stateExtensions, editableCompartment, bodyStart } from './state'
 import { editorTheme } from './source-theme'
@@ -121,6 +122,8 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     }),
     // 回车续列表。这是编辑器的输入手感，与渲染无关，所以单独一个模块。
     listInput,
+    // 代码块里的 ⌘A 先只选这段代码（见 code-select.ts）
+    codeBlockSelectAll,
     // 检索高亮。面板靠 effect 改它，而 effect 得有 StateField 接住；
     // 不装这一条，检索面板会以为高亮画上了，实际什么也没发生。
     searchHighlightField,
