@@ -87,6 +87,33 @@ function deleteAtLineStart(view: EditorView): boolean {
   return false
 }
 
+/**
+ * 任务框后面那一格退格：只拆 `[ ] `，把列表标记留着。
+ *
+ * 任务框是原子区间（左右键一次跨过整个 `- [ ] `）。CodeMirror 默认的退格会按原子区间
+ * 整段删掉，一次就把 `- ` 也带走，落成光秃儿一行 `甲`。用户看到的是「退格一下列表就没了」
+ * （2026-11-11）：「删行，各种乱跳」。参照 Obsidian：先拆框，再拆标记，最后才轮到粘行。
+ */
+function deleteTaskBox(view: EditorView): boolean {
+  const { state } = view
+  const range = state.selection.main
+  if (!range.empty) return false
+  const line = state.doc.lineAt(range.head)
+  const match = LIST_RE.exec(line.text)
+  const box = match?.[6]
+  if (!match || !box) return false
+  const contentStart = line.from + match[0].length
+  if (range.head !== contentStart) return false
+
+  const boxStart = contentStart - box.length
+  view.dispatch({
+    changes: { from: boxStart, to: contentStart, insert: '' },
+    selection: { anchor: boxStart },
+    userEvent: 'delete',
+  })
+  return true
+}
+
 /** 一级缩进的宽度。两个空格：`- ` 正好是两个字符，也和我们文档里的写法一致。 */
 const INDENT = '  '
 
@@ -213,6 +240,9 @@ function parentItem(
 // 接走（粘连两行），上面这两条一行都不会跑。
 export const listInput: Extension = Prec.high(keymap.of([
   { key: 'Enter', run: insertNewlineContinueMarkupCommand({ nonTightLists: false }) },
+  // 顺序有讲究：任务框后面那一格先归 deleteTaskBox，不然 deleteMarkupBackward
+  // 会按原子区间把 `- [ ] ` 整段吞掉。
+  { key: 'Backspace', run: deleteTaskBox },
   { key: 'Backspace', run: deleteAtLineStart },
   { key: 'Backspace', run: deleteMarkupBackward },
   { key: 'Tab', run: (view) => indentListItem(view, 1) },
