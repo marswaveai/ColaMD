@@ -407,7 +407,6 @@ const FOOTNOTE_HIDE_GRACE = 120
  * `visibleRanges` 就报 `[[0,29],[51,101]]`，看着像有内容没渲染。
  */
 function selectionRendered(view: EditorView): boolean {
-  if (view.contentDOM.querySelector('.cm-gap')) return false
   const viewport = view.viewport
   return view.state.selection.ranges.every(
     (range) => range.empty || (range.from >= viewport.from && range.to <= viewport.to),
@@ -492,10 +491,14 @@ function setupRichCopy(root: HTMLElement): void {
     if (selectionRendered(view)) {
       const html = selectionHTML(view, ranges)
       if (html) event.clipboardData?.setData('text/html', html)
+      event.preventDefault()
       return
     }
     // 文档太大就不追富文本口味了：纯文本上面已经放好了，返回就是它。
-    if (view.state.doc.length > MAX_RICH_COPY_CHARS) return
+    if (view.state.doc.length > MAX_RICH_COPY_CHARS) {
+      event.preventDefault()
+      return
+    }
     // 选区伸到了还没渲染的行上。CodeMirror 只为视口建 DOM，所以此刻拿不到完整的 HTML。
     // 富文本口味只能在事件之后补：先同步给出纯文本口味（它来自文档本身，总是完整的），
     // 再把整篇渲染出来、取 HTML，两个口味一起写回剪贴板。
@@ -597,8 +600,8 @@ function setupFootnotePreview(root: HTMLElement): void {
   window.addEventListener('resize', hide)
 }
 
-// 任务列表源码里的一段：`- [ ] 文案` 或 `- [x] 文案`。
-const TASK_RE = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])(\])/
+// 任务列表源码里的一段（含引用里的任务列表）：`- [ ] 文案` 或 `> - [x] 文案`。
+const TASK_RE = /^((?:[ \t]*> ?)*[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])(\])/
 
 /** 从点击位置找回任务项那一行；不是任务项就返回 null。 */
 function sourceFromTaskClick(view: EditorView, e: MouseEvent): number | null {

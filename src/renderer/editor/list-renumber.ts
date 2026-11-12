@@ -22,10 +22,12 @@ import { syntaxTree } from '@codemirror/language'
 import type { SyntaxNode, Tree } from '@lezer/common'
 import { markdownParser } from './state'
 
-/** 列表项那一行：缩进 + `-`/`*`/`+` 或 `1.`/`1)` + 空白。 */
-const LIST_LINE = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/
+/** 引用前缀：每层 `>` 最多吃掉紧跟的一个空格，其余空白算块内缩进。 */
+const QUOTE_PREFIX_RE = /^(?:[ \t]*> ?)+/
+/** 列表项那一行（允许套在引用里）：缩进 + `-`/`*`/`+` 或 `1.`/`1)` + 空白。 */
+const LIST_LINE = /^(?:[ \t]*> ?)*[ \t]*(?:[-*+]|\d+[.)])[ \t]/
 /** 缩进着的内容：可能是列表项的续行，也可能是嵌套列表。 */
-const INDENTED = /^[ \t]/
+const INDENTED = /^(?:[ \t]*> ?)*[ \t]/
 /** 往后扫的上限，防止在没有空行的大文档里一路扫到底。 */
 const MAX_SCAN_LINES = 5000
 
@@ -37,6 +39,8 @@ interface Mark {
 interface ListInfo {
   from: number
   to: number
+  /** 同一个 OrderedList 节点里，被上方顶格普通正文（懒续行）劈出来的下半截。 */
+  splitFromAbove: boolean
   /** 每项 ListMark（`1.` 那两个字符）的位置，相对传进来那一段的起点。 */
   marks: Mark[]
 }
@@ -59,18 +63,23 @@ export const renumberLists = EditorState.transactionFilter.of((tr) => {
   const before = syntaxTree(tr.startState)
   if (!touchesOrderedList(before, tr.changes)) return tr
 
-  const range = affectedRange(tr, before)
-  const slice = tr.newDoc.sliceString(range.from, range.to)
+  const { oldRange, newRange } = affectedRanges(tr, before)
+  const beforeSlice = tr.startState.doc.sliceString(oldRange.from, oldRange.to)
+  const oldLists = orderedLists(markdownParser.parse(beforeSlice), beforeSlice)
+  const slice = tr.newDoc.sliceString(newRange.from, newRange.to)
   const changes: { from: number; to: number; insert: string }[] = []
 
-  for (const list of orderedLists(markdownParser.parse(slice))) {
-    if (!needsRenumbering(list, before, tr.changes, range.from)) continue
-    const start = Number.parseInt(slice.slice(list.marks[0].from, list.marks[0].to), 10)
+  for (const list of orderedLists(markdownParser.parse(slice), slice)) {
+    const plan = renumberPlan(list, oldLists, tr.changes, newRange.from, oldRange.from)
+    if (!plan.run) continue
+    const start = plan.resetToOne
+      ? 1
+      : Number.parseInt(slice.slice(list.marks[0].from, list.marks[0].to), 10)
     if (!Number.isFinite(start)) continue
     list.marks.forEach((mark, index) => {
       const now = slice.slice(mark.from, mark.to)
       const want = `${start + index}${now.endsWith(')') ? ')' : '.'}`
-      if (now !== want) changes.push({ from: range.from + mark.from, to: range.from + mark.to, insert: want })
+      if (now !== want) changes.push({ from: newRange.from + mark.from, to: newRange.from + mark.to, insert: want })
     })
   }
 
@@ -104,19 +113,57 @@ export const renumberLists = EditorState.transactionFilter.of((tr) => {
   }
 })
 
-/** 树里的有序列表，各取自己每项 ListMark 的位置。 */
-function orderedLists(tree: Tree): ListInfo[] {
+/**
+ * 树里的有序列表，各取自己每项 ListMark 的位置。
+ *
+ * 两处边界与渲染层对齐：
+ *   1. 孤立的 `1.`（后面还没敲空格）不算成型的列表项，避免用户打 `1.5` 或刚敲到句点
+ *      就被重排成上一列表的续号。
+ *   2. 某一项后面若紧跟顶格非空正文（CommonMark 算作懒续行，但用户其实是退出列表后写正文），
+ *      列表在该项结束，后面再敲 `1. ` 独立从头编号，不跨过正文续成 `5. `。
+ */
+function itemHasLazyBreak(item: SyntaxNode, slice: string): boolean {
+  let ownEnd = item.to
+  for (let child = item.firstChild; child; child = child.nextSibling) {
+    if (child.name === 'BulletList' || child.name === 'OrderedList') {
+      ownEnd = child.from
+      break
+    }
+  }
+  const lines = slice.slice(item.from, ownEnd).split('\n')
+  for (let i = 1; i < lines.length; i++) {
+    const body = lines[i].replace(QUOTE_PREFIX_RE, '')
+    if (body.trim() !== '' && !/^[ \t]/.test(body)) return true
+  }
+  return false
+}
+
+function orderedLists(tree: Tree, slice: string): ListInfo[] {
   const lists: ListInfo[] = []
   tree.iterate({
     enter(node) {
       if (node.name !== 'OrderedList') return
-      const marks: Mark[] = []
+      let marks: Mark[] = []
+      let segFrom = node.from
+      let segTo = node.from
+      let splitFromAbove = false
+      const flush = (nextSplit: boolean): void => {
+        if (marks.length > 0) lists.push({ from: segFrom, to: segTo, splitFromAbove, marks })
+        marks = []
+        if (nextSplit) splitFromAbove = true
+      }
       for (let item = node.node.firstChild; item; item = item.nextSibling) {
         if (item.name !== 'ListItem') continue
         const mark = item.getChild('ListMark')
-        if (mark) marks.push({ from: mark.from, to: mark.to })
+        if (!mark) continue
+        const after = slice[mark.to]
+        if (after !== ' ' && after !== '\t') continue
+        if (marks.length === 0) segFrom = item.from
+        marks.push({ from: mark.from, to: mark.to })
+        segTo = item.to
+        if (itemHasLazyBreak(item, slice)) flush(true)
       }
-      if (marks.length > 0) lists.push({ from: node.from, to: node.to, marks })
+      flush(false)
     },
   })
   return lists
@@ -153,18 +200,34 @@ function enclosingOrderedList(tree: Tree, pos: number, side: -1 | 1): SyntaxNode
  * 起点取改动所在**最外层块**的第一行：列表的边界就在这一层，从块的边界切，
  * 不会把一个列表从中间切断。终点往后扫到列表确定结束为止（见 listClusterEnd）。
  */
-function affectedRange(tr: Transaction, before: Tree): { from: number; to: number } {
+function affectedRanges(
+  tr: Transaction,
+  before: Tree,
+): { oldRange: { from: number; to: number }; newRange: { from: number; to: number } } {
   let first = -1
   tr.changes.iterChangedRanges((fromA) => {
     if (first < 0) first = fromA
   })
-  if (first < 0) return { from: 0, to: tr.newDoc.length }
+  if (first < 0) {
+    return {
+      oldRange: { from: 0, to: tr.startState.doc.length },
+      newRange: { from: 0, to: tr.newDoc.length },
+    }
+  }
 
   let block: SyntaxNode | null = before.resolveInner(first, 1)
   while (block && block.parent && block.parent.name !== 'Document') block = block.parent
-  const mapped = block ? tr.changes.mapPos(block.from, -1) : first
-  const from = tr.newDoc.lineAt(Math.min(Math.max(mapped, 0), tr.newDoc.length)).from
-  return { from, to: listClusterEnd(tr.newDoc, from) }
+  const oldBase = block ? block.from : first
+  const oldFrom = tr.startState.doc.lineAt(Math.min(Math.max(oldBase, 0), tr.startState.doc.length)).from
+  const oldTo = listClusterEnd(tr.startState.doc, oldFrom)
+
+  const mapped = tr.changes.mapPos(oldBase, -1)
+  const newFrom = tr.newDoc.lineAt(Math.min(Math.max(mapped, 0), tr.newDoc.length)).from
+  const newTo = listClusterEnd(tr.newDoc, newFrom)
+  return {
+    oldRange: { from: oldFrom, to: oldTo },
+    newRange: { from: newFrom, to: newTo },
+  }
 }
 
 /**
@@ -181,7 +244,8 @@ function listClusterEnd(doc: Text, from: number): number {
   const stop = Math.min(doc.lines, first.number + MAX_SCAN_LINES)
   for (let number = first.number + 1; number <= stop; number++) {
     const line = doc.line(number)
-    if (line.text.trim() === '') {
+    const stripped = line.text.replace(QUOTE_PREFIX_RE, '')
+    if (stripped.trim() === '') {
       blank = true
       end = line.to
       continue
@@ -194,41 +258,58 @@ function listClusterEnd(doc: Text, from: number): number {
 }
 
 /**
- * 这个列表要不要重排。
+ * 这个列表要不要重排，以及是否因为原列表刚从中间被普通段落劈开而要从 1 重新起算。
  *
  * 数量变了（增删项、改层级）要重排；改动碰到序号本身（改起始编号）也要。
  * 其它情况一律放过：在列表里打普通文字不该动序号。
  */
-function needsRenumbering(list: ListInfo, before: Tree, changes: ChangeSet, offset: number): boolean {
-  const old = enclosingOrderedList(before, changes.mapPos(offset + list.from, -1), 1)
-  // 改动前这里还不是列表（比如刚敲出一个 `1.`）：当新列表处理
-  if (old === null) return true
-  if (countItems(old) !== list.marks.length) return true
-  return touchedMark(changes, old)
-}
+function renumberPlan(
+  list: ListInfo,
+  oldLists: ListInfo[],
+  changes: ChangeSet,
+  newOffset: number,
+  oldOffset: number,
+): { run: boolean; resetToOne: boolean } {
+  const listNewFrom = newOffset + list.from
+  const listNewTo = newOffset + list.to
+  const old = oldLists.find((item) => {
+    const mappedFrom = changes.mapPos(oldOffset + item.from, 1)
+    const mappedTo = changes.mapPos(oldOffset + item.to, -1)
+    return mappedTo >= listNewFrom && mappedFrom <= listNewTo
+  })
 
-function countItems(list: SyntaxNode): number {
-  let count = 0
-  for (let item = list.firstChild; item; item = item.nextSibling) {
-    if (item.name === 'ListItem') count++
+  // 原来是一整张列表，中间某一项刚被拆成普通文字（如 `2. 乙` → `乙`），下半截从 1 重新编号。
+  if (list.splitFromAbove && old) {
+    const oldFirstMapped = changes.mapPos(oldOffset + old.marks[0].from, 1)
+    if (oldFirstMapped < newOffset + list.marks[0].from) {
+      return { run: true, resetToOne: true }
+    }
   }
-  return count
+
+  let touchedThisSegment = false
+  changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+    if (toB >= listNewFrom - 1 && fromB <= listNewTo + 1) touchedThisSegment = true
+  })
+  if (!touchedThisSegment) return { run: false, resetToOne: false }
+
+  if (!old) return { run: true, resetToOne: false }
+  if (old.marks.length !== list.marks.length) return { run: true, resetToOne: false }
+  return { run: touchedMark(changes, old, oldOffset), resetToOne: false }
 }
 
 /** 改动有没有碰到这个列表里某个序号。位置都是**改动前**的坐标。 */
-function touchedMark(changes: ChangeSet, list: SyntaxNode): boolean {
+function touchedMark(changes: ChangeSet, list: ListInfo, oldOffset: number): boolean {
   let hit = false
   changes.iterChangedRanges((fromA, toA) => {
     if (hit) return
-    for (let item = list.firstChild; item; item = item.nextSibling) {
-      if (item.name !== 'ListItem') continue
-      const mark = item.getChild('ListMark')
-      if (!mark) continue
-      if (fromA <= mark.from && toA >= mark.from) {
+    for (const raw of list.marks) {
+      const markFrom = oldOffset + raw.from
+      const markTo = oldOffset + raw.to
+      if (fromA <= markFrom && toA >= markFrom) {
         hit = true
         return
       }
-      if (fromA < mark.to && toA > mark.from) {
+      if (fromA < markTo && toA > markFrom) {
         hit = true
         return
       }

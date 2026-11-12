@@ -65,7 +65,17 @@ function pushBlockLines(
  * 里规则的前后顺序才侥幸对。所以每一行都要问一次语法树：包住这一行的**最内层**
  * ListItem 是不是我自己。
  */
+const QUOTE_PREFIX_RE = /^(?:[ \t]*> ?)+/
+
+function hasListSpace(state: EditorState, markTo: number): boolean {
+  const ch = markTo < state.doc.length ? state.doc.sliceString(markTo, markTo + 1) : ''
+  return ch === ' ' || ch === '\t'
+}
+
 function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: DecorationRange[]): void {
+  const selfMark = node.getChild('ListMark')
+  // 孤立一个 `-` 或 `1.`（后面还没敲空格）不算成型的列表项，等空格落下再缩进。
+  if (!selfMark || !hasListSpace(state, selfMark.to)) return
   const className = `cm-md-li cm-md-li-${Math.min(listDepth(node), 6)}`
   const tree = syntaxTree(state)
   // 行没有 li 外壳，续行也没有 ListMark。把语法树里已有的归属带到导出层，
@@ -98,14 +108,23 @@ function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: Decorat
   const last = node.nextSibling?.name === 'ListItem' ? state.doc.lineAt(node.nextSibling.from).number - 1 : ownLast
   for (let n = first; n <= last; n++) {
     const line = state.doc.line(n)
+    if (n > first && n <= ownLast && line.to <= ownEnd) {
+      // 用户在空列表项按回车退出列表后直接顶格打字，CommonMark 仍把无缩进的下一行算作懒续行；
+      // 没有缩进的非空行已经退出列表，不该继续挂列表缩进和归属。
+      const body = line.text.replace(QUOTE_PREFIX_RE, '')
+      if (body.trim() !== '' && !/^[ \t]/.test(body)) break
+    }
     if (n <= ownLast && line.to > ownEnd) {
       // 子列表里的行：问语法树，包住这一行的**最内层** ListItem 得是我自己。
-      // 位置取行内第一个非空白字符——嵌套项的行首是缩进，从行首问会问到外层那一项。
-      const indent = /^[ \t]*/.exec(line.text)?.[0].length ?? 0
-      const at = Math.min(line.from + indent, line.to)
+      // 位置取行内第一个非空白字符（跳过引用前缀与缩进）——从行首问会问到外层那一项。
+      const quoteLen = QUOTE_PREFIX_RE.exec(line.text)?.[0].length ?? 0
+      const indent = /^[ \t]*/.exec(line.text.slice(quoteLen))?.[0].length ?? 0
+      const at = Math.min(line.from + quoteLen + indent, line.to)
       let owner: SyntaxNode | null = tree.resolveInner(at, 1)
       while (owner && owner.name !== 'ListItem') owner = owner.parent
       if (!owner || owner.from !== node.from) continue
+      const body = line.text.slice(quoteLen)
+      if (body.trim() !== '' && !/^[ \t]/.test(body)) break
     }
     const paragraph = paragraphs.find(block => block.from <= line.to && block.to > line.from)
     ranges.push({ from: line.from, to: line.from, deco: Decoration.line({ class: className, attributes: {
@@ -244,6 +263,7 @@ function remeasureAfterDraw(): void {
     const dom = view.contentDOM
     dom.style.minHeight = '0'
     view.requestMeasure({
+      read: () => null,
       write: () => {
         dom.style.minHeight = ''
       },
@@ -328,9 +348,13 @@ class ImageWidget extends WidgetType {
     const img = document.createElement('img')
     img.src = this.src
     img.alt = this.alt
+    img.addEventListener('load', () => {
+      remeasureAfterDraw()
+    })
     img.addEventListener('error', () => {
       wrap.classList.add('cm-md-image-failed')
       wrap.textContent = this.source
+      remeasureAfterDraw()
     })
     wrap.appendChild(img)
     return wrap
@@ -474,14 +498,15 @@ function listDepth(node: SyntaxNode): number {
 }
 
 /** 扫描公式并压入装饰。 */
-function collectMath(state: EditorState, ranges: DecorationRange[]): void {
-  const text = state.doc.toString()
-
-  // 排除区：属性区、代码块、行内代码、行内 HTML。
-  // 这些地方里的 `$x$` 不该渲染成公式——代码就是代码，Obsidian 也是这么处理的。
-  const excluded: Excluded[] = excludedRanges(text, syntaxTree(state))
-
+function collectMath(
+  state: EditorState,
+  text: string,
+  excluded: Excluded[],
+  ranges: DecorationRange[],
+  zones: ActiveZone[],
+): void {
   for (const range of scanMath(text, excluded)) {
+    if (range.block) zones.push({ from: range.from, to: range.to, kind: 'block' })
     // 块公式：光标落进去就退回源码，就地改（行内公式的判据见上，保持不露）
     if (isActiveLine(state, range.from) || (range.block && isBlockActive(state, range.from, range.to))) {
       const delim = range.block ? 2 : 1
@@ -505,8 +530,7 @@ function collectMath(state: EditorState, ranges: DecorationRange[]): void {
 /** `==高亮==` 的匹配。不吃跨行，也不吃空的 `====`。 */
 const HIGHLIGHT_RE = /(?<![=])==(?!=)([^=\n]+?)==(?!=)/g
 
-function collectHighlight(state: EditorState, ranges: DecorationRange[], excluded: Excluded[]): void {
-  const text = state.doc.toString()
+function collectHighlight(state: EditorState, text: string, ranges: DecorationRange[], excluded: Excluded[]): void {
   const inExcluded = (pos: number) => excluded.some((e) => pos >= e.from && pos < e.to)
 
   HIGHLIGHT_RE.lastIndex = 0
@@ -641,8 +665,13 @@ const POINTER_EVENTS = new Set([
   'touchend',
 ])
 
-function collectMermaid(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
-  const text = state.doc.toString()
+function collectMermaid(
+  state: EditorState,
+  text: string,
+  ranges: DecorationRange[],
+  front: Range | null,
+  zones: ActiveZone[],
+): void {
   iterateContent(state, front, (node) => {
       if (node.name !== 'FencedCode') return
       // 第一行是 ```mermaid 才画
@@ -650,12 +679,13 @@ function collectMermaid(state: EditorState, ranges: DecorationRange[], front: Ra
       if (firstLineEnd === -1) return
       const opening = text.slice(node.from, firstLineEnd).trim()
       if (!/^(`{3,}|~{3,})\s*mermaid\s*$/.test(opening)) return
-      if (isBlockActive(state, node.from, node.to)) return
       // 去掉开头的 ```mermaid 行与结尾的 ```
       const bodyStart = firstLineEnd + 1
       const lastLineStart = text.lastIndexOf('\n', node.to - 1)
       const code = text.slice(bodyStart, lastLineStart === -1 ? node.to : lastLineStart)
       if (!code.trim()) return
+      zones.push({ from: node.from, to: node.to, kind: 'block' })
+      if (isBlockActive(state, node.from, node.to)) return
       ranges.push({
         from: node.from,
         to: node.to,
@@ -674,8 +704,14 @@ function collectMermaid(state: EditorState, ranges: DecorationRange[], front: Ra
 // 上来的人第一眼就看到文首多出几行 YAML，而它本来不在「所见即所得」的范围里。
 // 不折叠、不画成卡片、不换成一个「属性区」按钮：那些都是拿凭空造出来的控件替掉用户
 // 文件里真实存在的内容。收起时不画任何东西，布局上就像它不在。
-function collectFrontmatter(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
+function collectFrontmatter(
+  state: EditorState,
+  ranges: DecorationRange[],
+  front: Range | null,
+  zones: ActiveZone[],
+): void {
   if (!front) return
+  zones.push({ from: front.from, to: front.to, kind: 'frontmatter' })
   // 光标在里面就露。这里不看焦点：光标停在一个被收起来的块里而窗口没有焦点时，
   // 下一句敲进去的字会落在看不见的地方。
   const editing = state.selection.ranges.some(
@@ -901,9 +937,15 @@ function appendInline(parent: HTMLElement, text: string, base: string | null): v
   if (last < text.length) write(parent, last, text.length)
 }
 
-function collectTables(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
+function collectTables(
+  state: EditorState,
+  ranges: DecorationRange[],
+  front: Range | null,
+  zones: ActiveZone[],
+): void {
   iterateContent(state, front, (node) => {
       if (node.name !== 'Table') return
+      zones.push({ from: node.from, to: node.to, kind: 'block' })
       // 光标在表格里就退回源码：改表格就是改文字（#153）
       if (isBlockActive(state, node.from, node.to)) {
         pushBlockLines(state, node.from, node.to, 'cm-md-table', ranges)
@@ -986,8 +1028,7 @@ class FootnoteRefWidget extends WidgetType {
   }
 }
 
-function collectFootnotes(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
-  const text = state.doc.toString()
+function collectFootnotes(state: EditorState, text: string, ranges: DecorationRange[], front: Range | null): void {
   const numbers = footnoteNumbers(text)
   const definitions = footnoteDefinitions(text)
 
@@ -1044,13 +1085,19 @@ class HTMLWidget extends WidgetType {
   }
 }
 
-function collectHTML(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
+function collectHTML(
+  state: EditorState,
+  ranges: DecorationRange[],
+  front: Range | null,
+  zones: ActiveZone[],
+): void {
   // 成对的行内标签（`<span style="color:red">文字</span>`）一起处理：闭标签的起点记下来，
   // 轮到它时就跳过。否则两个标签各自成一个 widget，样式落在空标签上（#125）。
   const paired = new Set<number>()
   iterateContent(state, front, (node) => {
     const block = node.name === 'HTMLBlock'
     if (!block && node.name !== 'HTMLTag') return
+    if (block) zones.push({ from: node.from, to: node.to, kind: 'block' })
     if (block ? isBlockActive(state, node.from, node.to) : isActiveLine(state, node.from)) return false
     if (!block) {
       if (paired.has(node.from)) return false
@@ -1177,12 +1224,16 @@ function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Ran
         break
       }
       case 'ListMark': {
+        if (!hasListSpace(state, node.to)) break
         // 缩进只由一处分派：样式表按层级给左内边距（cm-md-li-N），所以源码里那几个
         // 空格在渲染模式下要藏起来。留着的话，排版是「CSS 缩进 + 源码空格」两份叠在
         // 一起：实测二级 56px、三级 88px，比旧引擎（每层 24px）多出三成，越深越夸张
         // （2026-11-07 橘子：「我不喜欢列表缩进那么多的排版…tab 之后，也太多了」）。
-        const lead = node.from - state.doc.lineAt(node.from).from
-        if (lead > 0) ranges.push({ from: node.from - lead, to: node.from, deco: hide(node.from - lead, node.from) })
+        // 引用里的列表跳过行首 `> `，那一段归 QuoteMark 自己藏，避免两份 replace 撞区间。
+        const line = state.doc.lineAt(node.from)
+        const quoteLen = QUOTE_PREFIX_RE.exec(state.doc.sliceString(line.from, node.from))?.[0].length ?? 0
+        const hideFrom = line.from + quoteLen
+        if (node.from > hideFrom) ranges.push({ from: hideFrom, to: node.from, deco: hide(hideFrom, node.from) })
         const raw = state.doc.sliceString(node.from, node.to).trim()
         // 待办项的圆点要去掉：它已经有复选框了，两个标记并排就是「• ☐ 文案」。
         const after = state.doc.sliceString(node.to, node.to + 4)
@@ -1394,8 +1445,34 @@ let currentFlash: { from: number; to: number } | null = null
 
 // ─── 组装 ────────────────────────────────────────────────────────────────────
 
+interface ActiveZone {
+  from: number
+  to: number
+  kind: 'frontmatter' | 'block'
+}
+
+const zonesByDeco = new WeakMap<DecorationSet, ActiveZone[]>()
+
+/** 选区当前落进了哪些需要展开源码的块。没变就不必在拖选时重算整篇装饰（#201）。 */
+function activeZonesKey(state: EditorState, zones: readonly ActiveZone[]): string {
+  if (zones.length === 0) return ''
+  const main = state.selection.main
+  const parts: string[] = []
+  for (let i = 0; i < zones.length; i++) {
+    const z = zones[i]
+    if (z.kind === 'frontmatter') {
+      const hit = state.selection.ranges.some((r) => r.empty && r.head >= z.from && r.head <= z.to)
+      if (hit) parts.push(`f:${z.from}:${z.to}`)
+    } else if (main.from >= z.from && main.to <= z.to) {
+      parts.push(`b:${z.from}:${z.to}`)
+    }
+  }
+  return parts.join('|')
+}
+
 function buildDecorations(state: EditorState, flash: { from: number; to: number } | null): DecorationSet {
   const ranges: DecorationRange[] = []
+  const zones: ActiveZone[] = []
   const text = state.doc.toString()
   const excluded = excludedRanges(text, syntaxTree(state))
   // 属性区的区间要算一次、多处用：压淡它、把它里面的 YAML 排出 markdown 排版、
@@ -1408,18 +1485,18 @@ function buildDecorations(state: EditorState, flash: { from: number; to: number 
 
   collectBlocks(state, ranges, front)
   collectLinks(state, ranges, front)
-  collectFootnotes(state, ranges, front)
-  collectHTML(state, ranges, front)
+  collectFootnotes(state, text, ranges, front)
+  collectHTML(state, ranges, front, zones)
   collectImages(state, ranges, front)
   collectPages(state, ranges, front)
   collectInline(state, ranges, front)
-  collectFrontmatter(state, ranges, front)
-  collectTables(state, ranges, front)
+  collectFrontmatter(state, ranges, front, zones)
+  collectTables(state, ranges, front, zones)
   collectTaskItems(state, ranges, front)
-  collectMermaid(state, ranges, front)
-  collectHighlight(state, ranges, excluded)
+  collectMermaid(state, text, ranges, front, zones)
+  collectHighlight(state, text, ranges, excluded)
   // 公式放最后：它覆盖区间，其它装饰不该插进它里面
-  collectMath(state, ranges)
+  collectMath(state, text, excluded, ranges, zones)
 
   // 排序键必须带上 startSide：RangeSetBuilder 只接受按 (from, startSide) 递增的顺序，
   // 原来只按 (from, to) 排，同一段区间上挂了两种装饰时就翻车。
@@ -1432,14 +1509,16 @@ function buildDecorations(state: EditorState, flash: { from: number; to: number 
   ranges.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide || a.to - b.to)
   const builder = new RangeSetBuilder<Decoration>()
   for (const r of ranges) builder.add(r.from, r.to, r.deco)
-  return builder.finish()
+  const deco = builder.finish()
+  zonesByDeco.set(deco, zones)
+  return deco
 }
 
 /**
  * 装饰层。
  *
- * 重算是「文档变了或选区变了」才做：选区决定哪些标记显形，所以点一下也要重算。
- * 其余事务（比如落点高亮的开关）由 effect 单独驱动，靠 flash 值判断。
+ * 文档变化、解析推进、导出开关切换时重算；单纯移动光标或拖选文字时，只有跨进/跨出
+ * 块级替换区（表格、图、块公式、HTML 块、属性区）才重算，避免大文档拖选卡死（#201）。
  */
 export const livePreviewField = StateField.define<DecorationSet>({
   create: (state) => buildDecorations(state, null),
@@ -1450,13 +1529,15 @@ export const livePreviewField = StateField.define<DecorationSet>({
     const parsed = tr.effects.some((effect) => effect.is(decorationsRefreshEffect))
     // 文档换了个文件，图片的相对路径要按新的基准重新解析
     const rebased = tr.effects.some((effect) => effect.is(setDocumentFileUrlEffect))
-    // 焦点变化与导出开关都要重算：前者决定「正在编辑」那一行的源码显不显形，
-    // 后者在导出时把这一层整个关掉。
-    const focused = tr.state.field(editorFocusField, false) ?? false
-    const wasFocused = tr.startState.field(editorFocusField, false) ?? false
     const clean = tr.state.field(cleanExportField, false) ?? false
     const wasClean = tr.startState.field(cleanExportField, false) ?? false
-    if (!tr.docChanged && !tr.selection && !flash && !parsed && !rebased && focused === wasFocused && clean === wasClean) return deco
+    if (!tr.docChanged && !flash && !parsed && !rebased && clean === wasClean) {
+      if (!tr.selection) return deco
+      const zones = zonesByDeco.get(deco) ?? []
+      if (activeZonesKey(tr.state, zones) === activeZonesKey(tr.startState, zones)) {
+        return deco
+      }
+    }
     return buildDecorations(tr.state, flashValue)
   },
   provide: (field) => EditorView.decorations.from(field),

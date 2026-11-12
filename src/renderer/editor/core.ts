@@ -76,7 +76,9 @@ const taskMarkerAtomicRanges = EditorView.atomicRanges.of((view) => {
       // 列表标记就没了；停在 `]` 和正文之间打字，`[x]` 后面不再跟空格，任务语法也拆了。
       // 两种都是 `TaskMarker` 看着还在、下一帧就变回源码的那种怪事（#164）。
       const prefix = doc.sliceString(line.from, node.from)
-      const from = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]+$/.test(prefix) ? line.from : node.from
+      const quoteLen = /^(?:[ \t]*> ?)+/.exec(prefix)?.[0].length ?? 0
+      const listPart = prefix.slice(quoteLen)
+      const from = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]+$/.test(listPart) ? line.from + quoteLen : node.from
       const trailing = doc.sliceString(node.to, Math.min(node.to + 1, line.to)) === ' ' ? node.to + 1 : node.to
       ranges.push({ from, to: trailing })
     },

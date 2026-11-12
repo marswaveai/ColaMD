@@ -157,7 +157,23 @@ const scenarios = [
   { name: '文档末尾隔一行回车', doc: '- 甲\n\n', cursor: (d) => [at(d, '甲') + 1], keys: ['Enter'], expect: '- 甲\n- \n\n' },
   // 「多空格」的嫌疑：标记后本来就多打了空格的项
   { name: '标记后多空格续行不多留空格', doc: '-   甲', cursor: (d) => [d.length], keys: ['Enter'], observe: '' },
-  { name: '标记后按退格拆标记', doc: '- 甲', cursor: (d) => [at(d, '甲')], keys: ['Backspace'], observe: '' }
+  // 渲染模式下标记隐藏，正文首字前退格必须干净拆标记或退缩进，绝不留下 2/4 个空格（2026-11-11）
+  { name: '标记后按退格干净拆标记不留空格', doc: '- 甲', cursor: (d) => [at(d, '甲')], keys: ['Backspace'], expect: '甲', expectHead: () => 0 },
+  { name: '二级列表首字前退格退成一级不留四空格', doc: '- 甲\n  - 乙', cursor: (d) => [at(d, '乙')], keys: ['Backspace'], expect: '- 甲\n- 乙', expectHead: (d) => at(d, '乙') },
+  { name: '三级列表首字前退格退成二级', doc: '- 甲\n  - 乙\n    - 丙', cursor: (d) => [at(d, '丙')], keys: ['Backspace'], expect: '- 甲\n  - 乙\n  - 丙', expectHead: (d) => at(d, '丙') },
+  { name: '有序列表首字前退格拆标记并补号', doc: '1. 甲\n2. 乙\n3. 丙', cursor: (d) => [at(d, '乙')], keys: ['Backspace'], expect: '1. 甲\n乙\n1. 丙', expectHead: (d) => at(d, '乙') },
+  // 刚敲 `1.` 尚未敲空格不能被提前改成上一条续号，也不能跨顶格段落续号（2026-11-11）
+  { name: '敲 1. 未敲空格不提前续号', doc: '1. 甲\n2. 乙\n1', cursor: (d) => [d.length], type: '.', expect: '1. 甲\n2. 乙\n1.' },
+  { name: '隔着顶格普通段落新起 1. 不跨段续号', doc: '1. 甲\n2. 乙\n普通段落\n1.', cursor: (d) => [d.length], type: ' 新表', expect: '1. 甲\n2. 乙\n普通段落\n1. 新表' },
+  { name: '退出列表顶格打字后再回车不补缩进', doc: '- 甲\n普通段落', cursor: (d) => [d.length], keys: ['Enter'], expect: '- 甲\n普通段落\n', expectHead: (d) => d.length },
+  // 引用套列表（2026-11-11）：Tab / Shift+Tab / 退格 / 空行退出都必须认行首 `> `
+  { name: '引用内列表 Tab 缩进落在 > 后不炸代码块', doc: '> - 甲\n> - 乙', cursor: (d) => [at(d, '乙')], keys: ['Tab'], expect: '> - 甲\n>   - 乙', expectHead: (d) => at(d, '乙') },
+  { name: '引用内二级列表 Shift+Tab 退回一级', doc: '> - 甲\n>   - 乙', cursor: (d) => [at(d, '乙')], keys: [['Tab', 8]], expect: '> - 甲\n> - 乙', expectHead: (d) => at(d, '乙') },
+  { name: '引用内二级列表首字前退格退回一级', doc: '> - 甲\n>   - 乙', cursor: (d) => [at(d, '乙')], keys: ['Backspace'], expect: '> - 甲\n> - 乙', expectHead: (d) => at(d, '乙') },
+  { name: '引用内一级列表首字前退格拆标记保留引用', doc: '> - 甲\n> - 乙', cursor: (d) => [at(d, '乙')], keys: ['Backspace'], expect: '> - 甲\n> 乙', expectHead: (d) => at(d, '乙') },
+  { name: '引用内待办方框后退格只拆框保留 > - ', doc: '> - [ ] 甲', cursor: (d) => [at(d, '甲')], keys: ['Backspace'], expect: '> - 甲', expectHead: (d) => at(d, '甲') },
+  { name: '引用内空列表项回车退回空引用行', doc: '> - 甲\n> - ', cursor: (d) => [d.length], keys: ['Enter'], expect: '> - 甲\n> ' },
+  { name: '空引用行单次回车直接退出引用', doc: '> 甲\n> ', cursor: (d) => [d.length], keys: ['Enter'], expect: '> 甲\n', expectHead: (d) => d.length }
 ]
 
 async function main() {
@@ -229,12 +245,32 @@ async function main() {
         `得到 ${JSON.stringify(doc)} 光标 ${caret}，期望 ${JSON.stringify(s.expect)}${s.expectHead ? ` 光标 ${s.expectHead(doc)}` : ''}`)
     }
 
-    // 右键要一次跨过整个复选框，不是一格一格挪
+    // 右键要一次跨过整个复选框，不是一格一格挪（含引用内的待办）
     await setDoc('- [ ] 甲')
     await setCursor(0)
     await press(renderer, 'ArrowRight')
     const head = await headOf()
     check('右键一次跨过待办方框', head === 6, `光标落在 ${head}，应在 6（甲的起点）`)
+
+    await setDoc('> - [ ] 甲')
+    await setCursor(2)
+    await press(renderer, 'ArrowRight')
+    const quotedTaskHead = await headOf()
+    check('引用内右键一次跨过待办方框', quotedTaskHead === 8, `光标落在 ${quotedTaskHead}，应在 8（甲的起点）`)
+
+    const quotedTaskBox = JSON.parse(await evaluate(renderer, `(() => {
+      const cb = document.querySelector('#editor .cm-md-task')
+      if (!cb) return 'null'
+      const r = cb.getBoundingClientRect()
+      return JSON.stringify({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) })
+    })()`))
+    if (quotedTaskBox) {
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await renderer.send('Input.dispatchMouseEvent', { type, x: quotedTaskBox.x, y: quotedTaskBox.y, button: 'left', clickCount: 1 })
+      }
+      await sleep(160)
+    }
+    check('引用内点击待办复选框切换勾选', (await docOf()) === '> - [x] 甲', `文档=${JSON.stringify(await docOf())}`)
 
     reportChecks()
   } finally {

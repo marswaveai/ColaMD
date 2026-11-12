@@ -1236,7 +1236,7 @@ async function checkTyping() {
       await pressKey(renderer, 'Backspace', 'Backspace', 8)
       await pressKey(renderer, 'Backspace', 'Backspace', 8)
     }
-    const lineClasses = () => evaluate(renderer, `JSON.stringify([...document.querySelectorAll('#editor .cm-line')].map((l) => l.className))`)
+    const lineClasses = async () => JSON.parse(await evaluate(renderer, `JSON.stringify([...document.querySelectorAll('#editor .cm-line')].map((l) => l.className))`))
     const textColorOf = (needle) => evaluate(renderer, `(() => {
       const walker = document.createTreeWalker(document.querySelector('#editor .cm-content'), NodeFilter.SHOW_TEXT)
       let node
@@ -1249,11 +1249,11 @@ async function checkTyping() {
     // 1. 空格没落下之前不该当标题（CommonMark 把孤零零一个 `#` 也算空标题）
     await insert('#')
     const hashClasses = await lineClasses()
-    check('只打一个 # 还不是标题', !hashClasses.includes('atxheading') && (await docText()) === '#',
-      `行类=${hashClasses} 文档=${JSON.stringify(await docText())}`)
+    check('只打一个 # 还不是标题', !hashClasses.some((c) => c.includes('atxheading')) && (await docText()) === '#',
+      `行类=${JSON.stringify(hashClasses)} 文档=${JSON.stringify(await docText())}`)
     await insert(' 一级')
-    check('打出空格才成为标题', (await lineClasses()).includes('atxheading1'),
-      `行类=${await lineClasses()} 文档=${JSON.stringify(await docText())}`)
+    check('打出空格才成为标题', (await lineClasses()).some((c) => c.includes('atxheading1')),
+      `行类=${JSON.stringify(await lineClasses())} 文档=${JSON.stringify(await docText())}`)
 
     // 2. 标题前一次退格变回普通段落（不要留下 `#标题` 这种半截状态）
     await pressKey(renderer, 'Home', 'Home', 36)
@@ -1297,8 +1297,34 @@ async function checkTyping() {
     await pressKey(renderer, 'Enter', 'Enter', 13)
     check('空列表项上回车退出列表', (await docText()) === '- 甲\n', JSON.stringify(await docText()))
     await insert('正文')
-    check('退出列表后打的是普通段落', (await docText()) === '- 甲\n正文' && !(await lineClasses()).at(-1).includes('cm-md-li'),
-      `文档=${JSON.stringify(await docText())} 行类=${await lineClasses()}`)
+    const exitedClasses = await lineClasses()
+    check('退出列表后打的是普通段落', (await docText()) === '- 甲\n正文' && !exitedClasses.at(-1).includes('cm-md-li'),
+      `文档=${JSON.stringify(await docText())} 行类=${JSON.stringify(exitedClasses)}`)
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await insert('第二段')
+    const nextParaClasses = await lineClasses()
+    check('退出列表后继续回车仍然是普通段落',
+      (await docText()) === '- 甲\n正文\n第二段' && !nextParaClasses.at(-1).includes('cm-md-li'),
+      `文档=${JSON.stringify(await docText())} 行类=${JSON.stringify(nextParaClasses)}`)
+    await clearDoc()
+
+    // 6b. 有序列表退出后打普通段落，再敲 `1.` 过程态不提前重排也不跨段续号
+    await insert('1. 甲')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await insert('乙')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await insert('普通正文')
+    await pressKey(renderer, 'Enter', 'Enter', 13)
+    await insert('1.')
+    const pendingNumClasses = await lineClasses()
+    check('敲 1. 尚未敲空格时不提前重排也不缩进',
+      (await docText()) === '1. 甲\n2. 乙\n普通正文\n1.' && !pendingNumClasses.at(-1).includes('cm-md-li'),
+      `文档=${JSON.stringify(await docText())} 行类=${JSON.stringify(pendingNumClasses)}`)
+    await insert(' 新表')
+    check('隔了普通正文再起有序列表从 1. 开始',
+      (await docText()) === '1. 甲\n2. 乙\n普通正文\n1. 新表' && (await lineClasses()).at(-1).includes('cm-md-li-0'),
+      `文档=${JSON.stringify(await docText())} 行类=${JSON.stringify(await lineClasses())}`)
     await clearDoc()
 
     // 7. 链接后面打中文冒号：后半行不能一起变成链接
@@ -1308,6 +1334,31 @@ async function checkTyping() {
     const bodyColor = await evaluate(renderer, `getComputedStyle(document.querySelector('#editor .cm-content')).color`)
     check('链接后面打中文冒号，后半行保持正文色', tailColor === bodyColor && urlColor !== bodyColor,
       `链接=${urlColor} 后半行=${tailColor} 正文=${bodyColor}`)
+
+    // 8. 超一屏文档（含 .cm-gap）拖选普通段落与视口内复制（#201）：不触发全文重算与整篇异步导出
+    const longDoc = Array.from({ length: 180 }, (_, idx) => `第 ${idx + 1} 段**粗体**普通正文内容，用来撑出视口外的虚拟滚动间隙。`).join('\n\n')
+    const longCopyProbe = JSON.parse(await evaluate(renderer, `(() => {
+      const v = document.querySelector('#editor .cm-content').cmTile.root.view
+      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: ${JSON.stringify(longDoc)} }, selection: { anchor: 0 } })
+      const hasGap = !!v.contentDOM.querySelector('.cm-gap')
+      const field = v.state.config.base.flat(Infinity).find((ext) => ext && typeof ext === 'object' && 'init' in ext && 'update' in ext && String(ext.create || ext.init).includes('buildDecorations'))
+      v.dispatch({ selection: { anchor: 2, head: 14 } })
+      const data = new DataTransfer()
+      const ev = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true })
+      v.contentDOM.dispatchEvent(ev)
+      return JSON.stringify({
+        hasGap,
+        defaultPrevented: ev.defaultPrevented,
+        plain: data.getData('text/plain'),
+        html: data.getData('text/html')
+      })
+    })()`))
+    check('超一屏文档视口内选字直接同步复制（不被 .cm-gap 误判）',
+      longCopyProbe.hasGap === true &&
+      longCopyProbe.defaultPrevented === true &&
+      longCopyProbe.plain.includes('粗体') &&
+      longCopyProbe.html.includes('<strong>粗体</strong>'),
+      JSON.stringify(longCopyProbe))
   } finally {
     stopVerifyApp(join(WORK, 'udd-typing'))
     try { process.kill(child.pid, 'SIGKILL') } catch { /* 已退出 */ }

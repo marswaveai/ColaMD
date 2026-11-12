@@ -96,7 +96,11 @@ function ensureThemesDir(): void {
 }
 
 // --- Recent files + session restore (#28, #45) ---
-const recentStorePath = join(app.getPath('home'), '.colamd', 'recent.json')
+// 验收脚本传入独立的 --user-data-dir 时，recent.json 跟着临时目录走，别污染用户的 ~/.colamd/recent.json。
+const hasCustomUserDataDir = process.argv.some((arg) => arg.startsWith('--user-data-dir'))
+const recentStorePath = hasCustomUserDataDir
+  ? join(app.getPath('userData'), 'recent.json')
+  : join(app.getPath('home'), '.colamd', 'recent.json')
 let recentStore: { recent: string[]; restoreOnLaunch: boolean } = { recent: [], restoreOnLaunch: true }
 const languagePreferencePath = join(app.getPath('userData'), 'language.json')
 
