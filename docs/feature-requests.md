@@ -299,15 +299,17 @@ LLM 生成的 Markdown 常常在段落之间留一串空行，读起来松垮。
 
 **Status:** Candidate, not scheduled. 参考实现是现成的（mdnice / markdown-nice 那一路：Markdown → 行内样式 HTML）。按项目里「参考老前辈的决策」的原则，先研究它们的样式表怎么定，再决定我们的做法，不自己发明一套。
 
-### Selectable text inside a rendered block (#141, #153)
+### Selectable text inside a rendered block (#141, #153, #192, #205)
 
-**Source:** [#141](https://github.com/marswaveai/ColaMD/issues/141), [#153](https://github.com/marswaveai/ColaMD/issues/153)
+**Source:** [#141](https://github.com/marswaveai/ColaMD/issues/141), [#153](https://github.com/marswaveai/ColaMD/issues/153), [#192](https://github.com/marswaveai/ColaMD/issues/192), [#205](https://github.com/marswaveai/ColaMD/issues/205)
+
+**Status:** In progress for tables via [PR #194](https://github.com/marswaveai/ColaMD/pull/194) (Draft, queued behind #181/#184/#193).
 
 A rendered block (table, diagram, image, formula, raw HTML) is a replacement widget, so its own text never enters the selection model: dragging across a rendered table selects nothing, and the same holds for a diagram's labels.
 
 2026-10-15 changed what a click does (#153): block widgets reveal their Markdown while the caret is inside, and clicking a table cell lands the caret in that cell of the source (`isBlockActive` in `live-preview.ts`, `tableCellAnchor` in `editor.ts`). The reported problem, that typing after clicking a table destroyed it, is gone with that.
 
-Still open: editing and selecting text inside the rendered block itself, without stepping into the source. The document is text and rendering is a layer of decoration over it (`docs/editor-architecture.md`), so that is a structural change rather than a styling fix: the rendered table would have to stay real text, with the pipes hidden and the cells padded so the columns line up. Undecided.
+Still open: editing and selecting text inside the rendered block itself, without stepping into the source. For tables, [PR #194](https://github.com/marswaveai/ColaMD/pull/194) implements in-place editing on real document text with hidden pipes and aligned cells; other rendered blocks remain undecided.
 
 ### XDG data directories on Linux (#142)
 
@@ -456,6 +458,18 @@ Fenced code blocks currently render as plain styled text with a copy button, wit
 
 
 ## Declined
+
+### Show greyed-out non-Markdown files in the file panel
+
+**Source:** [#204](https://github.com/marswaveai/ColaMD/issues/204)
+
+Declined (2026-11-23). The file panel is a quiet Markdown document switcher, not a general file browser. Mixing unopenable files into the list adds visual noise, and adding a preference switch goes against keeping configuration minimal. Opening the folder in Finder or Explorer covers inspecting other file types.
+
+### Full-width (full-bleed) text width option
+
+**Source:** [#204](https://github.com/marswaveai/ColaMD/issues/204)
+
+Declined (2026-11-23). Per `design.md`, the editor keeps breathing room on both sides and does not stretch the reading column to fill an ultrawide window. View > Text Width already offers narrow (640), standard (780), and wide (1080) for large displays.
 
 ### Official Homebrew tap
 
