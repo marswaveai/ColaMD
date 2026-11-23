@@ -41,6 +41,21 @@ function escapeAttribute(value: string): string {
   return escapeText(value).replace(/"/g, '&quot;')
 }
 
+const DROP_SELECTOR = Array.from(DROP_CLASSES, name => `.${name}`).join(',')
+
+/**
+ * 这一行交出去的文字：编辑器零件（DROP_CLASSES）里的字不算。
+ * 只有 `>` 的空引用行会露出引用标记，但它和空行一样不是内容。
+ */
+function deliveredText(line: HTMLElement): string {
+  let text = ''
+  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.parentElement?.closest(DROP_SELECTOR)) text += node.textContent ?? ''
+  }
+  return text
+}
+
 function lineKind(line: HTMLElement, includeList = true): LineKind {
   const classes = line.classList
   // 引用排在最前：引用里的标题、列表、代码由 renderGroup 剥掉引用后再按块翻译
@@ -58,7 +73,7 @@ function lineKind(line: HTMLElement, includeList = true): LineKind {
     if (classes.contains(`cm-md-li-${depth}`)) return 'li'
   }
   // cm-widgetBuffer 是 CodeMirror 在隐藏区间旁边垫的占位图，不是内容（引用里的空行 `>` 就带着它）
-  if ((line.textContent ?? '').trim() === '' && line.querySelector('img:not(.cm-widgetBuffer)') === null) return 'empty'
+  if (deliveredText(line).trim() === '' && line.querySelector('img:not(.cm-widgetBuffer)') === null) return 'empty'
   return 'p'
 }
 
@@ -72,8 +87,8 @@ function listDepth(line: HTMLElement): number {
 
 /** 这一行是不是有序列表（`1.` 这种序号是用户写的，会留在行里）。 */
 function isOrdered(line: HTMLElement): boolean {
-  // 选区从第一项的文字起选时，序号不在选区里，行上的类还在
-  if (line.classList.contains('cm-md-li-ordered')) return true
+  // 选区从第一项的文字起选时，序号不在选区里，行上的属性还在（有序待办项的序号也不显示）
+  if (line.dataset.listNumber !== undefined || line.classList.contains('cm-md-li-ordered')) return true
   const mark = line.querySelector('.cm-md-listmark')
   return !!mark && /^\s*\d+[.)]/.test(mark.textContent ?? '')
 }

@@ -31,7 +31,8 @@ async function main() {
   }
   process.argv = [process.argv[0], __filename, source]
   await app.whenReady()
-  savedClipboard = await Promise.all((await clipboard.read()).map(async item => new ClipboardItem(
+  // 空剪贴板会读出一个没有类型的条目，ClipboardItem 不接受，只存有内容的条目。
+  savedClipboard = await Promise.all((await clipboard.read()).filter(item => item.types.length).map(async item => new ClipboardItem(
     Object.fromEntries(await Promise.all(item.types.map(async type => [type, await item.getType(type)]))),
   )))
   let started = false
