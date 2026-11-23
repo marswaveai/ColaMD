@@ -131,6 +131,22 @@ function handleEnter(view: EditorView): boolean {
     return true
   }
 
+  // 无序项正文首字前（`- |甲`）：与有序项 2b 一致，在上方插入完整的空同级项，光标留在原正文前。
+  // 交给 continueMarkup 会先削掉光标前的空白，上一行只剩 `-`，渲染层不认它是列表（见 hasListSpace）。
+  const bulletStart = startLine.from + startParsed.contentOffset
+  if (startParsed.kind === 'bullet' && !startParsed.isEmpty && range.head <= bulletStart) {
+    const indent = startLine.text.slice(startParsed.quoteLen, startParsed.quoteLen + startParsed.leadChars)
+    const upper = `${startParsed.quotePrefix}${indent}${startParsed.bullet} ${startParsed.box ? '[ ] ' : ''}\n`
+    const changes = state.changes({ from: startLine.from, to: startLine.from, insert: upper })
+    view.dispatch({
+      changes,
+      selection: { anchor: changes.mapPos(bulletStart, 1) },
+      scrollIntoView: true,
+      userEvent: 'input',
+    })
+    return true
+  }
+
   return continueMarkup(view)
 }
 

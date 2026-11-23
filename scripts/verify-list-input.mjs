@@ -185,6 +185,11 @@ const scenarios = [
   { name: '9. 涨成 10. 时旧 3 空格子项自动补缩进不脱钩', doc: '8. 甲\n9. 乙\n   1. 子', cursor: (d) => [at(d, '甲') + 1], keys: ['Enter'], expect: '8. 甲\n9. \n10. 乙\n    1. 子' },
   { name: '带子列表的父项行尾回车插入为第一条子项', doc: '1. 甲\n    1. 子1\n2. 乙', cursor: (d) => [at(d, '甲') + 1], keys: ['Enter'], expect: '1. 甲\n    1. \n    2. 子1\n2. 乙', expectHead: (d) => at(d, '    1. ') + 7 },
   { name: '有序项正文首字前回车在上方插空项原项顺延', doc: '1. 甲\n2. 乙', cursor: (d) => [at(d, '甲')], keys: ['Enter'], expect: '1. \n2. 甲\n3. 乙', expectHead: (d) => at(d, '甲') },
+  // 无序项同理；上方新项必须保留标记后的空格，否则 `-` 不再算列表
+  { name: '无序项正文首字前回车在上方插空项', doc: '正文\n\n- 甲\n- 乙', cursor: (d) => [at(d, '甲')], keys: ['Enter'], expect: '正文\n\n- \n- 甲\n- 乙', expectHead: (d) => at(d, '甲') },
+  { name: '引用里无序项首字前回车保留 > 与空格', doc: '> - 甲', cursor: (d) => [at(d, '甲')], keys: ['Enter'], expect: '> - \n> - 甲', expectHead: (d) => at(d, '甲') },
+  { name: '嵌套无序项首字前回车保留缩进', doc: '- 甲\n  * 乙', cursor: (d) => [at(d, '乙')], keys: ['Enter'], expect: '- 甲\n  * \n  * 乙', expectHead: (d) => at(d, '乙') },
+  { name: '待办首字前回车在上方插未勾选空项', doc: '- [x] 甲', cursor: (d) => [at(d, '甲')], keys: ['Enter'], expect: '- [ ] \n- [x] 甲', expectHead: (d) => at(d, '甲') },
   { name: '子列表首项 Shift+Tab 退级后留下的子项归 1.', doc: '1. 甲\n    1. 乙\n    2. 丙', cursor: (d) => [at(d, '乙')], keys: [['Tab', 8]], expect: '1. 甲\n2. 乙\n    1. 丙', expectHead: (d) => at(d, '乙') },
   { name: '嵌套空子项回车先退一级成上层同级项', doc: '1. 甲\n    1. 乙\n    2. ', cursor: (d) => [d.length], keys: ['Enter'], expect: '1. 甲\n    1. 乙\n2. ', expectHead: (d) => d.length },
   { name: '带子列表父项 Tab 缩进时整棵子树联动', doc: '1. 甲\n2. 乙\n    1. 子1', cursor: (d) => [at(d, '乙')], keys: ['Tab'], expect: '1. 甲\n    1. 乙\n        1. 子1', expectHead: (d) => at(d, '乙') },
