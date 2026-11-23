@@ -206,7 +206,9 @@ function blockNodes(nodes: MarkdownNode[] | undefined, sourcePath: string | null
     } else if (node.type === 'list') {
       const start = node.start ?? 1
       for (const [index, item] of (node.children ?? []).entries()) {
-        const first = item.children?.find((child) => child.type === 'paragraph')
+        // 只有开头那块是段落时才并进符号行；`- | A |` 这类以表格、代码、引用开头的项，
+        // 符号单独一行，后面的段落按原顺序跟在它们后面，不能被提到前面去。
+        const first = item.children?.[0]?.type === 'paragraph' ? item.children[0] : undefined
         const prefix = node.ordered ? `${start + index}. ` : '• '
         output.push(new Paragraph({
           children: [new TextRun({ text: prefix }), ...inlineRuns(first?.children)],

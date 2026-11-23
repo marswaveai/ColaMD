@@ -94,6 +94,29 @@ check('中文注释保留', xml.includes('值'))
 check('引用两段都在，且没有挤成一段', xml.includes('引用第一段') && xml.includes('引用第二段'))
 check('标题保留', xml.includes('导出验证'))
 
+// 5. 列表项以表格或代码开头时，后面的段落不能被提到它们前面
+const listFixture = [
+  '- | 表头甲 | 表头乙 |',
+  '  |---|---|',
+  '  | 格一 | 格二 |',
+  '',
+  '  表格后的段落',
+  '- ```',
+  '  代码行',
+  '  ```',
+  '',
+  '  代码后的段落',
+  '- 普通项文字',
+  '',
+].join('\n')
+const listPath = join(WORK, 'list.docx')
+writeFileSync(listPath, await markdownToDocx({ content: listFixture, sourcePath: null }))
+const listXml = execFileSync('unzip', ['-p', listPath, 'word/document.xml']).toString('utf8')
+const at = (text) => listXml.indexOf(text)
+check('列表项里表格在后续段落之前', at('表头甲') >= 0 && at('表头甲') < at('表格后的段落'), `表格 ${at('表头甲')} 段落 ${at('表格后的段落')}`)
+check('列表项里代码在后续段落之前', at('代码行') >= 0 && at('代码行') < at('代码后的段落'), `代码 ${at('代码行')} 段落 ${at('代码后的段落')}`)
+check('以段落开头的项仍和符号同一行', /• <\/w:t>(?:(?!<\/w:p>).)*普通项文字/s.test(listXml))
+
 mkdirSync(WORK, { recursive: true })
 rmSync(WORK, { recursive: true, force: true })
 console.log(`\n${passed} passed / ${failed} failed`)
