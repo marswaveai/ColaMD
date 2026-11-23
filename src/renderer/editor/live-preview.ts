@@ -1225,6 +1225,8 @@ function collectBlocks(
   front: Range | null,
   mathRanges: MathRange[],
 ): void {
+  // 引用块里有没有字，按块起点记一次：同一块里的每个空 `>` 行都要问，不能每次重切整块。
+  const quoteHasText = new Map<number, boolean>()
   iterateContent(state, front, (node) => {
     switch (node.name) {
       case 'Blockquote': {
@@ -1341,10 +1343,22 @@ function collectBlocks(
       }
       case 'QuoteMark': {
         // `>` 在光标不在这一行时藏起来（连它后面的空格），引用就该只看到竖线与文字
-        // 例外：这一行除了 `>` 别的什么都没有。刚打出一个 `>` 就把它藏掉，屏幕上什么
-        // 都不剩，得再打个空格才出现引用竖线（2026-11-07 与标题同一个毛病）。
+        // 例外：这一行除了 `>` 别的什么都没有，而且整个引用块还一个字都没有。刚打出一个
+        // `>` 就把它藏掉，屏幕上什么都不剩，得再打个空格才出现引用竖线（2026-11-07 与
+        // 标题同一个毛病）。引用里已经有字时，空 `>` 行只是段落之间的分隔，照常藏起来，
+        // 否则两段引用中间会露出一个孤零零的 `>`。
         const rest = state.doc.sliceString(node.to, state.doc.lineAt(node.to).to)
-        if (rest.trim() === '' || isActiveLine(state, node.from)) {
+        const quote = node.node.parent
+        let emptyQuote = false
+        if (rest.trim() === '' && quote?.name === 'Blockquote') {
+          let known = quoteHasText.get(quote.from)
+          if (known === undefined) {
+            known = /[^>\s]/.test(state.doc.sliceString(quote.from, quote.to))
+            quoteHasText.set(quote.from, known)
+          }
+          emptyQuote = !known
+        }
+        if (emptyQuote || isActiveLine(state, node.from)) {
           ranges.push({ from: node.from, to: node.to, deco: MARK({ class: 'cm-md-quotemark' }) })
         } else {
           hideMarker(state, node.from, node.to, ranges)

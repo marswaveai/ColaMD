@@ -1265,6 +1265,26 @@ async function checkTyping() {
     await insert('> 引用')
     await pressKey(renderer, 'Enter', 'Enter', 13)
     check('引用里回车自动续 >', (await docText()) === '> 引用\n> ', JSON.stringify(await docText()))
+    // 每行露出几个 `>`：只有整个引用块还没有字时才露，引用里分段的空 `>` 行照常藏
+    const quoteMarks = async (text) => JSON.parse(await evaluate(renderer, `(() => {
+      const view = document.querySelector('.cm-content').cmTile.root.view
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: ${JSON.stringify(text)} }, selection: { anchor: 0 } })
+      return JSON.stringify([...document.querySelectorAll('#editor .cm-line')].map((l) => l.querySelectorAll('.cm-md-quotemark').length))
+    })()`))
+    check('引用里回车后的空 > 行不露 >', JSON.stringify(await quoteMarks('> 引用\n> ')) === '[0,0]', JSON.stringify(await quoteMarks('> 引用\n> ')))
+    for (const [label, text, expected] of [
+      ['刚打出的 > 露出来', '>', [1]],
+      ['刚打出的 > 加空格仍露出来', '> ', [1]],
+      ['只有空 > 的引用都露出来', '>\n>', [1, 1]],
+      ['两段引用之间的空 > 不露', '> 第一段\n>\n> 第二段', [0, 0, 0]],
+      ['引用开头的空 > 不露', '>\n> 正文', [0, 0]],
+      ['嵌套引用刚打出的内层 > 露出来', '> 甲\n> >', [0, 1]],
+      ['嵌套引用分段的空 > 不露', '> > 甲\n> >\n> > 乙', [0, 0, 0]],
+      ['列表里的引用分段不露 >', '- > 甲\n  >\n  > 乙', [0, 0, 0]],
+    ]) {
+      const got = await quoteMarks(text)
+      check(label, JSON.stringify(got) === JSON.stringify(expected), `文档=${JSON.stringify(text)} 每行露出的 >=${JSON.stringify(got)}`)
+    }
     await clearDoc()
 
     // 4. 列表行行首退格：拆标记，不要把上一行和这一行粘起来
