@@ -601,7 +601,7 @@ function setupFootnotePreview(root: HTMLElement): void {
 }
 
 // 任务列表源码里的一段（含引用里的任务列表）：`- [ ] 文案` 或 `> - [x] 文案`。
-const TASK_RE = /^((?:[ \t]*> ?)*[ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])(\])/
+const TASK_RE = /^((?:[ \t]*> ?)*[ \t]*(?:[-*+]|\d+[.)]) +\[)([ xX])(\])/
 
 /** 从点击位置找回任务项那一行；不是任务项就返回 null。 */
 function sourceFromTaskClick(view: EditorView, e: MouseEvent): number | null {

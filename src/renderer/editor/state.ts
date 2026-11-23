@@ -17,13 +17,13 @@ import { indentOnInput, bracketMatching, syntaxHighlighting, Language } from '@c
 import { keymap } from '@codemirror/view'
 import { markdownHighlightStyle } from './source-theme'
 import { frontmatterRange } from './math-scan'
-import { renumberLists } from './list-renumber'
+import { createRenumberLists } from './list-renumber'
 
 /** 可编辑性放在一个 compartment 里，方便运行时切换而不重建编辑器。 */
 export const editableCompartment = new Compartment()
 
 /**
- * 基准语法：CommonMark 加 GFM，就这些。
+ * 基准语法：CommonMark 加 GFM，移除 SetextHeading。
  *
  * 为什么不用 `@codemirror/lang-markdown` 直接给的 `markdownLanguage`：它比 GFM 还多
  * 带三个扩展（Subscript、Superscript、Emoji），而这三个节点这个软件一个都不渲染，
@@ -31,9 +31,19 @@ export const editableCompartment = new Compartment()
  * 轴里的 `00:00:17` 中间那段被语法着色当成字符字面量，而 character 是 string 的子
  * 标签，正好命中代码块里那条 string 着色规则，于是时间戳中间绿了一段。
  *
+ * 为什么移除 SetextHeading：
+ *   CommonMark 把普通段落下一行孤零零一个 `-` 或 `=` 当成二级/一级标题下划线。
+ *   在实时预览里，用户在普通文字下面想敲 `- ` 开无序列表时，刚敲 `-` 上一行就突然变大号
+ *   H2、`HeaderMark` 还把 `-` 藏掉，屏幕上啥也没出现；再敲空格还是 Setext 标题，用户以为
+ *   没打上又敲一个 `-`，瞬间炸出 `• -` 或双圆点 `• •`。现代笔记里标题一律用 `#`，
+ *   去掉 SetextHeading 后 `---` 依然正常解析为分割线（HorizontalRule），不再误伤无序列表。
+ *
  * 保留 GFM，因为表格、删除线、任务列表、裸链接都是要渲染的。
  */
-const markdownParser: MarkdownParser = (commonmarkLanguage.parser as MarkdownParser).configure([GFM])
+const markdownParser: MarkdownParser = (commonmarkLanguage.parser as MarkdownParser).configure([
+  GFM,
+  { remove: ['SetextHeading'] },
+])
 
 const markdownBase = new Language(
   commonmarkLanguage.data,
@@ -62,7 +72,7 @@ export function stateExtensions(): Extension {
     // 看着像渲染故障。查找替换的高亮是 search 扩展自己的，不在这里。
     // 增删有序列表项时把序号排一遍（见 list-renumber.ts）。它是**写文件**的一层，
     // 所以只认用户自己的编辑，打开文件、外部写入、导出都不碰。
-    renumberLists,
+    createRenumberLists(markdownParser),
     // markdown 语言支持 + 语法高亮（颜色走 CSS 变量，深浅主题自动跟随）
     markdown({ base: markdownBase, codeLanguages: languages, addKeymap: false }),
     syntaxHighlighting(markdownHighlightStyle),

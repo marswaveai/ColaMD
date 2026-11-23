@@ -82,7 +82,12 @@ const KEYS = {
   Enter: { key: 'Enter', code: 'Enter', vkc: 13 },
   Backspace: { key: 'Backspace', code: 'Backspace', vkc: 8 },
   Tab: { key: 'Tab', code: 'Tab', vkc: 9 },
-  ArrowRight: { key: 'ArrowRight', code: 'ArrowRight', vkc: 39 }
+  Home: { key: 'Home', code: 'Home', vkc: 36 },
+  ArrowLeft: { key: 'ArrowLeft', code: 'ArrowLeft', vkc: 37 },
+  ArrowUp: { key: 'ArrowUp', code: 'ArrowUp', vkc: 38 },
+  ArrowRight: { key: 'ArrowRight', code: 'ArrowRight', vkc: 39 },
+  ArrowDown: { key: 'ArrowDown', code: 'ArrowDown', vkc: 40 },
+  KeyZ: { key: 'z', code: 'KeyZ', vkc: 90 },
 }
 
 async function press(renderer, name, modifiers = 0) {
@@ -152,8 +157,7 @@ const scenarios = [
   { name: '已勾选的任务续成未勾选', doc: '- [x] 甲', cursor: (d) => [d.length], keys: ['Enter'], expect: '- [x] 甲\n- [ ] ', expectHead: (d) => d.length },
   { name: '深层嵌套回车保留层级', doc: '- 甲\n    - 乙', cursor: (d) => [d.length], keys: ['Enter'], expect: '- 甲\n    - 乙\n    - ', expectHead: (d) => d.length },
   { name: '引用里多行列表中间插一条', doc: '> - 甲\n> - 乙', cursor: (d) => [at(d, '甲') + 1], keys: ['Enter'], expect: '> - 甲\n> - \n> - 乙' },
-  // 「多一行」的直接嫌疑：松散列表（项与项之间有空行）里回车
-  { name: '松散列表回车保持松散', doc: '1. 甲\n\n2. 乙', cursor: (d) => [d.length], keys: ['Enter'], observe: '' },
+  { name: '松散列表回车不凭空多插空行', doc: '1. 甲\n\n2. 乙', cursor: (d) => [d.length], keys: ['Enter'], expect: '1. 甲\n\n2. 乙\n3. ', expectHead: (d) => d.length },
   { name: '文档末尾隔一行回车', doc: '- 甲\n\n', cursor: (d) => [at(d, '甲') + 1], keys: ['Enter'], expect: '- 甲\n- \n\n' },
   // 「多空格」的嫌疑：标记后本来就多打了空格的项
   { name: '标记后多空格续行不多留空格', doc: '-   甲', cursor: (d) => [d.length], keys: ['Enter'], observe: '' },
@@ -161,7 +165,39 @@ const scenarios = [
   { name: '标记后按退格干净拆标记不留空格', doc: '- 甲', cursor: (d) => [at(d, '甲')], keys: ['Backspace'], expect: '甲', expectHead: () => 0 },
   { name: '二级列表首字前退格退成一级不留四空格', doc: '- 甲\n  - 乙', cursor: (d) => [at(d, '乙')], keys: ['Backspace'], expect: '- 甲\n- 乙', expectHead: (d) => at(d, '乙') },
   { name: '三级列表首字前退格退成二级', doc: '- 甲\n  - 乙\n    - 丙', cursor: (d) => [at(d, '丙')], keys: ['Backspace'], expect: '- 甲\n  - 乙\n  - 丙', expectHead: (d) => at(d, '丙') },
-  { name: '有序列表首字前退格拆标记并补号', doc: '1. 甲\n2. 乙\n3. 丙', cursor: (d) => [at(d, '乙')], keys: ['Backspace'], expect: '1. 甲\n乙\n1. 丙', expectHead: (d) => at(d, '乙') },
+  // 有序列表退格契约（2026-11-20 橘子拍板）：
+  // 第一项首字前退格 -> 第一行取消列表格式，下方立刻变成 1. / 2. 且格式不丢；
+  // 非首项首字前退格 -> 不拆成中间普通行，直接合并到上一项末尾并顺延下方。
+  { name: '有序列表首项退格取消第一行格式且下方归 1.', doc: '1. 测试\n2. 测试\n3. ', cursor: (d) => [at(d, '测试')], keys: ['Backspace'], expect: '测试\n1. 测试\n2. ', expectHead: () => 0 },
+  { name: '普通段落下方删掉整行 1. 下方立刻归 1.', doc: '测试\n1. 第一条\n2. 测试\n3. ', cursor: (d) => [at(d, '1. 第一条'), at(d, '2. 测试')], keys: ['Backspace'], expect: '测试\n1. 测试\n2. ' },
+  { name: '有序列表非首项首字前退格直接合并到上一项', doc: '1. 甲\n2. 乙\n3. 丙', cursor: (d) => [at(d, '乙')], keys: ['Backspace'], expect: '1. 甲乙\n2. 丙', expectHead: (d) => at(d, '乙') },
+  { name: '有序列表非首空项首字前退格删空项回上行末', doc: '1. 甲\n2. \n3. 丙', cursor: (d) => [at(d, '2. ') + 3], keys: ['Backspace'], expect: '1. 甲\n2. 丙', expectHead: (d) => at(d, '\n2. 丙') },
+  // 孤立空首项 `1. ` 按回车保留 1. 并续 2.；再按回车删除 2. 保留 1.（2026-11-20 橘子拍板）
+  { name: '敲完 1. 空格直接回车保留 1. 并出 2.', doc: '1. ', cursor: (d) => [d.length], keys: ['Enter'], expect: '1. \n2. ', expectHead: (d) => d.length },
+  { name: '普通文字下方敲 1. 空格直接回车保留 1. 并出 2.', doc: '测试\n1. ', cursor: (d) => [d.length], keys: ['Enter'], expect: '测试\n1. \n2. ', expectHead: (d) => d.length },
+  { name: '1. 回车出 2. 后第二次回车删除 2. 保留 1.', doc: '1. ', cursor: (d) => [d.length], keys: ['Enter', 'Enter'], expect: '1. \n', expectHead: (d) => d.length },
+  { name: '有内容项后连按两次回车退出列表', doc: '1. 甲', cursor: (d) => [d.length], keys: ['Enter', 'Enter'], expect: '1. 甲\n', expectHead: (d) => d.length },
+  // 隔着空行彼此独立，都从 1. 起算（2026-11-20 橘子拍板）
+  { name: '隔着空行敲 1. 空格保持 1. 不跨空行联动', doc: '1. 甲\n2. 乙\n\n1.', cursor: (d) => [d.length], type: ' ', expect: '1. 甲\n2. 乙\n\n1. ', expectHead: (d) => d.length },
+  { name: '中间空项回车退出形成空行后下方归 1.', doc: '1. 甲\n2. \n3. 丙', cursor: (d) => [at(d, '2. ') + 3], keys: ['Enter'], expect: '1. 甲\n\n1. 丙', expectHead: () => 5 },
+  { name: '紧贴上一项敲 1. 空格顺延成下一号', doc: '1. 甲\n1.', cursor: (d) => [d.length], type: ' ', expect: '1. 甲\n2. ', expectHead: (d) => d.length },
+  // 有序列表高级结构：进位护缩进、带子列表行尾回车、子树联动、首项禁 Tab、多行选区 Tab、软换行
+  { name: '9. 涨成 10. 时旧 3 空格子项自动补缩进不脱钩', doc: '8. 甲\n9. 乙\n   1. 子', cursor: (d) => [at(d, '甲') + 1], keys: ['Enter'], expect: '8. 甲\n9. \n10. 乙\n    1. 子' },
+  { name: '带子列表的父项行尾回车插入为第一条子项', doc: '1. 甲\n    1. 子1\n2. 乙', cursor: (d) => [at(d, '甲') + 1], keys: ['Enter'], expect: '1. 甲\n    1. \n    2. 子1\n2. 乙', expectHead: (d) => at(d, '    1. ') + 7 },
+  { name: '有序项正文首字前回车在上方插空项原项顺延', doc: '1. 甲\n2. 乙', cursor: (d) => [at(d, '甲')], keys: ['Enter'], expect: '1. \n2. 甲\n3. 乙', expectHead: (d) => at(d, '甲') },
+  { name: '子列表首项 Shift+Tab 退级后留下的子项归 1.', doc: '1. 甲\n    1. 乙\n    2. 丙', cursor: (d) => [at(d, '乙')], keys: [['Tab', 8]], expect: '1. 甲\n2. 乙\n    1. 丙', expectHead: (d) => at(d, '乙') },
+  { name: '嵌套空子项回车先退一级成上层同级项', doc: '1. 甲\n    1. 乙\n    2. ', cursor: (d) => [d.length], keys: ['Enter'], expect: '1. 甲\n    1. 乙\n2. ', expectHead: (d) => d.length },
+  { name: '带子列表父项 Tab 缩进时整棵子树联动', doc: '1. 甲\n2. 乙\n    1. 子1', cursor: (d) => [at(d, '乙')], keys: ['Tab'], expect: '1. 甲\n    1. 乙\n        1. 子1', expectHead: (d) => at(d, '乙') },
+  { name: '带子列表父项 Shift+Tab 退级时整棵子树联动', doc: '1. 甲\n    1. 乙\n        1. 子1', cursor: (d) => [at(d, '乙')], keys: [['Tab', 8]], expect: '1. 甲\n2. 乙\n    1. 子1', expectHead: (d) => at(d, '乙') },
+  { name: '有序列表第一项按 Tab 不缩进成代码块', doc: '1. 甲\n2. 乙', cursor: (d) => [at(d, '甲')], keys: ['Tab'], expect: '1. 甲\n2. 乙', expectHead: (d) => at(d, '甲') },
+  { name: '多行选区按 Tab 批量缩进且不删选区变制表符', doc: '1. 甲\n2. 乙\n3. 丙', cursor: (d) => [at(d, '乙'), d.length], keys: ['Tab'], expect: '1. 甲\n    1. 乙\n    2. 丙' },
+  { name: '有序列表 Shift+Enter 项内软换行对齐正文', doc: '1. 甲', cursor: (d) => [d.length], keys: [['Enter', 8]], expect: '1. 甲\n   ', expectHead: (d) => d.length },
+  { name: '圆括号有序列表 1) 续行保持圆括号', doc: '1) 甲\n2) 乙', cursor: (d) => [d.length], keys: ['Enter'], expect: '1) 甲\n2) 乙\n3) ', expectHead: (d) => d.length },
+  // 光标导航守护：Home / ArrowLeft / ArrowRight 绝不落进 `1.` 内部或左边
+  { name: '有序项 Home 落在正文首字前不落 1. 左边', doc: '1. 甲乙', cursor: (d) => [d.length], keys: ['Home'], expect: '1. 甲乙', expectHead: (d) => at(d, '甲') },
+  { name: '有序项首字前按左键直达上一行末不卡前缀', doc: '1. 甲\n2. 乙', cursor: (d) => [at(d, '乙')], keys: ['ArrowLeft'], expect: '1. 甲\n2. 乙', expectHead: (d) => at(d, '\n2. 乙') },
+  { name: '上一行末按右键一步跨过 2. 落正文首字前', doc: '1. 甲\n2. 乙', cursor: (d) => [at(d, '\n2. 乙')], keys: ['ArrowRight'], expect: '1. 甲\n2. 乙', expectHead: (d) => at(d, '乙') },
+  { name: '有序首项首字前按左键停在正文首字前不左越', doc: '1. 甲', cursor: (d) => [at(d, '甲')], keys: ['ArrowLeft'], expect: '1. 甲', expectHead: (d) => at(d, '甲') },
   // 刚敲 `1.` 尚未敲空格不能被提前改成上一条续号，也不能跨顶格段落续号（2026-11-11）
   { name: '敲 1. 未敲空格不提前续号', doc: '1. 甲\n2. 乙\n1', cursor: (d) => [d.length], type: '.', expect: '1. 甲\n2. 乙\n1.' },
   { name: '隔着顶格普通段落新起 1. 不跨段续号', doc: '1. 甲\n2. 乙\n普通段落\n1.', cursor: (d) => [d.length], type: ' 新表', expect: '1. 甲\n2. 乙\n普通段落\n1. 新表' },
@@ -271,6 +307,345 @@ async function main() {
       await sleep(160)
     }
     check('引用内点击待办复选框切换勾选', (await docOf()) === '> - [x] 甲', `文档=${JSON.stringify(await docOf())}`)
+
+    // --- 渲染层与 DOM 几何实测（2026-11-20 新增） ---
+    const lineClassesOf = () => evaluate(renderer, `[...document.querySelectorAll('#editor .cm-line')].map((l) => l.className)`)
+
+    // 1. 普通文字下面敲 `1. `（尚未打字），空格落下那一瞬间立刻出现列表格式 `.cm-md-li-0`
+    await setDoc('测试\n1.')
+    await setCursor(5)
+    const beforeSpaceCls = await lineClassesOf()
+    check('敲完 1. 尚未敲空格时不提前出列表格式', !beforeSpaceCls[1].includes('cm-md-li'), JSON.stringify(beforeSpaceCls))
+    await renderer.send('Input.insertText', { text: ' ' })
+    await sleep(160)
+    const afterSpaceCls = await lineClassesOf()
+    check('普通文字下方敲 1. 空格立刻出列表格式无需打字',
+      (await docOf()) === '测试\n1. ' && afterSpaceCls[1].includes('cm-md-li-0') && afterSpaceCls[1].includes('cm-md-li-ordered'),
+      `文档=${JSON.stringify(await docOf())} 类=${JSON.stringify(afterSpaceCls)}`)
+
+    // 1b. 普通文字下面敲 `-`：上一行不变 H2、`-` 可见不消失；再敲空格立刻变单个圆点 `•` 且不残留横杆、不出双圆点
+    await setDoc('新增付费用户\n')
+    await setCursor(7)
+    await renderer.send('Input.insertText', { text: '-' })
+    await sleep(160)
+    const afterDash = JSON.parse(await evaluate(renderer, `(() => {
+      const lines = [...document.querySelectorAll('#editor .cm-line')]
+      const h1 = lines[0]
+      const h2 = lines[1]
+      return JSON.stringify({
+        line0Class: h1 ? h1.className : '',
+        line0FontSize: h1 ? parseFloat(getComputedStyle(h1).fontSize) : 0,
+        line0Text: h1 ? h1.textContent : '',
+        line1Text: h2 ? h2.textContent : '',
+        line1Class: h2 ? h2.className : '',
+        bullets: h2 ? h2.querySelectorAll('.cm-md-li-bullet').length : 0,
+      })
+    })()`))
+    check('普通文字下方敲 - 不变 H2 且横杆可见不消失',
+      (await docOf()) === '新增付费用户\n-' &&
+      !afterDash.line0Class.includes('heading') &&
+      afterDash.line0FontSize > 0 && afterDash.line0FontSize < 24 &&
+      afterDash.line1Text === '-' &&
+      !afterDash.line1Class.includes('cm-md-li') &&
+      afterDash.bullets === 0,
+      JSON.stringify(afterDash))
+
+    await renderer.send('Input.insertText', { text: ' ' })
+    await sleep(160)
+    const afterDashSpace = JSON.parse(await evaluate(renderer, `(() => {
+      const lines = [...document.querySelectorAll('#editor .cm-line')]
+      const line1 = lines[1]
+      return JSON.stringify({
+        line1Text: line1 ? line1.textContent : '',
+        line1Class: line1 ? line1.className : '',
+        bullets: line1 ? line1.querySelectorAll('.cm-md-li-bullet').length : 0,
+      })
+    })()`))
+    check('普通文字下方敲 - 空格立刻变单个圆点无横杆',
+      (await docOf()) === '新增付费用户\n- ' &&
+      afterDashSpace.line1Class.includes('cm-md-li-0') &&
+      afterDashSpace.bullets === 1 &&
+      !afterDashSpace.line1Text.includes('-'),
+      JSON.stringify(afterDashSpace))
+
+    // 1c. 同行敲 `- - ` 只渲染行首 1 个圆点，绝不并排出现两个圆点
+    await setDoc('- - 测试')
+    await setCursor(6)
+    await sleep(160)
+    const doubleDashBullets = await evaluate(renderer, `document.querySelector('#editor .cm-line').querySelectorAll('.cm-md-li-bullet').length`)
+    check('同行 `- - ` 只画一个圆点不并排出现两个圆点', doubleDashBullets === 1, `圆点数=${doubleDashBullets}`)
+
+    // 2. 删掉 1. 测试 的 1. 后，下面 2. 测试 / 3. 立刻变 1. 测试 / 2. 且 DOM 保持列表格式不丢
+    await setDoc('1. 测试\n2. 测试\n3. ')
+    await setCursor(3)
+    await press(renderer, 'Backspace')
+    const afterUnlistCls = await lineClassesOf()
+    check('取消第一行列表格式后下面两行归 1./2. 且 DOM 保留列表格式',
+      (await docOf()) === '测试\n1. 测试\n2. ' &&
+      !afterUnlistCls[0].includes('cm-md-li') &&
+      afterUnlistCls[1].includes('cm-md-li-0') &&
+      afterUnlistCls[2].includes('cm-md-li-0'),
+      `文档=${JSON.stringify(await docOf())} 类=${JSON.stringify(afterUnlistCls)}`)
+
+    // 3. 鼠标直接点在有序列表行左侧 `1.` 上，光标落到正文首字前，打字绝不写出 `X1. 甲`
+    await setDoc('1. 甲\n2. 乙')
+    await setCursor(8)
+    const numMarkPos = JSON.parse(await evaluate(renderer, `(() => {
+      const m = document.querySelector('#editor .cm-md-li-ordered .cm-md-listmark')
+      if (!m) return 'null'
+      const r = m.getBoundingClientRect()
+      return JSON.stringify({ x: Math.round(r.left + 2), y: Math.round(r.top + r.height / 2) })
+    })()`))
+    if (numMarkPos) {
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await renderer.send('Input.dispatchMouseEvent', { type, x: numMarkPos.x, y: numMarkPos.y, button: 'left', clickCount: 1 })
+      }
+      await sleep(160)
+    }
+    const afterClickHead = await headOf()
+    await renderer.send('Input.insertText', { text: 'X' })
+    await sleep(160)
+    check('鼠标点在 1. 序号上光标自动落正文首字前不伤序号',
+      afterClickHead === 3 && (await docOf()) === '1. X甲\n2. 乙',
+      `点后光标=${afterClickHead} 打字后=${JSON.stringify(await docOf())}`)
+
+    // 4. 一次 Cmd+Z 撤销：合并/重排一起还原
+    await setDoc('1. 测试\n2. 测试\n3. 结尾')
+    await setCursor(3)
+    await press(renderer, 'Backspace')
+    const afterCancel = await docOf()
+    await press(renderer, 'KeyZ', 4) // Meta+Z
+    const afterUndo = await docOf()
+    check('取消首项格式并重排后一次撤销完整还原',
+      afterCancel === '测试\n1. 测试\n2. 结尾' && afterUndo === '1. 测试\n2. 测试\n3. 结尾',
+      `取消后=${JSON.stringify(afterCancel)} 撤销后=${JSON.stringify(afterUndo)}`)
+
+    // 5. 悬挂缩进真 DOM 坐标测量：长句折行后，第 2 行左边缘位于 `1.` 右侧，靠近正文首字
+    const longOrdered = '1. ' + '这是一段专门用于真窗口实测有序列表长句自动折行时悬挂缩进对齐效果的测试文本，确保第二行起点对齐正文首字而不是顶在序号正下方。'.repeat(3)
+    await setDoc(longOrdered)
+    await setCursor(longOrdered.length)
+    await sleep(160)
+    const hangGeom = JSON.parse(await evaluate(renderer, `(() => {
+      const line = document.querySelector('#editor .cm-md-li-ordered')
+      const mark = line && line.querySelector('.cm-md-listmark')
+      if (!line || !mark) return 'null'
+      const markRect = mark.getBoundingClientRect()
+      const range = document.createRange()
+      // 找正文第一个字符和足够靠后必在第二行的字符坐标
+      const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+      let bodyNode = null
+      while (walker.nextNode()) {
+        if (walker.currentNode.nodeValue && walker.currentNode.nodeValue.includes('这是一段')) {
+          bodyNode = walker.currentNode
+          break
+        }
+      }
+      if (!bodyNode) return 'null'
+      const idx = bodyNode.nodeValue.indexOf('这是一段')
+      range.setStart(bodyNode, idx)
+      range.setEnd(bodyNode, idx + 1)
+      const firstBodyRect = range.getBoundingClientRect()
+      // 找第一个 top 明显大于首行的字符（第二行首字）
+      let secondLineRect = null
+      for (let i = idx + 1; i < bodyNode.nodeValue.length; i++) {
+        range.setStart(bodyNode, i)
+        range.setEnd(bodyNode, i + 1)
+        const r = range.getBoundingClientRect()
+        if (r.top > firstBodyRect.top + 8) {
+          secondLineRect = r
+          break
+        }
+      }
+      return JSON.stringify({
+        markLeft: Math.round(markRect.left),
+        firstBodyLeft: Math.round(firstBodyRect.left),
+        secondLineLeft: secondLineRect ? Math.round(secondLineRect.left) : null,
+      })
+    })()`))
+    check('有序列表长句折行悬挂缩进对齐正文首字而非顶在序号下',
+      hangGeom && hangGeom.secondLineLeft !== null &&
+      hangGeom.secondLineLeft > hangGeom.markLeft + 8 &&
+      Math.abs(hangGeom.secondLineLeft - hangGeom.firstBodyLeft) <= 8,
+      JSON.stringify(hangGeom))
+
+    // 6. 退出列表/删空项后停在空行（即便下方隔空行还有另一张列表），光标 X 坐标立刻与普通段落左对齐，打字不跳
+    await setDoc('新增付费用户\n\n1. 测试\n2. 测试\n3. \n\n8. 甲')
+    await setCursor(22) // 停在 `3. ` 末尾
+    await press(renderer, 'Enter') // 退出列表，留空行在 `2. 测试` 下方
+    const emptyLineGeom = JSON.parse(await evaluate(renderer, `(() => {
+      const v = ${VIEW}
+      const paraLeft = v.coordsAtPos(0)?.left ?? null
+      const caretPos = v.state.selection.main.head
+      const caretLeft = v.coordsAtPos(caretPos)?.left ?? null
+      const lineIdx = v.state.doc.lineAt(caretPos).number - 1
+      const lineCls = [...document.querySelectorAll('#editor .cm-line')][lineIdx]?.className ?? ''
+      return JSON.stringify({ paraLeft, caretLeft, lineCls })
+    })()`))
+    check('退出列表后空行不残留列表缩进且光标立刻对齐正文左缘',
+      emptyLineGeom.paraLeft !== null &&
+      emptyLineGeom.caretLeft !== null &&
+      (!emptyLineGeom.lineCls.includes('cm-md-li') || emptyLineGeom.lineCls.includes('cm-md-li-blank')) &&
+      Math.abs(emptyLineGeom.caretLeft - emptyLineGeom.paraLeft) <= 1,
+      JSON.stringify(emptyLineGeom))
+
+    // 7. 列表项内嵌围栏代码块：在父项后新增同级项时，代码块内编号纹丝不动，外层后续项正常递增
+    await setDoc('1. 父项\n    ```\n    8. 代码内A\n    10. 代码内B\n    ```\n2. 下一项')
+    await setCursor(5) // `1. 父项` 行尾
+    await press(renderer, 'Enter')
+    await renderer.send('Input.insertText', { text: '插入项' })
+    await sleep(80)
+    check('列表内嵌围栏代码块编号不被重排器篡改且外层正常递增',
+      (await docOf()) === '1. 父项\n2. 插入项\n    ```\n    8. 代码内A\n    10. 代码内B\n    ```\n3. 下一项',
+      JSON.stringify(await docOf()))
+
+    // 8. 双 Tab 缩进孙项按 Shift+Tab 只退一级（从 8 列退到 4 列，不一口吞光两个 Tab）
+    await setDoc('1. 父\n\t1. 子\n\t\t1. 孙')
+    await setCursor(16) // 停在 `\t\t1. 孙` 正文
+    await press(renderer, 'Tab', 8)
+    check('双 Tab 缩进孙项按 Shift+Tab 只退一级不吞光缩进',
+      (await docOf()) === '1. 父\n\t1. 子\n\t2. 孙',
+      JSON.stringify(await docOf()))
+
+    // 9. 多行选区首行是普通段落、次行是列表首项，按 Tab 不把列表首项推成代码块
+    await setDoc('说明\n1. 首项\n2. 次项')
+    await evaluate(renderer, `${VIEW}.dispatch({ selection: { anchor: 0, head: 10 } })`)
+    await sleep(60)
+    await press(renderer, 'Tab')
+    check('跨段落与列表首项的多行选区按 Tab 不把首项推进代码块',
+      (await docOf()) === '说明\n1. 首项\n2. 次项',
+      JSON.stringify(await docOf()))
+
+    // 10. 跨行行内代码里的 `2. ` 不被 Paragraph 兜底误渲染成列表缩进（1. 按 CommonMark 本来会打断段落，2. 留在 InlineCode 内）
+    await setDoc('`前文\n2. 代码里的编号`')
+    await setCursor(0)
+    const inlineCodeLineCls = await evaluate(renderer, `(() => {
+      const lines = [...document.querySelectorAll('#editor .cm-line')]
+      return lines[1]?.className ?? ''
+    })()`)
+    check('跨行行内代码中的 `2. ` 不误渲染为列表格式',
+      !inlineCodeLineCls.includes('cm-md-li'),
+      JSON.stringify(inlineCodeLineCls))
+
+    // 11. 双 Tab 空孙项按 Enter / Shift+Tab 退一级不抛 RangeError 且正确留在 1 个 Tab
+    await setDoc('1. 甲\n\t1. 乙\n\t\t1. ')
+    await setCursor(16)
+    await press(renderer, 'Enter')
+    check('双 Tab 空孙项按 Enter 退一级不崩溃且只退一个 Tab',
+      (await docOf()) === '1. 甲\n\t1. 乙\n\t2. ',
+      JSON.stringify(await docOf()))
+
+    // 12. 普通行粘贴围栏代码块时，代码块内乱序编号不被重排器篡改
+    await setDoc('说明\n')
+    await setCursor(3)
+    await evaluate(renderer, `${VIEW}.dispatch({ changes: { from: 3, to: 3, insert: '\`\`\`\\n2. a\\n5. b\\n\`\`\`' }, userEvent: 'input.paste' })`)
+    await sleep(80)
+    check('粘贴围栏代码块时代码块内编号不被重排器篡改',
+      (await docOf()) === '说明\n```\n2. a\n5. b\n```',
+      JSON.stringify(await docOf()))
+
+    // 13. 围栏代码块闭合行之后紧接粘贴/新建有序列表，正常参与重排
+    await setDoc('```\ncode\n```')
+    await setCursor(12)
+    await evaluate(renderer, `${VIEW}.dispatch({ changes: { from: 12, to: 12, insert: '\\n1. 甲\\n5. 乙' }, userEvent: 'input.paste' })`)
+    await sleep(80)
+    check('围栏代码块闭合后新建有序列表正常重排',
+      (await docOf()) === '```\ncode\n```\n1. 甲\n2. 乙',
+      JSON.stringify(await docOf()))
+
+    // 14. 选中首项整行替换为普通段落，下方 `2. 乙\n3. 丙` 自动归 `1. / 2.`
+    await setDoc('1. 甲\n2. 乙\n3. 丙')
+    await evaluate(renderer, `${VIEW}.dispatch({ changes: { from: 0, to: 5, insert: '测试\\n' }, userEvent: 'input.paste' })`)
+    await sleep(80)
+    check('首项整行被替换为普通文字后下方自动归 1./2.',
+      (await docOf()) === '测试\n1. 乙\n2. 丙',
+      JSON.stringify(await docOf()))
+
+    // 15. 删掉带子列表的父项首行后，4 空格孤立子项不和下方 0 空格项串组
+    await setDoc('1. 父\n    1. 子1\n    2. 子2\n2. 乙')
+    await setCursor(3)
+    await press(renderer, 'Backspace')
+    check('取消带子列表父项格式后孤立子项不和下方顶格项串组且下方归 1.',
+      (await docOf()) === '父\n    1. 子1\n    2. 子2\n1. 乙',
+      JSON.stringify(await docOf()))
+
+    // 16. 围栏代码块内的 `- [ ] code` 按退格不整段删掉 `[ ] `
+    await setDoc('```\n- [ ] code\n```')
+    await setCursor(10) // `code` 之前
+    await press(renderer, 'Backspace')
+    check('围栏代码块内任务文本前退格只删一个空格不拆框',
+      (await docOf()) === '```\n- [ ]code\n```',
+      JSON.stringify(await docOf()))
+
+    // 17. 普通折行段落里的 `2026. 敬请期待。` 不被误画成列表，且可以正常定位到数字里编辑
+    await setDoc('发布会定在\n2026. 敬请期待。')
+    await setCursor(0)
+    const wrappedYearState = JSON.parse(await evaluate(renderer, `(() => {
+      const lines = [...document.querySelectorAll('#editor .cm-line')]
+      return JSON.stringify({ cls: lines[1]?.className ?? '' })
+    })()`))
+    await evaluate(renderer, `${VIEW}.dispatch({ selection: { anchor: 8 }, userEvent: 'select.pointer' })`)
+    await sleep(60)
+    const yearCaret = await headOf()
+    check('普通折行段落里的 2026. 不误变列表也不锁定光标',
+      !wrappedYearState.cls.includes('cm-md-li') && yearCaret === 8,
+      `cls=${JSON.stringify(wrappedYearState.cls)} caret=${yearCaret}`)
+
+    // 18. 引用后紧跟 Tab（`>\\t1. foo`）不触发重叠装饰崩溃且正常渲染
+    await setDoc('>\t1. 引用制表符项')
+    await setCursor(4)
+    const quoteTabCls = await evaluate(renderer, `[...document.querySelectorAll('#editor .cm-line')][0]?.className ?? ''`)
+    check('引用后紧跟 Tab 的有序列表正常渲染无装饰冲突',
+      quoteTabCls.includes('cm-md-blockquote') && quoteTabCls.includes('cm-md-li'),
+      JSON.stringify(quoteTabCls))
+
+    // 19. 敲 `1.` 后按 Tab 不触发有序列表格式，回车不续 `2.`
+    await setDoc('1.')
+    await setCursor(2)
+    await press(renderer, 'Tab')
+    const orderedTabState = JSON.parse(await evaluate(renderer, `(() => {
+      const line = document.querySelector('#editor .cm-line')
+      return JSON.stringify({
+        cls: line?.className ?? '',
+        hasMark: !!line?.querySelector('.cm-md-listmark'),
+      })
+    })()`))
+    await press(renderer, 'Enter')
+    check('敲 1. 后按 Tab 不触发有序列表格式也不续 2.',
+      !orderedTabState.cls.includes('cm-md-li')
+        && !orderedTabState.hasMark
+        && (await docOf()) === '1.\t\n',
+      `state=${JSON.stringify(orderedTabState)} doc=${JSON.stringify(await docOf())}`)
+
+    // 20. 敲 `-` 后按 Tab 不触发无序列表格式也不出现圆点，回车不续 `- `
+    await setDoc('说明\n-')
+    await setCursor(4)
+    await press(renderer, 'Tab')
+    await setCursor(0) // 移开光标验证非激活行也不把 `-` 画成圆点
+    const bulletTabState = JSON.parse(await evaluate(renderer, `(() => {
+      const lines = [...document.querySelectorAll('#editor .cm-line')]
+      const line = lines[1]
+      return JSON.stringify({
+        cls: line?.className ?? '',
+        hasBullet: !!line?.querySelector('.cm-md-bullet'),
+      })
+    })()`))
+    await setCursor(5)
+    await press(renderer, 'Enter')
+    check('敲 - 后按 Tab 不触发无序列表格式也不出圆点',
+      !bulletTabState.cls.includes('cm-md-li')
+        && !bulletTabState.hasBullet
+        && (await docOf()) === '说明\n-\t\n',
+      `state=${JSON.stringify(bulletTabState)} doc=${JSON.stringify(await docOf())}`)
+
+    // 21. 引用行 `> 1.` 后按 Tab 插入制表符而非空格，不触发列表格式且回车只续 `> `
+    await setDoc('> 1.')
+    await setCursor(4)
+    await press(renderer, 'Tab')
+    const quoteAfterNumCls = await evaluate(renderer, `[...document.querySelectorAll('#editor .cm-line')][0]?.className ?? ''`)
+    await press(renderer, 'Enter')
+    check('引用内 1. 后按 Tab 不触发列表格式且回车只续引用',
+      (await docOf()) === '> 1.\t\n> ' && !quoteAfterNumCls.includes('cm-md-li'),
+      `doc=${JSON.stringify(await docOf())} cls=${JSON.stringify(quoteAfterNumCls)}`)
 
     reportChecks()
   } finally {

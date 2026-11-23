@@ -1278,7 +1278,7 @@ async function checkTyping() {
     check('列表行行首退格不把两行粘起来', (await docText()) === '- 甲\n- 乙\n丙', JSON.stringify(await docText()))
     await clearDoc()
 
-    // 5. 有序列表：回车续号，行首退格不粘连
+    // 5. 有序列表：回车续号；非首项行首退格合并到上一行，首项行首退格取消格式且下面归 1.
     await insert('1. 甲')
     await pressKey(renderer, 'Enter', 'Enter', 13)
     await insert('乙')
@@ -1287,7 +1287,11 @@ async function checkTyping() {
     check('有序列表回车自动续号', (await docText()) === '1. 甲\n2. 乙\n3. 丙', JSON.stringify(await docText()))
     await pressKey(renderer, 'Home', 'Home', 36)
     await pressKey(renderer, 'Backspace', 'Backspace', 8)
-    check('有序列表行首退格拆掉标记', (await docText()) === '1. 甲\n2. 乙\n丙', JSON.stringify(await docText()))
+    check('有序列表非首项行首退格合并到上一项', (await docText()) === '1. 甲\n2. 乙丙', JSON.stringify(await docText()))
+    await pressKey(renderer, 'ArrowUp', 'ArrowUp', 38)
+    await pressKey(renderer, 'Home', 'Home', 36)
+    await pressKey(renderer, 'Backspace', 'Backspace', 8)
+    check('有序列表首项行首退格取消格式且下方归 1.', (await docText()) === '甲\n1. 乙丙', JSON.stringify(await docText()))
     await clearDoc()
 
     // 6. 空条目上再按一次回车：退出列表（官方命令默认会在空条目上方插一个空行，
@@ -1990,7 +1994,7 @@ function main() {
       const orderedNested = await docLine(renderer, '起点为六')
       const orderedClass = await lineClass(renderer, '起点为六')
       check('缩进进子列表时序号从 1 重新数',
-        orderedNested === '   1. 起点为六' && (orderedClass ?? '').includes('cm-md-li-1'),
+        orderedNested === '    1. 起点为六' && (orderedClass ?? '').includes('cm-md-li-1'),
         `缩进前=${JSON.stringify(orderedBefore)} 缩进后=${JSON.stringify(orderedNested)}`)
       await pressKey(renderer, 'Tab', 'Tab', 9, 8)
       const orderedBack = await docLine(renderer, '起点为六')
@@ -2013,7 +2017,7 @@ function main() {
         await renderer.send('Input.insertText', { text: 'X' })
         await sleep(200)
         const caretText = await evaluate(renderer, '__caretView.state.doc.toString()')
-        check('多位序号缩进后打字仍落在原位置', caretText === '9. 父项\n   1. 子X项\n', JSON.stringify(caretText))
+        check('多位序号缩进后打字仍落在原位置', caretText === '9. 父项\n    1. 子X项\n', JSON.stringify(caretText))
       } finally {
         await evaluate(renderer, `__caretView.setState(__caretState); delete window.__caretView; delete window.__caretState`)
       }

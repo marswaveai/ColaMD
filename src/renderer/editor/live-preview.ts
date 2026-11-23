@@ -27,6 +27,7 @@ import { forceParsing, syntaxTree } from '@codemirror/language'
 import type { SyntaxNode, SyntaxNodeRef } from '@lezer/common'
 import katex from 'katex'
 import { scanMath, excludedRanges, frontmatterRange, type Excluded, type MathRange } from './math-scan'
+import { QUOTE_PREFIX_RE, parseListLine } from './list-model'
 import { renderMermaid, attachDiagramZoom, detachDiagramZoom, isDiagramZoomed } from './mermaid-bridge'
 import { sanitizeHTML, cleanStyle } from './html-sanitize'
 import { footnoteDefinitions, footnoteNumbers, FOOTNOTE_REF_RE } from './footnotes'
@@ -65,18 +66,20 @@ function pushBlockLines(
  * 里规则的前后顺序才侥幸对。所以每一行都要问一次语法树：包住这一行的**最内层**
  * ListItem 是不是我自己。
  */
-const QUOTE_PREFIX_RE = /^(?:[ \t]*> ?)+/
-
 function hasListSpace(state: EditorState, markTo: number): boolean {
   const ch = markTo < state.doc.length ? state.doc.sliceString(markTo, markTo + 1) : ''
-  return ch === ' ' || ch === '\t'
+  // 只有标记后紧跟普通空格才触发列表格式；按 Tab 产生的 `\t` 不触发列表渲染
+  return ch === ' '
 }
 
 function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: DecorationRange[]): void {
   const selfMark = node.getChild('ListMark')
   // 孤立一个 `-` 或 `1.`（后面还没敲空格）不算成型的列表项，等空格落下再缩进。
   if (!selfMark || !hasListSpace(state, selfMark.to)) return
-  const className = `cm-md-li cm-md-li-${Math.min(listDepth(node), 6)}`
+  const afterMark = state.doc.sliceString(selfMark.to, Math.min(selfMark.to + 4, state.doc.length))
+  // 有序待办项的序号会被 ListMark 隐藏，只留复选框，不挂 cm-md-li-ordered 以免折行偏右
+  const isOrdered = node.parent?.name === 'OrderedList' && !/^ +\[[ xX]\]/.test(afterMark)
+  const baseClass = `cm-md-li cm-md-li-${Math.min(listDepth(node), 6)}`
   const tree = syntaxTree(state)
   // 行没有 li 外壳，续行也没有 ListMark。把语法树里已有的归属带到导出层，
   // 表格、空行与父项续文才不会被误认成另一项；这里只记录位置，不另存内容。
@@ -103,11 +106,13 @@ function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: Decorat
   }
 
   const first = state.doc.lineAt(node.from).number
-  const ownLast = state.doc.lineAt(node.to).number
-  // 同一列表的相邻项目间空行属于分隔，不让导出把一张列表截成两张。
+  const ownLast = state.doc.lineAt(Math.max(node.from, node.to - 1)).number
+  // 同一列表的相邻项目间空行保留 data-list-path 供导出/复制拼接，但不挂 cm-md-li 缩进类，
+  // 避免退出列表或删行后光标停在 1.5em 缩进位置、打字才跳回左边缘。
   const last = node.nextSibling?.name === 'ListItem' ? state.doc.lineAt(node.nextSibling.from).number - 1 : ownLast
   for (let n = first; n <= last; n++) {
     const line = state.doc.line(n)
+    const isBlank = line.text.replace(QUOTE_PREFIX_RE, '').trim() === ''
     if (n > first && n <= ownLast && line.to <= ownEnd) {
       // 用户在空列表项按回车退出列表后直接顶格打字，CommonMark 仍把无缩进的下一行算作懒续行；
       // 没有缩进的非空行已经退出列表，不该继续挂列表缩进和归属。
@@ -127,10 +132,14 @@ function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: Decorat
       if (body.trim() !== '' && !/^[ \t]/.test(body)) break
     }
     const paragraph = paragraphs.find(block => block.from <= line.to && block.to > line.from)
-    ranges.push({ from: line.from, to: line.from, deco: Decoration.line({ class: className, attributes: {
+    const lineAttrs = {
       ...attributes,
       ...(paragraph ? { 'data-list-paragraph': String(paragraph.from) } : {}),
-    } }) })
+    }
+    const lineClass = n > first && isBlank
+      ? `${baseClass} cm-md-li-blank`
+      : (isOrdered && n === first ? `${baseClass} cm-md-li-ordered` : baseClass)
+    ranges.push({ from: line.from, to: line.from, deco: Decoration.line({ class: lineClass, attributes: lineAttrs }) })
   }
 }
 
@@ -500,12 +509,11 @@ function listDepth(node: SyntaxNode): number {
 /** 扫描公式并压入装饰。 */
 function collectMath(
   state: EditorState,
-  text: string,
-  excluded: Excluded[],
+  mathRanges: MathRange[],
   ranges: DecorationRange[],
   zones: ActiveZone[],
 ): void {
-  for (const range of scanMath(text, excluded)) {
+  for (const range of mathRanges) {
     if (range.block) zones.push({ from: range.from, to: range.to, kind: 'block' })
     // 块公式：光标落进去就退回源码，就地改（行内公式的判据见上，保持不露）
     if (isActiveLine(state, range.from) || (range.block && isBlockActive(state, range.from, range.to))) {
@@ -577,6 +585,11 @@ class TaskCheckboxWidget extends WidgetType {
 function collectTaskItems(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
   iterateContent(state, front, (node) => {
       if (node.name !== 'TaskMarker') return
+      // 所在列表标记后面必须跟普通空格才算成型待办（避免 `-\t[ ] ` 仅凭 Tab 就渲染成复选框）
+      let ancestor = node.node.parent
+      while (ancestor && ancestor.name !== 'ListItem') ancestor = ancestor.parent
+      const selfMark = ancestor?.getChild('ListMark')
+      if (selfMark && !hasListSpace(state, selfMark.to)) return
       // 复选框**始终**画成复选框，光标停在那一行也一样（#136）。
       // 别的标记在这一行会退回源码，好让人能改到标记本身；复选框不需要这样：
       // 勾没勾是点出来的，而 `- [ ]` 这几个字符没人会手敲，退回源码只是多一步。
@@ -1206,7 +1219,12 @@ function collectImages(state: EditorState, ranges: DecorationRange[], front: Ran
 
 // ─── 引用块与分隔线 ──────────────────────────────────────────────────────────
 
-function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Range | null): void {
+function collectBlocks(
+  state: EditorState,
+  ranges: DecorationRange[],
+  front: Range | null,
+  mathRanges: MathRange[],
+): void {
   iterateContent(state, front, (node) => {
     switch (node.name) {
       case 'Blockquote': {
@@ -1225,19 +1243,23 @@ function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Ran
       }
       case 'ListMark': {
         if (!hasListSpace(state, node.to)) break
+        const line = state.doc.lineAt(node.from)
+        const quoteLen = QUOTE_PREFIX_RE.exec(state.doc.sliceString(line.from, node.from))?.[0].length ?? 0
+        // 同一行里只渲染行首第一个列表标记：CommonMark 会把 `- - ` 解析成两层嵌套 ListMark，
+        // 导致同一行并排出现两个圆点（`• •`）。第二个起当普通正文字符保留。
+        const beforeMark = state.doc.sliceString(line.from + quoteLen, node.from)
+        if (/[^ \t]/.test(beforeMark)) break
         // 缩进只由一处分派：样式表按层级给左内边距（cm-md-li-N），所以源码里那几个
         // 空格在渲染模式下要藏起来。留着的话，排版是「CSS 缩进 + 源码空格」两份叠在
         // 一起：实测二级 56px、三级 88px，比旧引擎（每层 24px）多出三成，越深越夸张
         // （2026-11-07 橘子：「我不喜欢列表缩进那么多的排版…tab 之后，也太多了」）。
         // 引用里的列表跳过行首 `> `，那一段归 QuoteMark 自己藏，避免两份 replace 撞区间。
-        const line = state.doc.lineAt(node.from)
-        const quoteLen = QUOTE_PREFIX_RE.exec(state.doc.sliceString(line.from, node.from))?.[0].length ?? 0
         const hideFrom = line.from + quoteLen
         if (node.from > hideFrom) ranges.push({ from: hideFrom, to: node.from, deco: hide(hideFrom, node.from) })
         const raw = state.doc.sliceString(node.from, node.to).trim()
         // 待办项的圆点要去掉：它已经有复选框了，两个标记并排就是「• ☐ 文案」。
         const after = state.doc.sliceString(node.to, node.to + 4)
-        if (/^\s+\[[ xX]\]/.test(after)) {
+        if (/^ +\[[ xX]\]/.test(after)) {
           hideMarker(state, node.from, node.to, ranges, isActiveLine(state, node.from))
           break
         }
@@ -1257,6 +1279,39 @@ function collectBlocks(state: EditorState, ranges: DecorationRange[], front: Ran
       // CM6 没有 ul/ol/li 元素，缩进只能自己算；层级来自语法的嵌套深度。
       case 'ListItem': {
         pushListItemLines(state, node.node, ranges)
+        break
+      }
+      // CommonMark 规定空列表项（如紧跟普通段落下方刚敲完 `1. ` 或 `- ` 尚未打字）
+      // 不能打断段落，因此语法树会把它归进 Paragraph，导致敲完空格不出列表格式、
+      // 非得打字才出来。这里仅对顶层 Paragraph 里的空列表项立即补渲染，绝不误伤
+      // 普通折行里的 `2026. 敬请期待`、跨行行内代码、块公式或 ListItem 续行。
+      case 'Paragraph': {
+        if (node.node.parent?.name === 'ListItem') break
+        const tree = syntaxTree(state)
+        const startLine = state.doc.lineAt(node.from).number
+        const endLine = state.doc.lineAt(Math.max(node.from, node.to - 1)).number
+        for (let n = startLine; n <= endLine; n++) {
+          const line = state.doc.line(n)
+          const parsed = parseListLine(line.text)
+          if (!parsed || !parsed.isEmpty || parsed.box) continue
+          const markFrom = line.from + parsed.markerStart
+          const markTo = line.from + parsed.markerEnd
+          // 只处理纯段落文本里的空列表行，排除已识别的 ListMark、跨行行内代码/HTML 及数学公式
+          const inner = tree.resolveInner(markFrom, 1)
+          if (inner.name !== 'Paragraph') continue
+          if (mathRanges.some((m) => markFrom >= m.from && markFrom < m.to)) continue
+          const lineClass = parsed.kind === 'ordered'
+            ? 'cm-md-li cm-md-li-0 cm-md-li-ordered'
+            : 'cm-md-li cm-md-li-0'
+          ranges.push({ from: line.from, to: line.from, deco: Decoration.line({ class: lineClass }) })
+          const hideFrom = line.from + parsed.quoteLen
+          if (markFrom > hideFrom) ranges.push({ from: hideFrom, to: markFrom, deco: hide(hideFrom, markFrom) })
+          if (parsed.kind === 'bullet' && !isActiveLine(state, markFrom)) {
+            ranges.push({ from: markFrom, to: markTo, deco: Decoration.replace({ widget: new ListBulletWidget() }) })
+          } else {
+            ranges.push({ from: markFrom, to: markTo, deco: MARK({ class: 'cm-md-listmark' }) })
+          }
+        }
         break
       }
       case 'FencedCode': {
@@ -1360,6 +1415,8 @@ function collectInline(state: EditorState, ranges: DecorationRange[], front: Ran
           break
         }
         case 'HeaderMark': {
+          // 仅隐藏 ATX 标题（`# `）标记；防止任何残留的非 ATX HeaderMark 误藏正文字符。
+          if (!node.node.parent?.name.startsWith('ATXHeading')) break
           // 标题的 `#` 连同后面那个空格一起藏，否则标题会比正文右移一个字
           hideMarker(state, from, to, ranges, active)
           break
@@ -1483,7 +1540,8 @@ function buildDecorations(state: EditorState, flash: { from: number; to: number 
     ranges.push({ from: flash.from, to: flash.to, deco: MARK({ class: 'cm-md-jump-flash' }) })
   }
 
-  collectBlocks(state, ranges, front)
+  const mathRanges = scanMath(text, excluded)
+  collectBlocks(state, ranges, front, mathRanges)
   collectLinks(state, ranges, front)
   collectFootnotes(state, text, ranges, front)
   collectHTML(state, ranges, front, zones)
@@ -1496,7 +1554,7 @@ function buildDecorations(state: EditorState, flash: { from: number; to: number 
   collectMermaid(state, text, ranges, front, zones)
   collectHighlight(state, text, ranges, excluded)
   // 公式放最后：它覆盖区间，其它装饰不该插进它里面
-  collectMath(state, text, excluded, ranges, zones)
+  collectMath(state, mathRanges, ranges, zones)
 
   // 排序键必须带上 startSide：RangeSetBuilder 只接受按 (from, startSide) 递增的顺序，
   // 原来只按 (from, to) 排，同一段区间上挂了两种装饰时就翻车。

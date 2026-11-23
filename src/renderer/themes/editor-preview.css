@@ -192,13 +192,40 @@
  * 层级由代码算出来写在类名里（cm-md-li-0 … cm-md-li-6）。
  * 嵌套时同一行会同时带外层与内层的类，所以这里按层级从小到大排列，
  * 靠顺序让最内层的那个值生效。第 1 层缩进 1.5em（旧版是 ul 的 24px），每深一层加 1.5em。 */
-.cm-content .cm-md-li-0 { padding-left: 1.5em; }
-.cm-content .cm-md-li-1 { padding-left: 3em; }
-.cm-content .cm-md-li-2 { padding-left: 4.5em; }
-.cm-content .cm-md-li-3 { padding-left: 6em; }
-.cm-content .cm-md-li-4 { padding-left: 7.5em; }
-.cm-content .cm-md-li-5 { padding-left: 9em; }
-.cm-content .cm-md-li-6 { padding-left: 10.5em; }
+.cm-content .cm-md-li-0:not(.cm-md-li-blank) { padding-left: 1.5em; }
+.cm-content .cm-md-li-1:not(.cm-md-li-blank) { padding-left: 3em; }
+.cm-content .cm-md-li-2:not(.cm-md-li-blank) { padding-left: 4.5em; }
+.cm-content .cm-md-li-3:not(.cm-md-li-blank) { padding-left: 6em; }
+.cm-content .cm-md-li-4:not(.cm-md-li-blank) { padding-left: 7.5em; }
+.cm-content .cm-md-li-5:not(.cm-md-li-blank) { padding-left: 9em; }
+.cm-content .cm-md-li-6:not(.cm-md-li-blank) { padding-left: 10.5em; }
+
+/* 有序列表悬挂缩进：首行序号起点与同级无序圆点对齐，长句折行后对齐正文首字。 */
+.cm-content .cm-md-li-ordered { text-indent: -1.35em; }
+.cm-content .cm-md-li-ordered.cm-md-li-0 { padding-left: 2.85em; }
+.cm-content .cm-md-li-ordered.cm-md-li-1 { padding-left: 4.35em; }
+.cm-content .cm-md-li-ordered.cm-md-li-2 { padding-left: 5.85em; }
+.cm-content .cm-md-li-ordered.cm-md-li-3 { padding-left: 7.35em; }
+.cm-content .cm-md-li-ordered.cm-md-li-4 { padding-left: 8.85em; }
+.cm-content .cm-md-li-ordered.cm-md-li-5 { padding-left: 10.35em; }
+.cm-content .cm-md-li-ordered.cm-md-li-6 { padding-left: 11.85em; }
+
+/* 引用块内列表缩进：高优先级避免被 elegant / sepia 等主题的 #editor .cm-content .cm-md-blockquote 盖掉，
+ * 导致有序序号叠加 text-indent 后贴住引用左竖线或嵌套层级塌陷。 */
+#editor .cm-content .cm-md-blockquote.cm-md-li-0:not(.cm-md-li-blank) { padding-left: 2.2em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-1:not(.cm-md-li-blank) { padding-left: 3.7em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-2:not(.cm-md-li-blank) { padding-left: 5.2em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-3:not(.cm-md-li-blank) { padding-left: 6.7em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-4:not(.cm-md-li-blank) { padding-left: 8.2em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-5:not(.cm-md-li-blank) { padding-left: 9.7em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-6:not(.cm-md-li-blank) { padding-left: 11.2em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-ordered.cm-md-li-0 { padding-left: 3.55em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-ordered.cm-md-li-1 { padding-left: 5.05em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-ordered.cm-md-li-2 { padding-left: 6.55em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-ordered.cm-md-li-3 { padding-left: 8.05em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-ordered.cm-md-li-4 { padding-left: 9.55em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-ordered.cm-md-li-5 { padding-left: 11.05em; }
+#editor .cm-content .cm-md-blockquote.cm-md-li-ordered.cm-md-li-6 { padding-left: 12.55em; }
 
 /* 无序列表的圆点。宽度与 `- ` 接近，避免换掉标记时行内文字抖动。
  *
@@ -218,6 +245,7 @@
 .cm-content .cm-md-li .cm-md-listmark,
 .cm-content .cm-md-li .cm-md-listmark * {
   color: var(--text-color);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ======= 代码块 ======= */
