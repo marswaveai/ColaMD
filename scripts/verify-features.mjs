@@ -310,7 +310,12 @@ const MEASURE = `(() => {
         const style = getComputedStyle(el)
         // 量它所在的那一行：屏幕上这一行在哪、多高，跟 CodeMirror 记的必须一样
         const line = el.closest('.cm-line').getBoundingClientRect()
-        const block = Number.isFinite(from) ? view.lineBlockAt(from) : null
+        // 段落排版会在块前插入留白 widget，lineBlockAt 返回「留白＋正文」复合块，
+        // 位置要和正文那一段比，不能拿复合块顶边当正文顶边。
+        const outer = Number.isFinite(from) ? view.lineBlockAt(from) : null
+        const block = outer && Array.isArray(outer.type)
+          ? outer.type.find((part) => part.type === 0 && part.from <= from && part.to >= from) ?? outer
+          : outer
         const round = (v) => Math.round(v * 10) / 10
         return {
           cls: el.className.split(' ')[0],

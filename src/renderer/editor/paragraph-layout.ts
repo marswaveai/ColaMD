@@ -5,6 +5,7 @@ import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from '
 import { syntaxTree } from '@codemirror/language'
 import type { SyntaxNode, Tree } from '@lezer/common'
 import { excludedRanges, frontmatterRange, scanMath, type Excluded } from './math-scan'
+import { parseListLine } from './list-model'
 
 interface Block {
   from: number
@@ -226,8 +227,23 @@ function layoutBlock(state: EditorState, node: SyntaxNode): Block {
     to: state.doc.lineAt(Math.max(node.from, node.to - 1)).to,
     contentFrom: first.from + (marker?.[0].length ?? 0),
     heading: heading ? Number(heading[1]) : 0,
-    prose: node.name === 'Paragraph' || !!heading,
+    prose: node.name === 'Paragraph' || !!heading || plainList(state, node),
   }
+}
+
+/**
+ * 标记后面不是空格的「列表」（`-\t`、`1.\t`、孤零零一个 `-`）：CommonMark 认它是列表项，
+ * 渲染层却只在标记后跟空格时才画成列表（见 live-preview 的 hasListSpace），屏幕上就是
+ * 一行普通文字。回车和留白跟着屏幕走，按正文处理；只要有一项真画成了列表，整块仍是列表。
+ */
+function plainList(state: EditorState, node: SyntaxNode): boolean {
+  if (node.name !== 'BulletList' && node.name !== 'OrderedList') return false
+  // 子列表也算：伪列表项下面挂着真列表时，那几行屏幕上是列表。真列表在第一个标记就返回。
+  const cursor = node.cursor()
+  while (cursor.next() && cursor.from < node.to) {
+    if (cursor.name === 'ListMark' && state.doc.sliceString(cursor.to, cursor.to + 1) === ' ') return false
+  }
+  return true
 }
 
 function topBlocks(state: EditorState): SyntaxNode[] {
@@ -381,11 +397,21 @@ const visibleSelection = EditorState.transactionFilter.of(tr => {
   return changed ? [tr, { sequential: true, selection: EditorSelection.create(ranges, tr.newSelection.mainIndex) }] : tr
 })
 
+/**
+ * 紧跟正文敲出的空列表项（`测试\n1. `）：CommonMark 不让它打断段落，语法树仍是
+ * Paragraph，但渲染层和列表输入都把它当列表（见 list-model 的 isActiveOrderedListLine），
+ * 回车要交给列表续号，不能当正文新起一段。
+ */
+function emptyListLine(state: EditorState, pos: number): boolean {
+  const parsed = parseListLine(state.doc.lineAt(pos).text)
+  return !!parsed && parsed.isEmpty && !parsed.box
+}
+
 function prosePosition(state: EditorState, pos: number): boolean {
   const { blocks, protected: protectedRanges } = state.field(paragraphLayoutField)
   if (protectedRanges.some(range => pos >= range.from && pos < range.to)) return false
   const block = blocks.find(item => pos >= item.from && pos <= item.to)
-  if (block) return block.prose
+  if (block) return block.prose && !emptyListLine(state, pos)
   if (state.doc.lineAt(pos).text.trim() !== '') return false
   // 空行只有在普通正文之间或文末才接管；代码块、列表、引用里的 Enter 沿用已有行为。
   const before = blocks.findLast(item => item.to < pos)

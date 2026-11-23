@@ -39,6 +39,7 @@ function loadSource(path, extra = '') {
       const math = loadSource('src/renderer/editor/math-scan.ts')
       return { ...math, scanMath: (...args) => { mathScans++; return math.scanMath(...args) } }
     }
+    if (name === './list-model') return loadSource('src/renderer/editor/list-model.ts')
     return require(name)
   }, exports)
   return exports
@@ -68,6 +69,7 @@ const fixtures = [
   '前文\n\n$$\na\n\nb\n$$\n\n后文\n\n\\[x^2\\]\n\n末段',
   '前文\n\n' + fence + 'md\n代码\n\n$$\n' + fence + '\n\n> 引用\n>\n> 下行\n\n- 列表\n\n- 另一项\n\n后文',
   '## 标题\n\n| 甲 | 乙 |\n| --- | --- |\n| 值 | `$x$` |\n\n<div>HTML</div>\n\n[x]: /url\n\n末段\n',
+  '说明\n\n-\t\n\n1.\t\n\n-\n\n- 真列表\n\n-\tx\n  - 子项\n\n末段',
 ]
 let seed = 184
 const random = n => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % n }
@@ -88,6 +90,16 @@ for (const [index, fixture] of fixtures.entries()) {
   }
   check('增量与全量对拍：编辑序列 ' + index, true)
 }
+// 标记后不是空格的「列表」屏幕上是普通文字，按正文处理；只要有一行真画成列表，整块就是列表。
+for (const [doc, prose] of [
+  ['-\t', true], ['1.\t', true], ['-', true], ['1.', true], ['-\t甲\n-\t乙', true],
+  ['- 甲', false], ['1. 甲', false], ['- ', false], ['-\t甲\n- 乙', false], ['-\tx\n  - 子项', false],
+]) {
+  const state = EditorState.create({ doc: '说明\n\n' + doc, extensions: [language, paragraphLayoutField] })
+  const block = state.field(paragraphLayoutField).blocks.at(-1)
+  check(`${JSON.stringify(doc)} ${prose ? '按正文' : '按列表'}`, block.prose, prose)
+}
+
 let withMath = EditorState.create({ doc: '前段正文没有公式\n\n$$\nx^2\n$$\n\n后段正文', extensions: [language, paragraphLayoutField] })
 mathScans = 0
 withMath = withMath.update({ changes: { from: 2, insert: '字' } }).state
@@ -445,6 +457,19 @@ try {
   await key('Z', 'KeyZ', 12)
   await key('Z', 'KeyZ', 12)
   check('重做恢复新段落', await text(), '前段\n\n新段\n\n后段')
+  // 屏幕上是普通文字的伪列表，回车新起一段；真列表回车续项。
+  for (const [doc, expected] of [
+    ['说明\n\n-\t', '说明\n\n-\t\n\n'],
+    ['1.\t', '1.\t\n\n'],
+    ['说明\n\n-', '说明\n\n-\n\n'],
+    ['说明\n\n- 甲', '说明\n\n- 甲\n- '],
+    ['-\tx\n  - 子项', '-\tx\n  - 子项\n  - '],
+    ['测试\n1. ', '测试\n1. \n2. '],
+  ]) {
+    await reset(doc, doc.length)
+    await key('Enter')
+    check('回车 ' + JSON.stringify(doc), await text(), expected)
+  }
   await reset('前段', 2)
   await key('Enter')
   check('文末 Enter 只有一个可见空段', (await metrics()).filter(row => row.blank).length, 1)
