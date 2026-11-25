@@ -59,6 +59,20 @@ function pushBlockLines(
   }
 }
 /**
+ * 列表首行的复制信息独立添加，与整项的逐行样式合并。
+ *
+ * 有序与否只放在 `data-list-number` 上，不挂 `cm-md-li-ordered`：那个类管缩进，
+ * 有序待办项故意不挂它（见 pushListItemLines），复制却仍要知道它是有序列表。
+ */
+function pushListItemStart(state: EditorState, mark: SyntaxNode, node: SyntaxNode, ranges: DecorationRange[]): void {
+  const number = node.parent?.name === 'OrderedList' ? Number.parseInt(state.doc.sliceString(mark.from, mark.to), 10) : NaN
+  const from = state.doc.lineAt(node.from).from
+  ranges.push({ from, to: from, deco: Decoration.line({
+    class: 'cm-md-li-start',
+    attributes: Number.isFinite(number) ? { 'data-list-number': String(number) } : undefined,
+  }) })
+}
+/**
  * 列表项：只给它**自己那一行**加类，不给它子列表里的行加。
  *
  * 一个 ListItem 的区间包含它下面的子列表，按区间铺类的话，嵌套项那一行会同时拿到
@@ -76,6 +90,7 @@ function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: Decorat
   const selfMark = node.getChild('ListMark')
   // 孤立一个 `-` 或 `1.`（后面还没敲空格）不算成型的列表项，等空格落下再缩进。
   if (!selfMark || !hasListSpace(state, selfMark.to)) return
+  pushListItemStart(state, selfMark, node, ranges)
   const afterMark = state.doc.sliceString(selfMark.to, Math.min(selfMark.to + 4, state.doc.length))
   // 有序待办项的序号会被 ListMark 隐藏，只留复选框，不挂 cm-md-li-ordered 以免折行偏右
   const isOrdered = node.parent?.name === 'OrderedList' && !/^ +\[[ xX]\]/.test(afterMark)
