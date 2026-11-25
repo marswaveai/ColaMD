@@ -42,6 +42,14 @@ The two items below are the ones actually blocking us. Everything else on this p
 
 **How to help:** comment on [#88](https://github.com/marswaveai/ColaMD/issues/88) with the failing document (or a cut-down version), the platform, the export option used, and whether the current release still fails.
 
+## Proposed
+
+### 段落与标题留白
+
+采用类似 Typora 的渲染逻辑，由块间距表达源码分隔空行，保留可输入空段落与文件原文。
+只缩小标题上边距仍会留下标题下方的整行空白，压矮可编辑空行又会缩短光标，
+因此把分隔留白和可输入空段分开处理；代码、列表、引用内部空行保留原有结构。
+
 ## Implemented On Main
 
 ### Inline HTML pairs (#125)

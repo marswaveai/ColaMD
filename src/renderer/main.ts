@@ -1059,6 +1059,8 @@ function toggleSourceMode(): void {
     if (view) {
       view.dispatch({
         selection: { anchor: backward ? selectionEnd : selectionStart, head },
+        // 用户主动切回渲染模式，单光标可让到可编辑边界；普通程序定位不做这个修正。
+        userEvent: 'select',
         effects: EditorView.scrollIntoView(head, {
           y: 'start',
           yMargin: caretViewportOffset(fraction, view.scrollDOM.clientHeight, view.defaultLineHeight),

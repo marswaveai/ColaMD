@@ -613,28 +613,30 @@ async function main() {
     check('敲 1. 后按 Tab 不触发有序列表格式也不续 2.',
       !orderedTabState.cls.includes('cm-md-li')
         && !orderedTabState.hasMark
-        && (await docOf()) === '1.\t\n',
+        && (await docOf()) === '1.\t\n\n',
       `state=${JSON.stringify(orderedTabState)} doc=${JSON.stringify(await docOf())}`)
 
     // 20. 敲 `-` 后按 Tab 不触发无序列表格式也不出现圆点，回车不续 `- `
-    await setDoc('说明\n-')
-    await setCursor(4)
+    // 段落排版下「说明」回车是新的一段，所以起点是两段：说明、-
+    await setDoc('说明\n\n-')
+    await setCursor(5)
     await press(renderer, 'Tab')
     await setCursor(0) // 移开光标验证非激活行也不把 `-` 画成圆点
     const bulletTabState = JSON.parse(await evaluate(renderer, `(() => {
       const lines = [...document.querySelectorAll('#editor .cm-line')]
-      const line = lines[1]
+      const line = lines.find((l) => l.textContent.startsWith('-'))
       return JSON.stringify({
         cls: line?.className ?? '',
         hasBullet: !!line?.querySelector('.cm-md-bullet'),
       })
     })()`))
-    await setCursor(5)
+    await setCursor(6)
     await press(renderer, 'Enter')
+    // `-\t` 不是列表，回车按正文新起一段（段落排版：一次回车插入两个换行），不续 `- `。
     check('敲 - 后按 Tab 不触发无序列表格式也不出圆点',
       !bulletTabState.cls.includes('cm-md-li')
         && !bulletTabState.hasBullet
-        && (await docOf()) === '说明\n-\t\n',
+        && (await docOf()) === '说明\n\n-\t\n\n',
       `state=${JSON.stringify(bulletTabState)} doc=${JSON.stringify(await docOf())}`)
 
     // 21. 引用行 `> 1.` 后按 Tab 插入制表符而非空格，不触发列表格式且回车只续 `> `
