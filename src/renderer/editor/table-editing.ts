@@ -1411,8 +1411,15 @@ function insertCellText(view: EditorView, from: number, to: number, text: string
   return true
 }
 
-function blocksTableMerge(state: EditorState, direction: number): boolean {
+/**
+ * 正文与表格之间那条被隐藏的空行不能当普通换行删：退格会把下一段正文粘进表格末行（屏幕上看不见），
+ * 前删会把表头粘进上一段（整张表塌回竖线源码）。
+ * 这里不删字节，改成把光标送进相邻表格：退格进末行末格，前删进首行首格。
+ */
+function deleteTowardTable(view: EditorView, direction: number): boolean {
+  const { state } = view
   if (state.selection.ranges.length !== 1 || !state.selection.main.empty) return false
+  if (state.readOnly || !state.facet(EditorView.editable)) return false
   const head = state.selection.main.head
   const line = state.doc.lineAt(head)
   if (blankLine(line.text)) return false
@@ -1423,7 +1430,10 @@ function blocksTableMerge(state: EditorState, direction: number): boolean {
     if (!prev || line.number - prev > 3) return false
     const prevLine = state.doc.line(prev)
     const table = tableAt(state, prevLine.to)
-    return !!(table && state.doc.lineAt(table.to).number === prev)
+    if (!table || state.doc.lineAt(table.to).number !== prev) return false
+    const row = table.rows.length - 1
+    selectCell(view, table, row, table.align.length - 1, false)
+    return true
   }
   if (head !== line.to) return false
   let next = line.number + 1
@@ -1431,13 +1441,15 @@ function blocksTableMerge(state: EditorState, direction: number): boolean {
   if (next > state.doc.lines || next - line.number > 3) return false
   const nextLine = state.doc.line(next)
   const table = tableAt(state, nextLine.from)
-  return !!(table && state.doc.lineAt(table.from).number === next)
+  if (!table || state.doc.lineAt(table.from).number !== next) return false
+  selectCell(view, table, 0, 0, false)
+  return true
 }
 
 function deleteAtBoundary(view: EditorView, direction: number): boolean {
   if (returnFromParagraph(view, direction)) return true
   const current = currentCell(view.state)
-  if (!current) return blocksTableMerge(view.state, direction)
+  if (!current) return deleteTowardTable(view, direction)
   const range = view.state.selection.main
   return range.empty && (!current.cell || (direction < 0 ? range.head <= current.cell.start : range.head >= current.cell.end))
 }

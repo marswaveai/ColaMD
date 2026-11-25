@@ -1771,17 +1771,23 @@ try {
 
   // ── 跨 PR 审查回归：#184 × #194、#193 × #194、懒解析外框、空单元格 IME、表外上下键 ──
   {
-  // 1. 表格下方正文首行 Backspace 与上方正文末行 Delete 不跨隐藏空行粘表或毁表
+  // 1. 表格下方正文首行 Backspace 与上方正文末行 Delete 不跨隐藏空行粘表或毁表，改为把光标送进相邻表格
   const belowTableDoc = '| A | B |\n| --- | --- |\n| 1 | 2 |\n\nHello world'
   await setDoc(belowTableDoc)
   await cursor(belowTableDoc.indexOf('Hello world'))
   await key('Backspace')
-  check('表格下方正文首行 Backspace 不粘到表格末行', await doc() === belowTableDoc && await evaluate(`v.contentDOM.textContent.includes('Hello world')`), await doc())
+  const backspaceLanding = await evaluate(`(() => { const r = v.state.selection.main; return { head: r.head, text: v.state.doc.sliceString(r.head - 1, r.head + 1) } })()`)
+  check('表格下方正文首行 Backspace 不粘到表格末行且光标落入末格',
+    await doc() === belowTableDoc && await evaluate(`v.contentDOM.textContent.includes('Hello world')`) &&
+    backspaceLanding.head === belowTableDoc.indexOf('2'), JSON.stringify(backspaceLanding))
   const aboveTableDoc = 'Intro\n\n| A | B |\n| --- | --- |\n| 1 | 2 |'
   await setDoc(aboveTableDoc)
   await cursor(aboveTableDoc.indexOf('\n'))
   await key('Delete')
-  check('表格上方正文末行 Delete 不摧毁表格结构', await doc() === aboveTableDoc && await evaluate(`document.querySelectorAll('.cm-md-table-row').length === 2`), await doc())
+  const deleteLanding = await evaluate(`v.state.selection.main.head`)
+  check('表格上方正文末行 Delete 不摧毁表格结构且光标落入首格',
+    await doc() === aboveTableDoc && await evaluate(`document.querySelectorAll('.cm-md-table-row').length === 2`) &&
+    deleteLanding === aboveTableDoc.indexOf('A'), String(deleteLanding))
 
   // 2. 行内公式、成对行内 HTML 与高亮不跨表格 `|` 格线或跨表格行配对
   const crossCell = '| $foo | bar$ |\n| --- | --- |\n| $$ | x |\n| y | $$ |\n| $a+b$ | ok |\n| <span style="color:red">left | right</span> |\n| ==foo | ==bar== |'
