@@ -146,10 +146,21 @@ try {
 
         const line=await evaluate('v.state.doc.lineAt(v.state.selection.main.head).number')
         check(`${prefix?'引用':'普通'}${direction} 跨过分隔行`,line===(direction==='ArrowUp'?1:7))
-        // 鼠标依然可以点到分隔，因此直接输入和中文组字的写入保护必须独立验证。
-        const point=await evaluate(`(()=>{const l=v.state.doc.line(${direction==='ArrowUp'?2:6}),b=v.coordsAtPos(l.to);return {x:b.left+1,y:(b.top+b.bottom)/2}})()`)
-        for(const type of ['mousePressed','mouseReleased'])await send('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1})
-        check('鼠标仍可落在相邻分隔行',await evaluate('v.state.doc.lineAt(v.state.selection.main.head).number')===(direction==='ArrowUp'?2:6))
+        // #184 合入后普通块间的分隔空行被隐藏且鼠标不停留；引用内的 `>` 分隔行仍可直接点中。
+        // 两种情况都要独立验证直接输入与中文组字的表格写入保护。
+        const sepLine = direction === 'ArrowUp' ? 2 : 6
+        if (prefix) {
+          const point=await evaluate(`(()=>{const l=v.state.doc.line(${sepLine}),b=v.coordsAtPos(l.to);return {x:b.left+1,y:(b.top+b.bottom)/2}})()`)
+          for(const type of ['mousePressed','mouseReleased'])await send('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1})
+          check('鼠标仍可落在引用相邻分隔行',await evaluate('v.state.doc.lineAt(v.state.selection.main.head).number')===sepLine)
+        } else {
+          const point=await evaluate(`(()=>{const l=v.state.doc.line(${sepLine}),b=v.coordsAtPos(l.to);return b ? {x:b.left+1,y:(b.top+b.bottom)/2} : null})()`)
+          if (point) {
+            for(const type of ['mousePressed','mouseReleased'])await send('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1})
+          }
+          check('隐藏分隔空行鼠标不停留（#184）',!point || await evaluate('v.state.doc.lineAt(v.state.selection.main.head).number')!==sepLine)
+          await evaluate(`(()=>{const l=v.state.doc.line(${sepLine});v.dispatch({selection:{anchor:l.to}})})()`)
+        }
         await type('正文')
         check('分隔行首次输入仍保留原表格',await evaluate(`v.contentDOM.querySelectorAll('.cm-md-table-row').length===2 && v.state.doc.toString().includes('正文')`),await doc())
         await key('z',MOD)
@@ -1757,6 +1768,109 @@ try {
   check('切回原标签保留表格与内容', await doc() === fixture && await evaluate(`document.querySelectorAll('.cm-md-table-row').length`) === 4)
   await key('z', MOD)
   check('撤销不会带入另一标签的内容', !(await doc()).includes('独立改') && readFileSync(second, 'utf8').includes('独立改'))
+
+  // ── 跨 PR 审查回归：#184 × #194、#193 × #194、懒解析外框、空单元格 IME、表外上下键 ──
+  {
+  // 1. 表格下方正文首行 Backspace 与上方正文末行 Delete 不跨隐藏空行粘表或毁表
+  const belowTableDoc = '| A | B |\n| --- | --- |\n| 1 | 2 |\n\nHello world'
+  await setDoc(belowTableDoc)
+  await cursor(belowTableDoc.indexOf('Hello world'))
+  await key('Backspace')
+  check('表格下方正文首行 Backspace 不粘到表格末行', await doc() === belowTableDoc && await evaluate(`v.contentDOM.textContent.includes('Hello world')`), await doc())
+  const aboveTableDoc = 'Intro\n\n| A | B |\n| --- | --- |\n| 1 | 2 |'
+  await setDoc(aboveTableDoc)
+  await cursor(aboveTableDoc.indexOf('\n'))
+  await key('Delete')
+  check('表格上方正文末行 Delete 不摧毁表格结构', await doc() === aboveTableDoc && await evaluate(`document.querySelectorAll('.cm-md-table-row').length === 2`), await doc())
+
+  // 2. 行内公式、成对行内 HTML 与高亮不跨表格 `|` 格线或跨表格行配对
+  const crossCell = '| $foo | bar$ |\n| --- | --- |\n| $$ | x |\n| y | $$ |\n| $a+b$ | ok |\n| <span style="color:red">left | right</span> |\n| ==foo | ==bar== |'
+  await setDoc(crossCell)
+  const crossRes = await evaluate(`(() => {
+    const rows = [...document.querySelectorAll('.cm-md-table-row')]
+    const mathWidgets = [...document.querySelectorAll('.cm-md-math-inline, .cm-md-math-block')]
+    const htmlRowCells = [...rows[4].querySelectorAll('.cm-md-table-cell')]
+    const hiRowCells = [...rows[5].querySelectorAll('.cm-md-table-cell')]
+    return {
+      rowCount: rows.length,
+      colCounts: rows.map(r => r.querySelectorAll('.cm-md-table-cell').length),
+      mathCount: mathWidgets.length,
+      mathText: mathWidgets.map(w => w.textContent),
+      htmlCol2Styled: !!htmlRowCells[1]?.querySelector('[style*="color"]'),
+      hiCol1Marked: !!hiRowCells[0]?.querySelector('.cm-md-highlight'),
+      hiCol2Marked: hiRowCells[1]?.querySelector('.cm-md-highlight')?.textContent ?? null,
+    }
+  })()`)
+  check('公式/HTML/高亮在表格内不跨格线也不跨行，单格内仍正常渲染',
+    crossRes.rowCount === 6 && crossRes.colCounts.every(n => n === 2) &&
+    crossRes.mathCount === 1 && !crossRes.htmlCol2Styled &&
+    !crossRes.hiCol1Marked && crossRes.hiCol2Marked === 'bar',
+    JSON.stringify(crossRes))
+
+  // 3. 长文档懒解析后表格外框同步引用类与分页类
+  const longLazy = Array.from({ length: 120 }, (_, i) => `第 ${i} 段填充内容用于超过初始语法树解析窗口以便触发滚动懒解析。`).join('\n\n') +
+    '\n\n---\n\n> | H1 | H2 |\n> | --- | --- |\n> | 1 | 2 |\n'
+  await setDoc(longLazy)
+  await evaluate(`v.scrollDOM.scrollTop = v.scrollDOM.scrollHeight`)
+  for (let i = 0; i < 30; i++) {
+    const ok = await evaluate(`(() => {
+      const w = document.querySelector('.cm-md-table-widget')
+      return !!(w && w.classList.contains('cm-md-blockquote') && w.classList.contains('cm-md-page-1'))
+    })()`)
+    if (ok) break
+    await sleep(100)
+  }
+  const lazyClass = await evaluate(`document.querySelector('.cm-md-table-widget')?.className ?? ''`)
+  check('长文档懒解析后表格外框带引用类且页码正确',
+    lazyClass.includes('cm-md-blockquote') && lazyClass.includes('cm-md-page-1'), lazyClass)
+
+  // 4. 空单元格 IME 组字期间点击另一空单元格，内容留在原格不串写
+  const twoEmpty = '| A | B |\n| --- | --- |\n|  |  |\n'
+  await setDoc(twoEmpty)
+  const clickTwoEmpty = await evaluate(`(() => {
+    const inputs = [...document.querySelectorAll('.cm-md-table-row[data-table-row="1"] .cm-md-table-cell')]
+    return inputs.map(el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  })()`)
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: clickTwoEmpty[0].x, y: clickTwoEmpty[0].y, button: 'left', clickCount: 1 })
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: clickTwoEmpty[0].x, y: clickTwoEmpty[0].y, button: 'left', clickCount: 1 })
+  await sleep(60)
+  await evaluate(`(() => {
+    const inp = document.querySelector('.cm-md-table-row[data-table-row="1"] .cm-md-table-cell[data-column="0"] .cm-md-table-input')
+    inp.textContent = '甲'
+  })()`)
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: clickTwoEmpty[1].x, y: clickTwoEmpty[1].y, button: 'left', clickCount: 1 })
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: clickTwoEmpty[1].x, y: clickTwoEmpty[1].y, button: 'left', clickCount: 1 })
+  await sleep(80)
+  check('空单元格组字期间点击另一空单元格不串写', same(await rowCells(1), ['甲', '']), JSON.stringify(await rowCells(1)))
+
+  // 5. 表外上下键在列表内代码块不误跳 `# `
+  const listCode = '- item\n\n  ```py\n  # comment\n  x = 1\n  ```\n'
+  await setDoc(listCode)
+  await cursor(listCode.indexOf('  x = 1'))
+  await key('ArrowUp')
+  const codeLineHead = await evaluate(`v.state.selection.main.head`)
+  const commentLineStart = listCode.indexOf('  # comment')
+  check('列表内代码块按上键不跳过缩进与 # 注释符', codeLineHead === commentLineStart, JSON.stringify({ codeLineHead, commentLineStart }))
+
+  // 6. 表格点击不露源码、格内行内公式可点开就地编辑，跨格复制可拿到纯文本与富文本
+  const richTable = '| 指标 | 数值 |\n| --- | --- |\n| **营收** | $x+1$ |\n'
+  await setDoc(richTable)
+  await select('营收')
+  const stayRendered = await evaluate(`(() => {
+    const rows = document.querySelectorAll('.cm-md-table-row')
+    const delimiter = document.querySelector('.cm-md-table-delimiter')
+    const box = delimiter?.getBoundingClientRect()
+    return rows.length === 2 && (!delimiter || !box || box.height < 2)
+  })()`)
+  check('点击表格单元格保持渲染态不露整表源码', stayRendered)
+  const mathBox = await evaluate(`(() => { const el = document.querySelector('.cm-md-math-inline'); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: mathBox.x, y: mathBox.y, button: 'left', clickCount: 1 })
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: mathBox.x, y: mathBox.y, button: 'left', clickCount: 1 })
+  await sleep(60)
+  const mathInTable = await evaluate(`!!document.querySelector('.cm-md-math-source') && document.querySelectorAll('.cm-md-table-row').length === 2`)
+  check('表格内点击行内公式就地展开源码且不打散表格', mathInTable)
+  }
+
   await setDoc(fixture)
   check('运行时没有异常', errors.length === 0, JSON.stringify(errors))
   await sleep(1200)

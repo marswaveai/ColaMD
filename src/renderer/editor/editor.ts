@@ -267,8 +267,7 @@ function installEditorInteractions(root: HTMLElement, view: EditorView): void {
     // 图上的缩放控件、以及放大态下的图，都是控件自己的地盘：点一下就把光标送进源码，
     // 图当场没了，正在看的局部也就白缩了（控件由 mermaid-bridge 的 attachDiagramZoom 装）。
     const hit = e.target as HTMLElement
-    // 正文行内公式由 live-preview 的导航入口处理，不能再用通用块落点覆盖选区。
-    // 表格格内的公式没有自己的源码区间，仍按表格处理。
+    // 行内公式由 live-preview 的导航入口处理，不能再用通用块落点覆盖选区。
     if (hit.closest('.cm-md-math-inline[data-source-from]')) return
     if (hit.closest('.pele-zoom')) return
     const diagram = hit.closest('.cm-md-mermaid') as HTMLElement | null

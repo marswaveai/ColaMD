@@ -5,7 +5,7 @@ import { invertedEffects, isolateHistory, redo, selectAll, undo } from '@codemir
 import type { SyntaxNode, Tree } from '@lezer/common'
 import { frontmatterRange, scanMath } from './math-scan'
 import { isChinese } from '../ui-language'
-import { linkTextRange, livePreviewField } from './live-preview'
+import { decorationsRefreshEffect, linkTextRange, livePreviewField } from './live-preview'
 import { unpairedBackticks, tableCodeSpans, tablePipes } from '../../shared/markdown-tables'
 import { markdownParser } from './state'
 
@@ -126,8 +126,15 @@ class EmptyTableCell extends WidgetType {
     input.setAttribute('role', 'textbox')
     input.setAttribute('aria-label', isChinese() ? '单元格' : 'Cell')
     let committed = false
+    const matchesSelf = () => {
+      const current = currentCell(view.state)
+      const rowEl = cell.closest<HTMLElement>('.cm-md-table-row')
+      const range = rowEl ? tableDOMRange(view, rowEl) : undefined
+      return !!(current && range && current.table.from === range.from
+        && current.row === Number(rowEl?.dataset.tableRow) && current.column === this.column)
+    }
     const commit = (focus = true) => {
-      if (committed || !input.isConnected || !input.textContent) return
+      if (committed || !input.isConnected || !input.textContent || !matchesSelf()) return
       committed = true
       const { from, to } = view.state.selection.main
       insertCellText(view, from, to, input.textContent)
@@ -404,9 +411,12 @@ const tableField = StateField.define<ReturnType<typeof tableDecorations>>({
     if (tr.state.field(tableComposition, false)) return mapped
     if (tr.startState.facet(EditorView.editable) !== tr.state.facet(EditorView.editable) || tr.startState.readOnly !== tr.state.readOnly) return tableDecorations(tr.state)
     const compositionEnded = tr.effects.some(effect => effect.is(setTableComposition) && !effect.value)
+    const refreshed = tr.effects.some(effect => effect.is(decorationsRefreshEffect))
     const composition = tr.startState.field(tableComposition, false)
     const composedAt = composition?.changes.mapPos(composition.start.selection.main.head)
-    if (!tr.docChanged && !compositionEnded && syntaxTree(tr.startState) === syntaxTree(tr.state)) return value
+    if (!tr.docChanged && !compositionEnded && syntaxTree(tr.startState) === syntaxTree(tr.state)) {
+      return refreshed ? { ...value, wrappers: tableWrappers(tr.state, value.tables) } : value
+    }
     if (changed && !compositionEnded) {
       const from = tr.state.doc.lineAt(changed.after.from).from, to = changed.after.to
       const ranges: DecorationRange[] = [], prefixes: Range<Decoration>[] = []
@@ -438,7 +448,9 @@ const tableField = StateField.define<ReturnType<typeof tableDecorations>>({
       return false
     })
     const removed = tables.filter((_table, index) => !retained.has(index))
-    if (!rebuild.length && !removed.length) return mapped
+    if (!rebuild.length && !removed.length) {
+      return refreshed ? { ...mapped, wrappers: tableWrappers(tr.state, mapped.tables) } : mapped
+    }
     const replacement = tableDecorations(tr.state, rebuild, tables)
     const nextByRange = new Map([...tables, ...replacement.tables].map(table => [`${table.from}:${table.to}`, table]))
     const nextTables = nodes.map(({ from, to }) => nextByRange.get(`${from}:${to}`)!)
@@ -1399,16 +1411,40 @@ function insertCellText(view: EditorView, from: number, to: number, text: string
   return true
 }
 
+function blocksTableMerge(state: EditorState, direction: number): boolean {
+  if (state.selection.ranges.length !== 1 || !state.selection.main.empty) return false
+  const head = state.selection.main.head
+  const line = state.doc.lineAt(head)
+  if (blankLine(line.text)) return false
+  if (direction < 0) {
+    if (head !== line.from) return false
+    let prev = line.number - 1
+    while (prev > 0 && blankLine(state.doc.line(prev).text)) prev--
+    if (!prev || line.number - prev > 3) return false
+    const prevLine = state.doc.line(prev)
+    const table = tableAt(state, prevLine.to)
+    return !!(table && state.doc.lineAt(table.to).number === prev)
+  }
+  if (head !== line.to) return false
+  let next = line.number + 1
+  while (next <= state.doc.lines && blankLine(state.doc.line(next).text)) next++
+  if (next > state.doc.lines || next - line.number > 3) return false
+  const nextLine = state.doc.line(next)
+  const table = tableAt(state, nextLine.from)
+  return !!(table && state.doc.lineAt(table.from).number === next)
+}
+
 function deleteAtBoundary(view: EditorView, direction: number): boolean {
   if (returnFromParagraph(view, direction)) return true
   const current = currentCell(view.state)
-  if (!current) return false
+  if (!current) return blocksTableMerge(view.state, direction)
   const range = view.state.selection.main
   return range.empty && (!current.cell || (direction < 0 ? range.head <= current.cell.start : range.head >= current.cell.end))
 }
 
 function deleteToCellEdge(view: EditorView, direction: number): boolean {
   if (pendingParagraph(view.state)) return true
+  if (!view.state.facet(EditorView.editable) || view.state.readOnly) return false
   const current = currentCell(view.state)
   if (!current || !view.state.selection.main.empty) return false
   if (!current.cell) return true
@@ -1495,8 +1531,28 @@ function movePastSeparators(view: EditorView, range: SelectionRange, direction: 
   return EditorSelection.cursor(moved.head, moved.assoc, undefined, goal)
 }
 
+/** 按语法树实际存在的行首标记（引用、列表、标题）计算正文起点，避免误把代码块里的 `# ` 或缩进当成 Markdown 前缀跳过。 */
+function linePrefixStart(state: EditorState, line: Line): number {
+  let end = line.from
+  let found = false
+  syntaxTree(state).iterate({
+    from: line.from,
+    to: line.to,
+    enter: (node) => {
+      if (node.name !== 'QuoteMark' && node.name !== 'ListMark' && node.name !== 'HeaderMark') return
+      const gap = state.sliceDoc(end, node.from)
+      if (!/^[ \t]*$/.test(gap)) return false
+      found = true
+      end = node.to
+      while (end < line.to && (state.sliceDoc(end, end + 1) === ' ' || state.sliceDoc(end, end + 1) === '\t')) end++
+    },
+  })
+  return found ? end : line.from
+}
+
 function moveVertical(view: EditorView, direction: 1 | -1, extend = false): boolean {
   if (returnFromParagraph(view, direction)) return true
+  if (view.state.selection.ranges.length > 1) return false
   const current = currentCell(view.state)
   if (!current) {
     const range = view.state.selection.main
@@ -1513,18 +1569,15 @@ function moveVertical(view: EditorView, direction: 1 | -1, extend = false): bool
     // 扩展选区必须允许包含下一行的源码起点；吸附到正文会把下一项标记
     // 也选进去，整行删除时就会破坏列表。
     if (extend) return false
-    // 原生移动可能停在列表/引用的隐藏标记内部；只归一化这类不可见前缀，
-    // 其余正文与软换行仍交给 CM 的公开移动规则。
+    // 原生移动可能停在列表/引用的隐藏标记内部；只归一化语法树真实存在的不可见前缀，
+    // 其余正文、代码行与软换行仍交给 CM 的公开移动规则。
     const native = view.moveVertically(range, direction > 0)
     const moved = movePastSeparators(view, range, direction, native)
     const line = view.state.doc.lineAt(moved.head)
-    const start = textStart(line)
-    let node: SyntaxNode | null = syntaxTree(view.state).resolveInner(Math.min(start, line.to), -1)
-    while (node && node.name !== 'Blockquote' && node.name !== 'ListItem' && !/^ATXHeading/.test(node.name)) node = node.parent
+    const start = linePrefixStart(view.state, line)
     const skipped = moved.head !== native.head
-    if (skipped || node && moved.head < start) {
-      view.dispatch({ selection: EditorSelection.create([extend ? EditorSelection.range(range.anchor, Math.max(start, moved.head), moved.goalColumn)
-        : EditorSelection.cursor(Math.max(start, moved.head), 1, undefined, moved.goalColumn)]), userEvent: 'select', scrollIntoView: true })
+    if (skipped || (start > line.from && moved.head < start)) {
+      view.dispatch({ selection: EditorSelection.create([EditorSelection.cursor(Math.max(start, moved.head), 1, undefined, moved.goalColumn)]), userEvent: 'select', scrollIntoView: true })
       return true
     }
     return false
@@ -1659,8 +1712,8 @@ const tableCompositionInput = ViewPlugin.fromClass(class {
 /** 切换标签、源码模式前提交当前 DOM 输入，快照不能带走未收口的组字状态。 */
 export function finishTableComposition(view: EditorView): void {
   const input = view.dom.ownerDocument.activeElement
-  // 空格和缺省格拥有独立输入节点；先通过它自己的 blur 提交，再读取标签或源码快照。
-  if (input instanceof HTMLElement && input.closest('.cm-md-table-input') && view.contentDOM.contains(input)) input.blur()
+  // 空格、缺省格和边界临时段落拥有独立输入节点；先通过它自己的 blur 提交，再读取标签或源码快照。
+  if (input instanceof HTMLElement && input.closest('.cm-md-table-input, .cm-md-table-paragraph-input') && view.contentDOM.contains(input)) input.blur()
   if (!view.state.field(tableComposition, false)) return
   view.contentDOM.blur()
   view.plugin(tableCompositionInput)?.finish()
@@ -1756,9 +1809,33 @@ export const tableEditing = [
     let inside = true
     tr.changes.iterChangedRanges((from, to) => { if (!cellAround(tr.startState, from, to)) inside = false })
     if (inside) return true
-    const table = tableAt(tr.startState, tr.startState.selection.main.head)
-    if (!table) return true
     const selection = tr.startState.selection.main
+    const table = tableAt(tr.startState, selection.head)
+    if (!table) {
+      for (const range of tr.startState.field(tableField).tables) {
+        if (selection.from <= range.from && selection.to >= range.to) continue
+        const firstLine = tr.startState.doc.lineAt(range.from)
+        const lastLine = tr.startState.doc.lineAt(range.to)
+        let mergesBoundary = false
+        tr.changes.iterChangedRanges((from, to) => {
+          if (mergesBoundary) return
+          if (firstLine.from > 0 && from < firstLine.from && to >= firstLine.from) {
+            const mappedFrom = tr.changes.mapPos(range.from, 1)
+            const nextFirst = tr.newDoc.lineAt(mappedFrom)
+            const oldPrefix = tr.startState.sliceDoc(firstLine.from, range.from)
+            const newPrefix = tr.newDoc.sliceString(nextFirst.from, mappedFrom)
+            if (newPrefix !== oldPrefix && !/^[ \t>]*$/.test(newPrefix)) mergesBoundary = true
+          }
+          if (lastLine.to < tr.startState.doc.length && from <= lastLine.to && to > lastLine.to) {
+            const mappedTo = tr.changes.mapPos(range.to, -1)
+            const nextLast = tr.newDoc.lineAt(mappedTo)
+            if (!/^[ \t]*$/.test(tr.newDoc.sliceString(mappedTo, nextLast.to))) mergesBoundary = true
+          }
+        })
+        if (mergesBoundary) return false
+      }
+      return true
+    }
     if (selection.from <= table.from && selection.to >= table.to) return true
     if (selection.empty && tr.isUserEvent('delete')) {
       const cell = currentCell(tr.startState)?.cell
@@ -1807,6 +1884,7 @@ export const tableEditing = [
     if (changes.some((change, index) => index && change.from < changes[index - 1].to)) return []
     if (changes.length !== 1 || tr.newSelection.ranges.length !== 1 || !tr.newSelection.main.empty) caret = undefined
     const safe = preserveTableRows(tr.startState, changes, rows, undefined, caret)
+    if (changes.length && !safe.length) return []
     rewritten ||= safe.length !== changes.length || safe.some((change, index) => !unchanged(change, changes[index].from, changes[index].to, changes[index].insert))
     if (!rewritten) return tr
     const set = tr.startState.changes(safe)
@@ -1895,17 +1973,24 @@ export const tableEditing = [
       const cell = event.target.closest<HTMLElement>('.cm-md-table-cell')
       const row = cell?.closest<HTMLElement>('.cm-md-table-row')
       if (!cell || !row) return false
+      // 另一处空单元格若正在 IME 组字，先在旧选区下提交，再按最新文档坐标切到点中的格。
+      const activeInput = view.dom.ownerDocument.activeElement
+      if (activeInput instanceof HTMLElement && !cell.contains(activeInput) && activeInput.closest('.cm-md-table-input, .cm-md-table-paragraph-input') && view.contentDOM.contains(activeInput)) {
+        finishTableComposition(view)
+      }
       const range = tableDOMRange(view, row)
       const table = range && tableAt(view.state, range.from)
       if (!table) return false
       const rowIndex = Number(row.dataset.tableRow)
       const column = Number(cell.dataset.column)
-      const target = table.rows[rowIndex].cells[column]
+      const targetRow = table.rows[rowIndex]
+      if (!targetRow) return false
+      const target = targetRow.cells[column]
       if (target && target.start !== target.end) return false
       event.preventDefault()
       if (target) {
         const anchor = Math.max(target.start, Math.min(target.end, view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? target.start))
-        view.dispatch({ selection: EditorSelection.create([EditorSelection.cursor(anchor, cellAssoc(target, anchor, view.state))]), effects: setVirtualCell.of({ row: table.rows[rowIndex].from, column }) })
+        view.dispatch({ selection: EditorSelection.create([EditorSelection.cursor(anchor, cellAssoc(target, anchor, view.state))]), effects: setVirtualCell.of({ row: targetRow.from, column }) })
       } else selectCell(view, table, rowIndex, column, false, undefined, false)
       const input = cell.querySelector<HTMLElement>('.cm-md-table-input')
       if (input) input.focus({ preventScroll: true })

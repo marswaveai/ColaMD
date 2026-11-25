@@ -443,9 +443,6 @@ function isBlockActive(state: EditorState, from: number, to: number): boolean {
 /**
  * 画一个公式。
  *
- * 两个调用点：正文里的 MathWidget，和表格单元格里的行内公式。表格是整块替换渲染的，
- * 格子里的文字挂不上 CodeMirror 的装饰层，只能在拼 DOM 的时候自己画。
- *
  * 渲染失败时把源码原样放回去（`cm-md-math-error`），宁可难看也不丢字。
  */
 function mathElement(code: string, block: boolean): HTMLElement {
@@ -611,11 +608,20 @@ const inlineMathNavigation = [
   Prec.highest(EditorView.domEventHandlers({
     mousedown(event, view) {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || view.composing) return false
-      const widget = (event.target as HTMLElement).closest<HTMLElement>('.cm-md-math-inline[data-source-from]')
+      let widget = (event.target as HTMLElement).closest<HTMLElement>('.cm-md-math-inline[data-source-from]')
       if (!widget || exportingCleanly(view.state)) return false
+      // 表格空单元格或临时段落输入框若仍在组字，先在旧选区下失焦提交，避免组字内容写入点中的公式位置。
+      const activeInput = view.dom.ownerDocument.activeElement
+      if (activeInput instanceof HTMLElement && activeInput.closest('.cm-md-table-input, .cm-md-table-paragraph-input') && view.contentDOM.contains(activeInput)) {
+        activeInput.blur()
+        if (!widget.isConnected) {
+          widget = view.dom.ownerDocument.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.cm-md-math-inline[data-source-from]') ?? null
+          if (!widget) return false
+        }
+      }
       const from = Number(widget.dataset.sourceFrom), to = Number(widget.dataset.sourceTo)
       const rect = widget.getBoundingClientRect()
-      if (event.clientX < rect.left || event.clientX > rect.right) return false
+      if (rect.width <= 0 || event.clientX < rect.left || event.clientX > rect.right) return false
       const delim = view.state.sliceDoc(from, from + 2) === '$$' || view.state.sliceDoc(from, from + 1) === '\\' ? 2 : 1
       const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
       let anchor = from + delim + Math.round(ratio * (to - from - 2 * delim))
@@ -657,23 +663,83 @@ const inlineMathAtomicRanges = EditorView.atomicRanges.of(view => {
 /** `==高亮==` 的匹配。不吃跨行，也不吃空的 `====`。 */
 const HIGHLIGHT_RE = /(?<![=])==(?!=)([^=\n]+?)==(?!=)/g
 
-function collectHighlight(state: EditorState, text: string, ranges: DecorationRange[], excluded: Excluded[]): void {
-  if (!text.includes('==')) return
-  const inExcluded = (pos: number) => excluded.some((e) => pos >= e.from && pos < e.to)
+function collectTableBounds(tree: ReturnType<typeof syntaxTree>, front: Excluded | null): { tables: Excluded[]; cells: Excluded[] } {
+  const tables: Excluded[] = []
+  const cells: Excluded[] = []
+  tree.iterate({
+    enter: (node) => {
+      if (front && node.from < front.to) return false
+      if (node.name === 'Table') {
+        tables.push({ from: node.from, to: node.to })
+      } else if (node.name === 'TableCell') {
+        cells.push({ from: node.from, to: node.to })
+        return false
+      }
+    },
+  })
+  return { tables, cells }
+}
 
-  HIGHLIGHT_RE.lastIndex = 0
-  let match: RegExpExecArray | null
-  while ((match = HIGHLIGHT_RE.exec(text)) !== null) {
-    const start = match.index
-    const end = start + match[0].length
-    if (inExcluded(start)) continue
-    const active = isActiveLine(state, start)
-    // 藏定界符，给中间那段加底色；光标在这一行时定界符露出来，但仍要能认出来
-    const delimiter = (from: number, to: number) =>
-      active ? MARK({ class: 'cm-md-marker' }) : hide(from, to)
-    ranges.push({ from: start, to: start + 2, deco: delimiter(start, start + 2) })
-    ranges.push({ from: end - 2, to: end, deco: delimiter(end - 2, end) })
-    ranges.push({ from: start + 2, to: end - 2, deco: MARK({ class: 'cm-md-highlight' }) })
+function sliceExcluded(excluded: Excluded[], from: number, to: number): Excluded[] {
+  const out: Excluded[] = []
+  for (const e of excluded) {
+    if (e.to <= from || e.from >= to) continue
+    out.push({ from: Math.max(e.from, from) - from, to: Math.min(e.to, to) - from })
+  }
+  return out
+}
+
+function scanDocumentMath(text: string, excluded: Excluded[], tables: Excluded[], cells: Excluded[]): MathRange[] {
+  if (!tables.length) return scanMath(text, excluded)
+  // 表外排除整张表格，表内逐格独立扫描，避免公式跨 `|` 格线或跨表格行配对破坏列结构。
+  const out = scanMath(text, [...excluded, ...tables])
+  for (const cell of cells) {
+    const slice = text.slice(cell.from, cell.to)
+    if (!/[$\\]/.test(slice)) continue
+    const inner = scanMath(slice, sliceExcluded(excluded, cell.from, cell.to))
+    for (const r of inner) {
+      out.push({ from: cell.from + r.from, to: cell.from + r.to, code: r.code, block: false })
+    }
+  }
+  out.sort((a, b) => a.from - b.from)
+  return out
+}
+
+function collectHighlight(
+  state: EditorState,
+  text: string,
+  ranges: DecorationRange[],
+  excluded: Excluded[],
+  tables: Excluded[] = [],
+  cells: Excluded[] = [],
+): void {
+  if (!text.includes('==')) return
+  const scanSlice = (slice: string, offset: number, blocked: Excluded[]) => {
+    const overlapsBlocked = (start: number, end: number) => blocked.some((e) => start < e.to && end > e.from)
+    HIGHLIGHT_RE.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = HIGHLIGHT_RE.exec(slice)) !== null) {
+      const start = offset + match.index
+      const end = start + match[0].length
+      if (overlapsBlocked(start, end)) continue
+      const active = isActiveLine(state, start)
+      // 藏定界符，给中间那段加底色；光标在这一行时定界符露出来，但仍要能认出来
+      const delimiter = (from: number, to: number) =>
+        active ? MARK({ class: 'cm-md-marker' }) : hide(from, to)
+      ranges.push({ from: start, to: start + 2, deco: delimiter(start, start + 2) })
+      ranges.push({ from: end - 2, to: end, deco: delimiter(end - 2, end) })
+      ranges.push({ from: start + 2, to: end - 2, deco: MARK({ class: 'cm-md-highlight' }) })
+    }
+  }
+  if (!tables.length) {
+    scanSlice(text, 0, excluded)
+    return
+  }
+  scanSlice(text, 0, [...excluded, ...tables])
+  for (const cell of cells) {
+    const slice = text.slice(cell.from, cell.to)
+    if (!slice.includes('==')) continue
+    scanSlice(slice, cell.from, excluded)
   }
 }
 
@@ -1059,7 +1125,12 @@ function inlinePair(state: EditorState, from: number, to: number): { closeFrom: 
   if (!styleAttr) return null
   const style = cleanStyle(styleAttr[1] ?? styleAttr[2] ?? '')
   if (!style) return null
-  const rest = state.doc.sliceString(to, state.doc.lineAt(from).to)
+  let limit = state.doc.lineAt(from).to
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(from, 1); node; node = node.parent) {
+    if (node.name === 'TableCell') { limit = Math.min(limit, node.to); break }
+    if (node.name === 'TableRow' || node.name === 'TableHeader' || node.name === 'Table') break
+  }
+  const rest = state.doc.sliceString(to, limit)
   const close = new RegExp(`</${open[1]}\\s*>`, 'i').exec(rest)
   if (!close) return null
   const closeFrom = to + close.index
@@ -1451,16 +1522,19 @@ function buildDecorations(state: EditorState, flash: { from: number; to: number 
   const ranges: DecorationRange[] = []
   const zones: ActiveZone[] = []
   const text = state.doc.toString()
-  const excluded = /[$\\]|==/.test(text) ? excludedRanges(text, syntaxTree(state)) : []
+  const needsScan = /[$\\]|==/.test(text)
+  const tree = syntaxTree(state)
+  const excluded = needsScan ? excludedRanges(text, tree) : []
   // 属性区的区间要算一次、多处用：压淡它、把它里面的 YAML 排出 markdown 排版、
   // 不让它的 `---` 被当成分页。
   const front = frontmatterRange(text)
+  const tableBounds = needsScan ? collectTableBounds(tree, front) : { tables: [], cells: [] }
 
   if (flash && flash.to <= state.doc.length) {
     ranges.push({ from: flash.from, to: flash.to, deco: MARK({ class: 'cm-md-jump-flash' }) })
   }
 
-  const mathRanges = scanMath(text, excluded)
+  const mathRanges = /[$\\]/.test(text) ? scanDocumentMath(text, excluded, tableBounds.tables, tableBounds.cells) : []
   collectBlocks(state, ranges, front, mathRanges)
   collectLinks(state, ranges, front)
   collectFootnotes(state, text, ranges, front)
@@ -1471,7 +1545,7 @@ function buildDecorations(state: EditorState, flash: { from: number; to: number 
   collectFrontmatter(state, ranges, front, zones)
   collectTaskItems(state, ranges, front)
   collectMermaid(state, text, ranges, front, zones)
-  collectHighlight(state, text, ranges, excluded)
+  collectHighlight(state, text, ranges, excluded, tableBounds.tables, tableBounds.cells)
   // 公式放最后：它覆盖区间，其它装饰不该插进它里面
   collectMath(state, mathRanges, ranges, zones)
 

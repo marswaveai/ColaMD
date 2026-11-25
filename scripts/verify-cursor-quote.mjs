@@ -57,7 +57,7 @@ export async function verifyCursorQuote({ evaluate, send, key, setDoc, type, che
   try {
     for(const [label,doc,lines] of [
       ['引用表格',quote,[1,3,4,6,8]],
-      ['列表边界','- 列表起点\n\n'+quote+'\n\n- 列表终点',process.env.CURSOR_QUOTE_WITH_PARAGRAPH ? [3,5,6,8,10,12] : [3,5,6,8,10,11,12]],
+      ['列表边界','- 列表起点\n\n'+quote+'\n\n- 列表终点',[3,5,6,8,10,12]],
     ]){
       await setDoc(doc)
       for(const change of ['初始','格内输入','引用Enter','撤销','滚动','缩窗']){
