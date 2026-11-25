@@ -8,7 +8,7 @@ export interface SiblingFile {
 
 type FileOpenedData = { path: string | null; content: string; fileUrl: string | null }
 type ImageExportPreset = 'desktop' | 'mobile'
-type ImageExportSnapshot = { html: string; styles: string; bodyClass: string; background: string }
+type ImageExportSnapshot = { tableLayout?: string; html: string; styles: string; bodyClass: string; background: string }
 export type FileManagerName = 'finder' | 'explorer' | 'file-manager'
 
 const pendingFileOpened: FileOpenedData[] = []

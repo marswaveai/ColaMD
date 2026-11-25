@@ -42,6 +42,14 @@ The two items below are the ones actually blocking us. Everything else on this p
 
 **How to help:** comment on [#88](https://github.com/marswaveai/ColaMD/issues/88) with the failing document (or a cut-down version), the platform, the export option used, and whether the current release still fails.
 
+## Proposed
+
+### 段落与标题留白
+
+采用类似 Typora 的渲染逻辑，由块间距表达源码分隔空行，保留可输入空段落与文件原文。
+只缩小标题上边距仍会留下标题下方的整行空白，压矮可编辑空行又会缩短光标，
+因此把分隔留白和可输入空段分开处理；代码、列表、引用内部空行保留原有结构。
+
 ## Implemented On Main
 
 ### Inline HTML pairs (#125)
@@ -299,17 +307,23 @@ LLM 生成的 Markdown 常常在段落之间留一串空行，读起来松垮。
 
 **Status:** Candidate, not scheduled. 参考实现是现成的（mdnice / markdown-nice 那一路：Markdown → 行内样式 HTML）。按项目里「参考老前辈的决策」的原则，先研究它们的样式表怎么定，再决定我们的做法，不自己发明一套。
 
-### Selectable text inside a rendered block (#141, #153, #192, #205)
+### Direct table cell editing (#153, #162, #192, #205)
 
-**Source:** [#141](https://github.com/marswaveai/ColaMD/issues/141), [#153](https://github.com/marswaveai/ColaMD/issues/153), [#192](https://github.com/marswaveai/ColaMD/issues/192), [#205](https://github.com/marswaveai/ColaMD/issues/205)
+**Source:** [#153](https://github.com/marswaveai/ColaMD/issues/153), [#162](https://github.com/marswaveai/ColaMD/issues/162), [#192](https://github.com/marswaveai/ColaMD/issues/192), [#205](https://github.com/marswaveai/ColaMD/issues/205)
 
-**Status:** In progress for tables via [PR #194](https://github.com/marswaveai/ColaMD/pull/194) (Draft, queued behind #181/#184/#193).
+**Status:** Implemented via [PR #194](https://github.com/marswaveai/ColaMD/pull/194). Table cells stay editable in the rendered layout. The Markdown buffer remains the source of truth: decorations hide the pipes and separator row. Column widths use the contents of the whole table and stay fixed during cell edits and scrolling; structure, alignment, font or available-width changes recalculate them. Rows outside the viewport still unload. Tab moves between cells and adds a row at the end; Enter moves down, Mod+Enter inserts a row, and Shift+Enter inserts a line break. Pasted tab-separated data can extend the table. No toolbar is added.
 
-A rendered block (table, diagram, image, formula, raw HTML) is a replacement widget, so its own text never enters the selection model: dragging across a rendered table selects nothing, and the same holds for a diagram's labels.
+**导航决定（2026-10-22）：** 方向键在文首、文末离开表格只移动可见光标，不新增文件字节。外面没有现成正文时提供临时输入位置，实际输入确认后才用一笔可撤销事务创建段落。取消输入、点击别处或返回表格不写文件。
 
-2026-10-15 changed what a click does (#153): block widgets reveal their Markdown while the caret is inside, and clicking a table cell lands the caret in that cell of the source (`isBlockActive` in `live-preview.ts`, `tableCellAnchor` in `editor.ts`). The reported problem, that typing after clicking a table destroyed it, is gone with that.
+**审阅决定（2026-10-22）：** 普通数据行文字编辑只更新该行装饰，结构变化保留完整重建；主题应用入口统一通知编辑器重测行高和表格列宽，覆盖自定义主题之间的切换。表格外框中的独立留白片段按普通块显示，虚拟行占位继续保留表格布局。
 
-Still open: editing and selecting text inside the rendered block itself, without stepping into the source. For tables, [PR #194](https://github.com/marswaveai/ColaMD/pull/194) implements in-place editing on real document text with hidden pipes and aligned cells; other rendered blocks remain undecided.
+**代码格与查找替换决定（2026-10-22）：** 按用户确认采用 Typora 式表格代码规则：完整行内代码里的竖线不分格，反斜杠原样显示、逐个删除。通过 Lezer 的公开扩展接入，共享规则覆盖编辑器与 Word；保存仍原样写回源码，不迁移旧文件。这会改变旧 GFM 文件中代码转义竖线的显示，文档拿到严格 GFM 环境可能显示不同。渲染查找替换限定单元格文字，普通竖线自动转义，代码竖线原样保留，同格多匹配按一笔事务处理；源码模式继续支持直接修改结构。界面不增加常驻提示或开关。
+
+### Selectable text inside other rendered blocks (#141)
+
+**Source:** [#141](https://github.com/marswaveai/ColaMD/issues/141)
+
+Diagrams, images, formulas and raw HTML remain replacement widgets. Selecting their rendered text without entering the source is still undecided; table editing does not change those blocks.
 
 ### XDG data directories on Linux (#142)
 

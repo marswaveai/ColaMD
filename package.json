@@ -1,6 +1,6 @@
 {
   "name": "colamd",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "description": "A free, elegant Markdown editor for macOS, Windows and Linux. Simple by design, always in sync with the file on disk.",
   "main": "dist/main/index.js",
   "author": {
@@ -24,10 +24,14 @@
     "build:web": "vite build --config vite.web.config.ts",
     "preview:web": "vite preview --config vite.web.config.ts",
     "check:theme-colors": "node scripts/check-theme-colors.mjs",
+    "verify:inline-math": "node scripts/verify-inline-math.mjs",
     "verify:markdown": "node scripts/verify-markdown.mjs",
     "verify:links": "node scripts/verify-links.mjs",
     "verify:features": "node scripts/verify-features.mjs",
     "verify:list": "node scripts/verify-list-input.mjs",
+    "verify:tables": "node scripts/verify-tables.mjs",
+    "verify:table-caret": "node scripts/verify-table-caret.mjs",
+    "verify:table-syntax": "node scripts/verify-table-syntax.mjs",
     "verify:scroll-render": "node scripts/verify-scroll-render.mjs",
     "verify:source-mode": "node scripts/verify-source-mode.mjs",
     "verify:image-export": "node scripts/verify-image-export.mjs",

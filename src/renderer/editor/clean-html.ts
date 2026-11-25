@@ -1,3 +1,6 @@
+import katex from 'katex'
+import { scanMath } from './math-scan'
+
 // 把编辑器画出来的 DOM 翻译成一篇干净的 HTML。
 //
 // 编辑器里的 DOM 是给**编辑**用的：每一行是一个 `<div class="cm-line">`，加粗是
@@ -6,6 +9,8 @@
 //
 // 所以这里做一次翻译：行 → `<p>`，连续的同类行合并成 `<ul>`/`<ol>`/`<blockquote>`/`<pre>`，
 // 装饰类 → 语义标签。**只读**：它不改编辑器里的任何东西，改的是要交出去的那份拷贝。
+
+import { cleanStyle } from './html-sanitize'
 
 /** 元素上的装饰类 → 语义标签。没登记的类原样透传（KaTeX、mermaid、图片要保住）。 */
 const INLINE_TAGS: Record<string, string> = {
@@ -27,6 +32,9 @@ const DROP_CLASSES = new Set([
   // 光标所在的那一行会把 markdown 标记（`**`、`#`、`==` 等）露出来给人看，
   // 它们不属于正文，交出去的那份里不能带
   'cm-md-marker',
+  'cm-md-table-caret-anchor',
+  'cm-md-table-marker',
+  'cm-md-table-paragraph',
 ])
 
 type LineKind = 'code' | 'li' | 'quote' | 'hr' | 'table' | 'empty' | 'p' | `h${1 | 2 | 3 | 4 | 5 | 6}`
@@ -39,22 +47,39 @@ function escapeAttribute(value: string): string {
   return escapeText(value).replace(/"/g, '&quot;')
 }
 
+const DROP_SELECTOR = Array.from(DROP_CLASSES, name => `.${name}`).join(',')
+
+/**
+ * 这一行交出去的文字：编辑器零件（DROP_CLASSES）里的字不算。
+ * 只有 `>` 的空引用行会露出引用标记，但它和空行一样不是内容。
+ */
+function deliveredText(line: HTMLElement): string {
+  let text = ''
+  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.parentElement?.closest(DROP_SELECTOR)) text += node.textContent ?? ''
+  }
+  return text
+}
+
 function lineKind(line: HTMLElement, includeList = true): LineKind {
   const classes = line.classList
+  // 引用排在最前：引用里的标题、列表、代码由 renderGroup 剥掉引用后再按块翻译
+  if (classes.contains('cm-md-blockquote')) return 'quote'
   for (let level = 1; level <= 6; level++) {
     if (classes.contains(`cm-md-atxheading${level}`)) return `h${level}` as LineKind
   }
   // 图表沿用围栏行的代码块类，已有 SVG 时不能再按代码围栏删掉。
   if (line.querySelector('.cm-md-mermaid svg')) return 'p'
   if (classes.contains('cm-md-codeblock')) return 'code'
-  if (classes.contains('cm-md-blockquote')) return 'quote'
   if (classes.contains('cm-md-hr')) return 'hr'
-  if (line.querySelector('.cm-md-table-widget')) return 'table'
+  if (line.querySelector('.cm-md-table-widget') || classes.contains('cm-md-table-row') || classes.contains('cm-md-table-delimiter')) return 'table'
   if (classes.contains('cm-md-frontmatter')) return 'empty'
   if (includeList) for (let depth = 0; depth <= 6; depth++) {
     if (classes.contains(`cm-md-li-${depth}`)) return 'li'
   }
-  if ((line.textContent ?? '').trim() === '' && line.querySelector('img') === null) return 'empty'
+  // cm-widgetBuffer 是 CodeMirror 在隐藏区间旁边垫的占位图，不是内容（引用里的空行 `>` 就带着它）
+  if (deliveredText(line).trim() === '' && line.querySelector('img:not(.cm-widgetBuffer)') === null) return 'empty'
   return 'p'
 }
 
@@ -68,11 +93,25 @@ function listDepth(line: HTMLElement): number {
 
 /** 这一行是不是有序列表（`1.` 这种序号是用户写的，会留在行里）。 */
 function isOrdered(line: HTMLElement): boolean {
+  // 选区从第一项的文字起选时，序号不在选区里，行上的属性还在（有序待办项的序号也不显示）
+  if (line.dataset.listNumber !== undefined || line.classList.contains('cm-md-li-ordered')) return true
   const mark = line.querySelector('.cm-md-listmark')
   return !!mark && /^\s*\d+[.)]/.test(mark.textContent ?? '')
 }
 
-function inlineHTML(node: Node): string {
+/** 行内样式沿用显示 HTML 时的白名单，语义标签补齐继承的文字颜色。 */
+function inlineStyleAttribute(node: HTMLElement, inheritedColor = ''): string {
+  let style = cleanStyle(node.getAttribute('style') ?? '')
+  if (inheritedColor && !node.style.color) style += `${style ? '; ' : ''}color: ${inheritedColor}`
+  return style ? ` style="${escapeAttribute(style)}"` : ''
+}
+
+function withInlineStyle(node: HTMLElement, html: string): string {
+  const attribute = inlineStyleAttribute(node)
+  return attribute ? `<span${attribute}>${html}</span>` : html
+}
+
+function inlineHTML(node: Node, inheritedColor = ''): string {
   if (node.nodeType === Node.TEXT_NODE) return escapeText(node.textContent ?? '')
   if (!(node instanceof HTMLElement)) return ''
 
@@ -80,23 +119,30 @@ function inlineHTML(node: Node): string {
   for (const dropped of DROP_CLASSES) {
     if (classes.contains(dropped)) return ''
   }
+  const color = node.style.color || inheritedColor
   // 属性区是文件的元数据，不属于正文
   if (classes.contains('cm-md-frontmatter')) return ''
   if (classes.contains('cm-md-html-block') || classes.contains('cm-md-html-inline')) {
-    return childrenHTML(node)
+    return withInlineStyle(node, childrenHTML(node, color))
   }
   if (classes.contains('cm-md-link')) {
     const href = node.getAttribute('data-href') ?? ''
-    return `<a href="${escapeAttribute(href)}">${childrenHTML(node)}</a>`
+    // 为 a、mark 补齐继承的文字颜色，避免浏览器默认色覆盖。
+    return `<a href="${escapeAttribute(href)}"${inlineStyleAttribute(node, inheritedColor)}>${childrenHTML(node, color)}</a>`
   }
   if (classes.contains('cm-md-footnote-ref')) {
-    return `<sup>${escapeText(node.textContent ?? '')}</sup>`
+    return `<sup${inlineStyleAttribute(node)}>${escapeText(node.textContent ?? '')}</sup>`
+  }
+  // 正在编辑的完整行内公式也要交成渲染结果；局部复制保留所选原文。
+  if (classes.contains('cm-md-math-source')) {
+    return mathSourceHTML(node.textContent ?? '')
   }
   // 公式（KaTeX）、mermaid 图、图片：它们已经是能独立成立的 HTML，原样带走
   if (classes.contains('cm-md-math') || classes.contains('cm-md-mermaid')) {
     return node.innerHTML
   }
   if (node.tagName === 'IMG') return node.outerHTML
+  if (node.tagName === 'BR') return '<br>'
   if (classes.contains('cm-md-image')) {
     // 编辑器给图片套了一层定位用的 span，交出去的文档里只要那张图
     const img = node.querySelector('img')
@@ -104,14 +150,14 @@ function inlineHTML(node: Node): string {
   }
 
   for (const [className, tag] of Object.entries(INLINE_TAGS)) {
-    if (classes.contains(className)) return `<${tag}>${childrenHTML(node)}</${tag}>`
+    if (classes.contains(className)) return `<${tag}${inlineStyleAttribute(node, tag === 'mark' ? inheritedColor : '')}>${childrenHTML(node, color)}</${tag}>`
   }
-  // 其它（编辑器自己的行内 span 等）只保留里面的文字
-  return childrenHTML(node)
+  // 移除编辑器包装，保留行内内容和样式。
+  return withInlineStyle(node, childrenHTML(node, color))
 }
 
-function childrenHTML(node: Node): string {
-  return Array.from(node.childNodes).map(inlineHTML).join('')
+function childrenHTML(node: Node, inheritedColor = ''): string {
+  return Array.from(node.childNodes).map((child) => inlineHTML(child, inheritedColor)).join('')
 }
 
 /** 一行里的正文（去掉列表标记、复制按钮这些零件）。 */
@@ -127,7 +173,7 @@ function lineHTML(line: HTMLElement): string {
  */
 function listTag(line: HTMLElement, ordered: boolean): string {
   if (!ordered) return '<ul>'
-  const start = Number.parseInt(line.querySelector('.cm-md-listmark')?.textContent ?? '', 10)
+  const start = Number.parseInt(line.querySelector('.cm-md-listmark')?.textContent ?? line.dataset.listNumber ?? '', 10)
   return Number.isFinite(start) && start !== 1 ? `<ol start="${start}">` : '<ol>'
 }
 
@@ -147,6 +193,12 @@ function renderList(lines: HTMLElement[]): string {
   for (const line of lines) {
     const depth = listDepth(line)
     const ordered = isOrdered(line)
+    // 续行（一项里的第二行起）接在这一项后面，不是新的一项
+    if (!line.classList.contains('cm-md-li-start') && open.length > 0 && open[open.length - 1].depth === depth) {
+      const content = lineHTML(line).replace(/^\s+/, '')
+      if (content.trim() !== '') html += `<br>${content}`
+      continue
+    }
     while (open.length > 0 && open[open.length - 1].depth > depth) {
       html += `</li></${tagOf(open.pop()!.ordered)}>`
     }
@@ -211,6 +263,8 @@ function isCodeFenceEnd(line: HTMLElement): boolean {
 }
 
 function renderCode(lines: HTMLElement[]): string {
+  // 选区只伸进了开头的围栏行：一行代码也没选，不交出一个空代码块
+  if (lines.length === 1 && lines[0].classList.contains('cm-md-codeblock-first') && !lines[0].classList.contains('cm-md-codeblock-last')) return ''
   // 第一行是首行围栏，最后一行是收尾围栏；若选区只截取内部几行，则不截断内容
   let body = lines
   if (body.length > 0 && isCodeFenceStart(body[0])) {
@@ -227,26 +281,45 @@ function renderGroup(kind: LineKind, lines: HTMLElement[], ownerDepth = -1): str
   if (kind === 'code') return renderCode(lines)
   if (kind === 'li') return renderList(lines)
   if (kind === 'quote') {
-    return `<blockquote>${lines.map((line) => `<p>${lineHTML(line)}</p>`).join('')}</blockquote>`
+    const inner = lines.map(line => {
+      const clone = line.cloneNode(true) as HTMLElement
+      clone.classList.remove('cm-md-blockquote')
+      return clone
+    })
+    return `<blockquote>${blocksHTML(inner, ownerDepth)}</blockquote>`
   }
   if (kind === 'table') {
-    const table = lines[0].querySelector<HTMLElement>('.cm-md-table-widget')
-    if (!table) return ''
-    // 表格本身是语义标签，编辑器自己的东西只有类名和定位属性。
-    // 单元格里的行内公式外面还套着一层 `<span class="cm-md-math">`，整棵克隆会
-    // 把它带出去（#198 合进来之后暴露的），所以先拆外壳再剥类名。
-    const clone = table.cloneNode(true) as HTMLElement
-    for (const shell of Array.from(clone.querySelectorAll<HTMLElement>('.cm-md-math, .cm-md-mermaid-ready'))) {
-      shell.replaceWith(...Array.from(shell.childNodes))
+    let html = ''
+    let head = ''
+    let body: string[] = []
+    const flush = () => {
+      if (head || body.length) {
+        let table = `<table>${head}<tbody>${body.join('')}</tbody></table>`
+        const first = lines[0]
+        // 带 listPath 的行由列表归属逻辑处理；独立合入 main 时沿用旧列表信息。
+        if (first.classList.contains('cm-md-li') && !first.dataset.listPath) {
+          const ordered = isOrdered(first)
+          table = `${listTag(first, ordered)}<li>${table}</li></${ordered ? 'ol' : 'ul'}>`
+        }
+        html += table
+      }
+      head = ''
+      body = []
     }
-    for (const element of [clone, ...Array.from(clone.querySelectorAll<HTMLElement>('*'))]) {
-      element.classList.remove(...Array.from(element.classList).filter((name) => name.startsWith('cm-md-')))
-      element.removeAttribute('contenteditable')
-      for (const attribute of ['data-source-from', 'data-source-to', 'data-list-path', 'data-line']) {
-        element.removeAttribute(attribute)
+    for (const line of lines) {
+      if (line.classList.contains('cm-md-table-delimiter')) continue
+      const header = line.classList.contains('cm-md-table-header')
+      const cells = tableCellsHTML(Array.from(line.querySelectorAll<HTMLElement>('.cm-md-table-cell')), header ? 'th' : 'td')
+      if (header) {
+        flush()
+        head = `<thead><tr>${cells}</tr></thead>`
+      } else body.push(`<tr>${cells}</tr>`)
+      if (line.classList.contains('cm-md-table-last')) {
+        flush()
       }
     }
-    return clone.outerHTML
+    flush()
+    return html
   }
   if (kind === 'hr') return '<hr>'
   // 空行在 markdown 里只是段落分隔，元素本身已经把它表达出来了。
@@ -266,7 +339,7 @@ function renderGroup(kind: LineKind, lines: HTMLElement[], ownerDepth = -1): str
 
 /** 同类且可合并的块：列表、引用、代码要合起来才成形。 */
 function mergeable(kind: LineKind): boolean {
-  return kind === 'code' || kind === 'li' || kind === 'quote'
+  return kind === 'code' || kind === 'li' || kind === 'quote' || kind === 'table'
 }
 
 /** 把一串「行」按块翻译成 HTML。行与行之间是编辑器自己的排版，这里重建文档结构。 */
@@ -317,12 +390,20 @@ function blocksHTML(nodes: Node[], ownerDepth = -1): string {
     if (!isLineElement(node)) {
       // 选区从一个行的中间开始或结束：连续的行内片段属于同一行，要合成一个段落。
       // 不合并的话，`含 **加粗**、` 会变成「含」「加粗」「、」三个段落。
-      const inline: string[] = []
+      const inline: Node[] = []
       while (index < nodes.length && !isLineElement(nodes[index])) {
-        inline.push(inlineHTML(nodes[index]))
+        inline.push(nodes[index])
         index += 1
       }
-      const merged = inline.join('')
+      // 同一行里跨了几个单元格：交出这几格组成的一行表格，否则格子之间的分隔会丢，两格并成一段
+      const cells = inline.filter((part): part is HTMLElement => part instanceof HTMLElement && part.classList.contains('cm-md-table-cell'))
+      if (cells.length > 1) {
+        html += cells.some(cell => cell.getAttribute('role') === 'columnheader')
+          ? `<table><thead><tr>${tableCellsHTML(cells, 'th')}</tr></thead></table>`
+          : `<table><tbody><tr>${tableCellsHTML(cells, 'td')}</tr></tbody></table>`
+        continue
+      }
+      const merged = inline.map(node => inlineHTML(node)).join('')
       if (merged.trim() !== '') html += `<p>${merged}</p>`
       continue
     }
@@ -352,12 +433,32 @@ function isLineElement(node: Node): node is HTMLElement {
   return node instanceof HTMLElement && node.classList.contains('cm-line')
 }
 
+/** 与普通行内样式翻译分开，公式内部的颜色由 KaTeX 保留，外层颜色自然继承。 */
+function mathSourceHTML(source: string): string {
+  const range = scanMath(source)[0]
+  if (range?.from === 0 && range.to === source.length) {
+    try { return katex.renderToString(range.code, { displayMode: false, throwOnError: true, trust: false }) }
+    catch { /* 无效公式保留源码，不能丢字。 */ }
+  }
+  return escapeText(source)
+}
+
+function tableCellsHTML(cells: HTMLElement[], tag: 'th' | 'td'): string {
+  return cells.map(cell => `<${tag} style="overflow-wrap:anywhere;word-break:normal;text-align:${cell.style.textAlign || 'left'}">${childrenHTML(cell).replace(/^[ \t]+|[ \t]+$/g, '')}</${tag}>`).join('')
+}
+
+/** 列表/引用归属与分组都读取源码行；先展开表格的布局包装，保留每行的归属信息。 */
+function tableLines(nodes: Node[]): Node[] {
+  return nodes.flatMap(node => node instanceof HTMLElement && node.classList.contains('cm-md-table-widget')
+    ? Array.from(node.childNodes) : [node])
+}
+
 /** 选中的一段 → 干净的 HTML。复制用它。 */
 export function selectionHTMLFrom(fragment: DocumentFragment): string {
-  return blocksHTML(Array.from(fragment.childNodes))
+  return blocksHTML(tableLines(Array.from(fragment.childNodes)))
 }
 
 /** 整篇文档 → 干净的 HTML。导出 HTML 用它。 */
 export function documentHTMLFrom(root: HTMLElement): string {
-  return blocksHTML(Array.from(root.children))
+  return blocksHTML(tableLines(Array.from(root.children)))
 }

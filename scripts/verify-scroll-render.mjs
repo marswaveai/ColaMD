@@ -14,6 +14,7 @@ import { join } from 'node:path'
 
 import { assertBuildFresh } from './build-freshness.mjs'
 import { stopVerifyApp, verifyWorkdir } from './verify-workdir.mjs'
+import './verify-live-preview.mjs'
 
 const APP = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 assertBuildFresh()

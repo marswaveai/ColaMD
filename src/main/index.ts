@@ -1195,8 +1195,9 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
   if (!win || (preset !== 'desktop' && preset !== 'mobile') || !snapshot || typeof snapshot !== 'object') return false
   win.show()
   win.focus()
-  const { html, styles, bodyClass, background } = snapshot as { html?: unknown; styles?: unknown; bodyClass?: unknown; background?: unknown }
+  const { html, styles, bodyClass, background, tableLayout } = snapshot as { tableLayout?: unknown; html?: unknown; styles?: unknown; bodyClass?: unknown; background?: unknown }
   if (typeof html !== 'string' || typeof styles !== 'string' || typeof bodyClass !== 'string' || typeof background !== 'string') return false
+  if (tableLayout !== undefined && (typeof tableLayout !== 'string' || !/^\d*$/.test(tableLayout))) return false
   const baseName = suggestFileName(win) ?? 'untitled'
   const suffix = preset === 'desktop' ? 'desktop' : 'mobile'
   const result = await dialog.showSaveDialog(win, {
@@ -1209,7 +1210,7 @@ ipcMain.handle('export-image', async (event, snapshot: unknown, preset: unknown)
   if (result.canceled || !result.filePath) return false
   try {
     const { renderDocumentImages } = await import('./image-export')
-    const pages = await renderDocumentImages({ html, styles, bodyClass, background }, preset)
+    const pages = await renderDocumentImages({ html, styles, bodyClass, background, tableLayout: tableLayout as string | undefined }, preset)
     if (pages.length === 0) throw new Error('没有可导出的内容')
 
     const extension = extname(result.filePath)
@@ -1270,7 +1271,6 @@ ipcMain.handle('export-pdf', async (event) => {
            warm or dark theme ends up with a bright frame around every page. */
         @page { margin: 20mm 18mm; background: ${background}; }
         html, body, #editor { height: auto !important; overflow: visible !important; background: ${background} !important; }
-        #editor { margin: 0 !important; padding: 0 !important; }
         /* 光标与选区是编辑器的东西，不是文档的内容。 */
         .cm-cursor, .cm-cursorLayer, .cm-selectionLayer, .cm-selectionBackground { display: none !important; }
         /* A cell has to break a long token (JSON, a URL) instead of forcing the
@@ -1278,10 +1278,20 @@ ipcMain.handle('export-pdf', async (event) => {
            the table cannot go below, and the last column ends up cut off at the
            paper's edge (#108). The table already carries width: 100% in the
            theme; this is what lets it actually shrink to that width. */
-        #editor .cm-content th, #editor .cm-content td { overflow-wrap: anywhere !important; word-break: break-word !important; }
+        #editor .cm-md-table-cell { overflow-wrap: anywhere !important; word-break: break-word !important; }
       }`
     )
+    let spacingCSSKey: string | undefined
     try {
+      // 底部输入留白不能另起一页；user !important 才能覆盖任意主题的 author !important。
+      // 只把间距放在 user origin：Chromium 不应用该 origin 的 @page，页边距须留在上面。
+      spacingCSSKey = await win.webContents.insertCSS(
+        `@media print {
+          #editor { margin: 0 !important; padding: 0 !important; }
+          #editor .cm-content { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+        }`,
+        { cssOrigin: 'user' }
+      )
       const pdfData = await win.webContents.printToPDF({
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
         printBackground: true,
@@ -1290,6 +1300,7 @@ ipcMain.handle('export-pdf', async (event) => {
       await writeFile(result.filePath, pdfData)
       return true
     } finally {
+      if (spacingCSSKey) await win.webContents.removeInsertedCSS(spacingCSSKey)
       await win.webContents.removeInsertedCSS(cssKey)
     }
   } catch {

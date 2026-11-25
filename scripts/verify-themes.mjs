@@ -272,7 +272,7 @@ async function main() {
     for (let i = 0; i < 80; i++) {
       const ok = await evaluate(renderer, `(() => {
         const el = document.querySelector('#editor .cm-content')
-        return el ? el.textContent.includes('一级标题') && el.querySelector('.cm-md-table-widget th') !== null
+        return el ? el.textContent.includes('一级标题') && el.querySelector('.cm-md-table-header .cm-md-table-cell') !== null
           && el.querySelector('.cm-md-url') !== null : false
       })()`)
       if (ok === true) { loaded = true; break }

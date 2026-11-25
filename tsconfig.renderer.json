@@ -6,7 +6,7 @@
     "target": "ESNext",
     "jsx": "preserve",
     "outDir": "dist/renderer",
-    "rootDir": "src/renderer"
+    "rootDir": "src"
   },
   "include": ["src/renderer/**/*"]
 }
