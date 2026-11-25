@@ -14,6 +14,12 @@ const themes: Record<string, string> = {
 }
 
 let customStyleEl: HTMLStyleElement | null = null
+const themeListeners = new Set<() => void>()
+
+/** 样式应用完毕后通知布局使用者，包括两个自定义主题之间的切换。 */
+export function onThemeChange(listener: () => void): void {
+  themeListeners.add(listener)
+}
 
 export function applyTheme(name: string, customCSS?: string): void {
   const body = document.body
@@ -40,6 +46,7 @@ export function applyTheme(name: string, customCSS?: string): void {
   }
 
   applyCodePalette()
+  themeListeners.forEach(listener => listener())
 
   // Persist theme choice
   localStorage.setItem('colamd-theme', name)

@@ -30,7 +30,7 @@ let savedScrollTop = 0
 // 同为单类时它永远排在后面；加高优先级才盖得住。
 const PAPER_RULES = `
 body.${PAPER_CLASS} #editor { height: auto !important; overflow: visible !important; }
-body.${PAPER_CLASS} #editor .cm-editor { height: auto !important; }
+body.${PAPER_CLASS} #editor .cm-editor { display: block !important; height: auto !important; }
 body.${PAPER_CLASS} #editor .cm-scroller { display: block !important; height: auto !important; overflow: visible !important; }
 `
 

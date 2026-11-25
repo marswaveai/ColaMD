@@ -9,7 +9,8 @@
 // 这一层需要 DOM（EditorView 要做布局测量）。不依赖 DOM 的那一半在 state.ts 里，
 // 验收脚本直接消费那一半，所以保真的证明不需要真实浏览器。
 
-import { EditorState, RangeSet } from '@codemirror/state'
+import { tableEditing } from './table-editing'
+import { Compartment, EditorState, RangeSet } from '@codemirror/state'
 import { EditorView, drawSelection, dropCursor, highlightSpecialChars, rectangularSelection, crosshairCursor, Decoration } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { undo, redo } from '@codemirror/commands'
@@ -48,6 +49,8 @@ export interface EditorOptions {
   redo(): void
   /** 拿到底层 view（装饰层、搜索面板需要）。 */
   getView(): EditorView
+  /** 主题这类外部样式换过之后，让编辑器按新字体重量行高。 */
+  remeasure(): void
   /** 销毁。 */
   destroy(): void
 }
@@ -124,6 +127,8 @@ const ATOMIC_MARK = Decoration.replace({})
 
 export function createEditorCore(parent: HTMLElement, options: EditorOptions = {}): EditorHandle {
   const changeListener = options.onChange
+  const themeLayout = new Compartment()
+  const remeasureTheme = EditorView.theme({})
 
   const extension = [
     // 状态层：语言、高亮、撤销栈、缩进、快捷键（无 DOM，可进 harness）
@@ -138,6 +143,7 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     rectangularSelection(),
     crosshairCursor(),
     editorTheme,
+    themeLayout.of([]),
     // 装饰层：把源码画成所见即所得。它只画不写，所以装在这里不会影响
     // 「没改过的字节不许变」这条纪律。
     livePreview,
@@ -164,6 +170,7 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     searchHighlightField,
     // 列表前缀与任务复选框原子区间：一次跨过 `[ ] ` 与有序列表的 `1. ` 前缀。
     listPrefixAtomicRanges,
+    tableEditing,
     editableCompartment.of(EditorView.editable.of(options.editable ?? true)),
     // 文档变化的唯一出口：把新文本交给外壳
     EditorView.updateListener.of((update) => {
@@ -214,6 +221,11 @@ export function createEditorCore(parent: HTMLElement, options: EditorOptions = {
     undo: () => { undo(view) },
     redo: () => { redo(view) },
     getView: () => view,
+    remeasure(): void {
+      // 短文档的总高度可能被 min-height 撑住，requestMeasure 不会重测行高。
+      // 公开 API 里只有 theme 变化会让 CM 重量内容：在空主题和无之间切一次，不改文档或撤销栈。
+      view.dispatch({ effects: themeLayout.reconfigure(themeLayout.get(view.state) === remeasureTheme ? [] : remeasureTheme) })
+    },
     destroy(): void {
       setMeasureHost(null)
       view.destroy()

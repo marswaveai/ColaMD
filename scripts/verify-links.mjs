@@ -78,27 +78,6 @@ async function unitChecks() {
   await context.openFileInNewTab(join(WORK, 'other.md'))
   check('failed save preserves current tab', () => { assert.equal(current.filePath, source); assert.equal(opens, 0) })
 
-  // Verify tableCellStart (supports indented & unbordered tables, #153)
-  const editorCode = readFileSync(join(ROOT, 'src/renderer/editor/editor.ts'), 'utf8')
-  const tStart = editorCode.indexOf('function tableCellStart(')
-  const tEnd = editorCode.indexOf('\n}\n', tStart) + 3
-  const { code: compiledTableCell } = await transform(editorCode.slice(tStart, tEnd), { loader: 'ts' })
-  const tableContext = {}
-  vm.runInNewContext(compiledTableCell, tableContext)
-  const { tableCellStart } = tableContext
-  check('tableCellStart standard', () => {
-    assert.equal(tableCellStart('| A | B |', 0, 0), 1)
-    assert.equal(tableCellStart('| A | B |', 0, 1), 5)
-  })
-  check('tableCellStart indented', () => {
-    assert.equal(tableCellStart('  | A | B |', 0, 0), 3)
-    assert.equal(tableCellStart('  | A | B |', 0, 1), 7)
-  })
-  check('tableCellStart unbordered', () => {
-    assert.equal(tableCellStart('A | B', 0, 0), 0)
-    assert.equal(tableCellStart('A | B', 0, 1), 3)
-  })
-
   // Verify renderCode (strips closing fence without leaking backticks)
   const cleanHtmlCode = readFileSync(join(ROOT, 'src/renderer/editor/clean-html.ts'), 'utf8')
   const rStart = cleanHtmlCode.indexOf('function isCodeFenceStart(')
@@ -198,16 +177,23 @@ async function runtimeChecks() {
     await wait(`document.title==='source.md' && !!document.querySelector('[data-href]')`, 'source loaded')
     const openSource = async () => {
       await evaluate(`window.electronAPI.openExternal(${JSON.stringify(source)})`)
-      await wait(`document.title==='source.md'`, 'return to source')
-      await sleep(150)
+      await wait(`document.title==='source.md' && document.querySelector('#editor .cm-content')?.cmTile?.root?.view.state.doc.toString()===${JSON.stringify(sourceText)}`, 'return to source document')
     }
     const click = async (label, modifiers = MOD) => {
-      const point = await evaluate(`(() => {
-        const a=[...document.querySelectorAll('#editor [data-href], #editor a[href]')].find(a=>a.textContent===${JSON.stringify(label)});
-        if(!a)return null; a.scrollIntoView({block:'center',behavior:'instant'});
-        const r=[...a.getClientRects()].find(r=>r.width>2&&r.height>2);
-        return r?{x:r.x+r.width/2,y:r.y+r.height/2}:null;
-      })()`)
+      let point
+      // 标题更新和视口装饰并非同一时刻；先把真实文档里的目标滚入视口，再等可点击矩形。
+      for (let i = 0; i < 80 && !point; i++) {
+        point = await evaluate(`(() => {
+          const view=document.querySelector('#editor .cm-content')?.cmTile?.root?.view;
+          const at=view?.state.doc.toString().indexOf('['+${JSON.stringify(label)}+']');
+          if(at>=0) { view.dispatch({selection:{anchor:at},scrollIntoView:true});view.coordsAtPos(at); }
+          const a=[...document.querySelectorAll('#editor [data-href], #editor a[href]')].find(a=>a.textContent===${JSON.stringify(label)});
+          if(!a)return null; a.scrollIntoView({block:'center',behavior:'instant'});
+          const r=[...a.getClientRects()].find(r=>r.width>2&&r.height>2);
+          return r?{x:r.x+r.width/2,y:r.y+r.height/2}:null;
+        })()`)
+        if (!point) await sleep(100)
+      }
       assert(point, `Link not rendered: ${label}`)
       for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, ...point, button: 'left', clickCount: 1, modifiers })
     }

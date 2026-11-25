@@ -32,7 +32,9 @@ export const markdownHighlightStyle = HighlightStyle.define([
      深浅主题和自定义主题都自动跟着走。
      运算符、标点、括号**不给颜色**，让它们跟着代码块正文色走，否则整块代码会花。 */
   { tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.definitionKeyword, t.operatorKeyword, t.self, t.modifier], color: 'var(--code-keyword)' },
-  { tag: [t.string, t.special(t.string), t.escape], color: 'var(--code-string)' },
+  { tag: [t.string, t.special(t.string)], color: 'var(--code-string)' },
+  // Markdown 正文的转义字符不使用代码块配色；代码块通过局部变量保留语法色。
+  { tag: t.escape, color: 'var(--syntax-escape, inherit)' },
   { tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: 'var(--code-comment)' },
   { tag: [t.number, t.integer, t.float, t.bool, t.null, t.atom, t.unit, t.constant(t.variableName)], color: 'var(--code-number)' },
   { tag: [t.function(t.variableName), t.function(t.propertyName), t.function(t.definition(t.variableName)), t.labelName], color: 'var(--code-function)' },

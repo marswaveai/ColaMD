@@ -41,8 +41,9 @@
   background: #f7f6f3;
 }
 
-#editor .cm-content .cm-md-table-widget th,
-#editor .cm-content .cm-md-table-widget td {
-  border-left: none;
+#editor .cm-content .cm-md-table-header .cm-md-table-cell,
+#editor .cm-content .cm-md-table-row:not(.cm-md-table-header) .cm-md-table-cell {
   border-right: none;
 }
+
+#editor .cm-content .cm-md-table-cell[data-column="0"] { border-left: none; }

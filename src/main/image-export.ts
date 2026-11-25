@@ -6,6 +6,7 @@ import { join } from 'path'
 export type ImageExportPreset = 'desktop' | 'mobile'
 
 export interface ImageExportSnapshot {
+  tableLayout?: string
   html: string
   styles: string
   bodyClass: string
@@ -66,10 +67,11 @@ function exportHTML(snapshot: ImageExportSnapshot, preset: ImageExportPreset): s
     *::-webkit-scrollbar { display: none !important; }
     #titlebar, #file-panel, #source-editor, #update-banner { display: none !important; }
     #editor { display: block !important; width: ${width}px !important; height: auto !important; min-height: 0 !important; overflow: visible !important; margin: 0 !important; padding: ${padding}px !important; background: ${snapshot.background} !important; }
+    #editor .cm-md-table-number { white-space: normal !important; }
     #editor .cm-content { width: auto !important; max-width: none !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }
   </style>
 </head>
-<body class="${snapshot.bodyClass}"><div id="editor"><div class="cm-content">${snapshot.html}</div></div></body>
+<body class="${snapshot.bodyClass}"><div id="editor"><div class="cm-content" data-table-layout="${/^\d+$/.test(snapshot.tableLayout ?? '') ? snapshot.tableLayout : ''}">${snapshot.html}</div></div></body>
 </html>`
 }
 

@@ -282,18 +282,17 @@ const MEASURE = `(() => {
     },
     table: {
       tables: q('.cm-md-table-widget').length,
-      realTables: q('table.cm-md-table-widget').length,
-      cells: q('.cm-md-table-widget td').length,
-      headers: q('.cm-md-table-widget th').length,
+      cells: q('.cm-md-table-row:not(.cm-md-table-header) .cm-md-table-cell').length,
+      headers: q('.cm-md-table-header .cm-md-table-cell').length,
       // 格子里的 <br/> 要画成换行，格子里的图片要画出来
-      brs: q('.cm-md-table-widget td br').length,
-      imgs: q('.cm-md-table-widget td img').length,
+      brs: q('.cm-md-table-cell br').length,
+      imgs: q('.cm-md-table-cell img').length,
       // #161：只有真正的星号斜体该成斜体，词中下划线不能
-      ems: q('.cm-md-table-widget em').map((e) => e.textContent),
+      ems: q('.cm-md-table-cell .cm-md-em').map((e) => e.textContent),
       // #197：格子里的行内公式要画成公式，不能留下字面的美元符号
-      math: q('.cm-md-table-widget td .katex').length,
-      mathErrors: q('.cm-md-table-widget td .cm-md-math-error').length,
-      cellTexts: q('.cm-md-table-widget td').map((td) => td.textContent)
+      math: q('.cm-md-table-row:not(.cm-md-table-header) .cm-md-table-cell .katex').length,
+      mathErrors: q('.cm-md-table-row:not(.cm-md-table-header) .cm-md-table-cell .cm-md-math-error').length,
+      cellTexts: q('.cm-md-table-row:not(.cm-md-table-header) .cm-md-table-cell').map((td) => td.textContent)
     },
     quote: {
       count: q('.cm-md-blockquote').length,
@@ -310,10 +309,12 @@ const MEASURE = `(() => {
       const content = view.contentDOM
       const base = content.getBoundingClientRect().top + parseFloat(getComputedStyle(content).paddingTop) - view.scrollDOM.scrollTop
       const rows = [...content.querySelectorAll('.cm-md-table-widget, .cm-md-mermaid, .cm-md-math-block, .cm-md-html-block')].map((el) => {
-        const from = Number(el.dataset.sourceFrom)
+        const isTableWrapper = el.classList.contains('cm-md-table-widget')
+        const lineEl = isTableWrapper ? el.querySelector('.cm-line') : el.closest('.cm-line')
+        const from = isTableWrapper && lineEl ? view.posAtDOM(lineEl) : Number(el.dataset.sourceFrom)
         const style = getComputedStyle(el)
         // 量它所在的那一行：屏幕上这一行在哪、多高，跟 CodeMirror 记的必须一样
-        const line = el.closest('.cm-line').getBoundingClientRect()
+        const line = lineEl ? lineEl.getBoundingClientRect() : el.getBoundingClientRect()
         // 段落排版会在块前插入留白 widget，lineBlockAt 返回「留白＋正文」复合块，
         // 位置要和正文那一段比，不能拿复合块顶边当正文顶边。
         const outer = Number.isFinite(from) ? view.lineBlockAt(from) : null
@@ -1466,8 +1467,8 @@ function main() {
         (m.list.nestedClass ?? '').includes('cm-md-li-1') && !(m.list.nestedClass ?? '').includes('cm-md-li-0'),
         `嵌套行类=${m.list.nestedClass}`)
       check('待办复选框', m.list.tasks >= 2 && m.list.checked >= 1, `tasks=${m.list.tasks} checked=${m.list.checked}`)
-      check('表格渲染', m.table.realTables >= 1 && m.table.cells >= 2,
-        `表格=${m.table.tables} 真 table=${m.table.realTables} cells=${m.table.cells}`)
+      check('表格渲染', m.table.tables >= 1 && m.table.cells >= 2,
+        `表格=${m.table.tables} cells=${m.table.cells}`)
       check('表格格子里的 <br/> 画成换行', m.table.brs >= 1, `<br> 个数=${m.table.brs}`)
       check('表格格子里的图片画出来', m.table.imgs >= 1, `格子里 img 个数=${m.table.imgs}`)
       // #197：格子里的 `$\delta$` 要画成公式，不能把美元符号留在字上
@@ -1563,39 +1564,27 @@ function main() {
         await sleep(400)
       }
 
-      // 表格：点第二行第二格 → 整块退回源码，而且光标就落在点到的那一格上（#153）。
-      const tableAppeared = await waitFor('.cm-md-table-widget')
+      const tableAppeared = await waitFor('.cm-md-table-header')
       await clickBox(JSON.parse(await evaluate(renderer, `(() => {
-        const table = document.querySelector('.cm-md-table-widget')
-        const cell = table ? (table.querySelectorAll('tr')[2] || {}).children : null
-        if (!cell || !cell[1]) return JSON.stringify({ x: 0, y: 0 })
-        const r = cell[1].getBoundingClientRect()
-        return JSON.stringify({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) })
+        const cell = document.querySelectorAll('.cm-md-table-row')[2]?.querySelectorAll('.cm-md-table-cell')[1]
+        if (!cell) return JSON.stringify({ x: 0, y: 0 })
+        const r = cell.getBoundingClientRect()
+        return JSON.stringify({ x: Math.round(r.left + 14), y: Math.round(r.top + r.height / 2) })
       })()`)))
-      const revealed = JSON.parse(await evaluate(renderer, `JSON.stringify({
-        widgets: document.querySelectorAll('.cm-md-table-widget').length,
-        rows: document.querySelectorAll('#editor .cm-md-table').length
-      })`))
-      check('点表格一格就退回源码（#153）',
-        tableAppeared && revealed.widgets === 0 && revealed.rows >= 4,
-        `表格出现=${tableAppeared} 点完渲染块=${revealed.widgets} 源码行=${revealed.rows}`)
-
-      // 打字改的是点到的格，不是表格开头。文件里那一行必须还是表格的一行。
+      check('点击单元格后保持表格布局', tableAppeared && Number(await evaluate(renderer,
+        `document.querySelectorAll('.cm-md-table-header').length`)) === 1)
       await renderer.send('Input.insertText', { text: 'Z' })
       await sleep(1600)
       const typedCell = readFileSync(source, 'utf8').split('\n').find((l) => l.includes('乙三')) ?? ''
-      check('点哪一格，打字就改哪一格（#153）',
+      check('直接编辑只改变点到的单元格',
         /Z\s*乙三/.test(typedCell) && typedCell.trim().startsWith('|') && typedCell.trim().endsWith('|'),
         `点到的行=${JSON.stringify(typedCell)}`)
       await pressKey(renderer, 'z', 'KeyZ', 90, 4)
       await sleep(1600)
       const undoneCell = readFileSync(source, 'utf8').split('\n').find((l) => l.includes('乙三')) ?? ''
-      check('撤销回到点之前', !/Z\s*乙三/.test(undoneCell), `撤销后=${JSON.stringify(undoneCell)}`)
-
-      // 点走：表格重新渲染回来（光标不在块里就不该再露源码）
+      check('撤销恢复单元格内容', !/Z\s*乙三/.test(undoneCell), `撤销后=${JSON.stringify(undoneCell)}`)
       await clickLine(renderer, '行内公式')
-      check('点走之后表格重新渲染', Number(await evaluate(renderer, `document.querySelectorAll('.cm-md-table-widget').length`)) === 1,
-        `点走后的渲染块=${await evaluate(renderer, `document.querySelectorAll('.cm-md-table-widget').length`)}`)
+      check('离开单元格后保持表格布局', Number(await evaluate(renderer, `document.querySelectorAll('.cm-md-table-header').length`)) === 1)
 
       // 图片：点一下排版要还在（它的源码就一行，不露）
       {
@@ -1677,10 +1666,9 @@ function main() {
         `选中=${JSON.stringify(drags.paragraph.text.slice(0, 60))}`)
       check('拖选引用块的文字能选中（2026-10-08 报）', (drags.quote.text ?? '').includes('引用文字'),
         `选中=${JSON.stringify(drags.quote.text.slice(0, 60))}`)
-      // 表格是替换 widget，预览不参与选择模型（#141）。这条断言记的是现状：哪一天表格里的文字能拖选了，
-      // 它会红，那就是该换断言的时候。行内 HTML 上色那一条也是同一个写法。
-      check('拖选表格里的文字目前选不到（#141 已知缺口）', !(drags.table.text ?? '').includes('列甲'),
-        `选中=${JSON.stringify(drags.table.text.slice(0, 60))}（能选到就说明缺口补上了，请改写这条断言）`)
+      // 直接编辑的表格也必须支持浏览器原生拖选。
+      check('拖选表格里的文字', (drags.table.text ?? '').includes('列甲'),
+        `选中=${JSON.stringify(drags.table.text.slice(0, 60))}`)
       check('拖选代码块里的文字', (drags.code.text ?? '').includes('const answer'),
         `选中=${JSON.stringify(drags.code.text.slice(0, 60))}`)
 
