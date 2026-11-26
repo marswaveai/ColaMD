@@ -12,6 +12,7 @@ import { Decoration, EditorView, type DecorationSet } from '@codemirror/view'
 import { RangeSetBuilder, type StateEffect } from '@codemirror/state'
 import { getEditorView } from './editor'
 import { setSearchHighlight } from './search-highlight'
+import { sourcePositionTop } from './source-line'
 import { getUiLanguage, type UiLanguage } from '../ui-language'
 import { findTextMatches, replaceTextMatches } from './table-editing'
 
@@ -317,8 +318,10 @@ export class SearchPanel {
   private selectSourceMatch(sourceEditor: HTMLTextAreaElement): void {
     if (this.currentIndex < 0 || this.currentIndex >= this.matches.length) return
     const match = this.matches[this.currentIndex]
-    sourceEditor.focus()
+    const top = sourcePositionTop(sourceEditor, match.from)
+    sourceEditor.focus({ preventScroll: true })
     sourceEditor.setSelectionRange(match.from, match.to)
-    this.input.focus()
+    sourceEditor.scrollTop = Math.max(0, top - sourceEditor.clientHeight / 3)
+    this.input.focus({ preventScroll: true })
   }
 }

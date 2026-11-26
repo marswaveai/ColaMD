@@ -277,7 +277,7 @@ LLM 生成的 Markdown 常常在段落之间留一串空行，读起来松垮。
 
 **Not wanted from that PR:** 标签拖拽排序和拖出独立窗口。拖拽在本产品里反复被否（面板调宽改成固定规则加窄热区、标签排序一直是 Candidate 里「先问值不值得」的那条），而拖出窗口就是多窗口，多窗口的需求在 [#44](https://github.com/marswaveai/ColaMD/issues/44) 里已经由标签页回答了。
 
-**Status:** Candidate, not scheduled.
+**Status:** Implemented via [PR #195](https://github.com/marswaveai/ColaMD/pull/195).
 
 ### 右键菜单：插入表格、待办、列表、标题层级 (#163)
 
@@ -474,6 +474,12 @@ Fenced code blocks currently render as plain styled text with a copy button, wit
 
 
 ## Declined
+
+### Side-by-side source and preview split view
+
+**Source:** [#210](https://github.com/marswaveai/ColaMD/issues/210)
+
+Declined (2026-11-26). ColaMD is a single-pane live-preview editor (`design.md`: one editor instance per tab, generous reading margins, and quick toggle to source mode while preserving cursor and scroll position). A permanent side-by-side split duplicates the viewport, requires dual scroll synchronization, and trades away the calm single-column writing surface.
 
 ### Show greyed-out non-Markdown files in the file panel
 

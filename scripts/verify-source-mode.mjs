@@ -369,6 +369,72 @@ try {
   const typedMissing = (await evaluate('v.state.doc.toString()')).split('\n')
   check('缺省格源码往返后输入补齐整行', typedMissing[4] === '| 缺省 | Y |  |' && typedMissing.length === tableText.split('\n').length, typedMissing)
 
+  // #189：源码模式下，含大量软折行段落时，大纲点击跳转、滚动高亮同步与查找定位都按真实折行位置算
+  const wrappedPara = '这是一段很长的中文与 English words 混排软折行段落，用来让逻辑行号与实际视觉高度彻底脱节。'.repeat(24)
+  const navText = [
+    '# 第一章 起点',
+    wrappedPara,
+    wrappedPara,
+    '## 第二章 中段',
+    wrappedPara,
+    wrappedPara,
+    '## 第三章 终点',
+    wrappedPara,
+    '文末锚点：源码查找目标词',
+  ].join('\n')
+  const navFile = join(runtime, 'source-nav-189.md')
+  writeFileSync(navFile, navText)
+  await openFixture(navFile, navText)
+  await toggle('source', 0)
+  // 打开文件面板并切到大纲页签
+  await evaluate(`(() => {
+    if (!document.body.classList.contains('show-file-panel')) document.getElementById('file-toggle-btn').click()
+    document.getElementById('file-panel-outline').click()
+  })()`)
+  await waitFor(`document.querySelectorAll('#outline-list button').length === 3`, '源码大纲未渲染出 3 条标题')
+  // 1) 点击大纲「第三章 终点」，标题应落入视口且被选中
+  await evaluate(`document.querySelectorAll('#outline-list button')[2].click()`)
+  const h3Offset = navText.indexOf('## 第三章 终点')
+  const afterOutlineClick = await evaluate(`viewportProbe.settle('source', ${h3Offset})`)
+  check('#189 源码模式点击大纲跳转目标标题可见且选中',
+    afterOutlineClick.visible && afterOutlineClick.selection.anchor === h3Offset && afterOutlineClick.selection.head === h3Offset + '## 第三章 终点'.length,
+    afterOutlineClick)
+  // 2) 滚到「第二章 中段」真实顶部附近，大纲高亮应同步为第 2 项（索引 1）
+  const h2Offset = navText.indexOf('## 第二章 中段')
+  const spyIndex = await evaluate(`(async () => {
+    const ta = document.getElementById('source-editor')
+    const [rect] = viewportProbe.sourceCarets([${h2Offset}])
+    // 等大纲点击锁释放再触发手动滚动
+    await new Promise(r => setTimeout(r, 1700))
+    ta.scrollTop = Math.max(0, rect.top - 10)
+    ta.dispatchEvent(new Event('scroll'))
+    for (let i = 0; i < 6; i++) await new Promise(requestAnimationFrame)
+    const btns = [...document.querySelectorAll('#outline-list button')]
+    return btns.findIndex(b => b.classList.contains('active'))
+  })()`)
+  check('#189 源码模式滚动大纲高亮同步到真实折行章节', spyIndex === 1, { spyIndex })
+  // 3) 回到顶部后，用查找面板搜文末关键词，匹配项应主动滚进视口
+  const targetOffset = navText.indexOf('源码查找目标词')
+  await evaluate(`(() => {
+    const ta = document.getElementById('source-editor')
+    ta.scrollTop = 0
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', metaKey: true, ctrlKey: true, bubbles: true }))
+  })()`)
+  const searchVisible = await evaluate(`(async () => {
+    const input = document.querySelector('.search-input')
+    if (!input) return { ok: false, reason: 'no input' }
+    input.value = '源码查找目标词'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    for (let i = 0; i < 4; i++) await new Promise(requestAnimationFrame)
+    const m = viewportProbe.measure('source', ${targetOffset})
+    // 关掉查找面板与侧栏以免影响后续用例
+    document.querySelector('.search-close')?.click()
+    if (document.body.classList.contains('show-file-panel')) document.getElementById('file-toggle-btn').click()
+    return { ok: m.visible && m.selection.anchor === ${targetOffset} && m.selection.head === ${targetOffset + '源码查找目标词'.length}, m }
+  })()`)
+  check('#189 源码模式查找命中远端关键词主动滚入视口', searchVisible.ok, searchVisible)
+  await toggle('render', 0)
+
   // 源码位置按真实排版测量，代价随光标前的文字线性增长。用接近整篇源码阈值
   // （512K 字符）的文档记录切换耗时，防止退化成多次全文排版。
   let large = '', index = 0

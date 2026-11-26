@@ -1,7 +1,7 @@
 import { createEditor, finishEditorComposition, focusEditor, getMarkdown, getEditorView, getEditorScroller, onEditorJumpPhase, setMarkdown, setEditorEditable, getEditorState, restoreEditorState, applyMarkdownStyle, runFormatCommand, jumpToLine, jumpToHeading, setCleanExport, setDocumentFileUrl, remeasureEditor, type FormatCommandId } from './editor/editor'
 import { markdownForWord } from './editor/mermaid-export'
 import { withDiagramZoomPaused } from './editor/mermaid-bridge'
-import { jumpToSourceLine, sourcePositionTop } from './editor/source-line'
+import { jumpToSourceLine, sourceLineTops, sourcePositionTop } from './editor/source-line'
 import { EditorView } from '@codemirror/view'
 import { documentHTMLFrom } from './editor/clean-html'
 import { isPresenting, startSlideshow, stopSlideshow } from './slideshow'
@@ -1250,11 +1250,7 @@ function renderOutline(): void {
       if (!current) return
       if (sourceModeActive) {
         beginOutlineJump()
-        const source = sourceEl()
-        const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight) || 24
-        source.scrollTop = Math.max(0, (current.line ?? 0) * lineHeight - lineHeight)
-        source.focus()
-        revealSourceHeading(source, current.line ?? 0)
+        jumpToSourceLine(sourceEl(), (current.line ?? 0) + 1)
       } else if (current.line !== undefined) {
         // 视觉模式：交给编辑器自己跳，它会同时把光标放过去。
         // flashHeadingOnArrival 的信号靠编辑器内部的落点装饰发出，这里只管跳。
@@ -1374,32 +1370,36 @@ function visualActiveIndex(): number {
   return index
 }
 
+let sourceOutlineTopsCache: { value: string; width: number; key: string; tops: number[] } | null = null
+
+function getSourceOutlineTops(source: HTMLTextAreaElement): number[] {
+  const lines = outlineItems.map((item) => item.line ?? 0)
+  const key = lines.join(',')
+  if (
+    sourceOutlineTopsCache
+    && sourceOutlineTopsCache.value === source.value
+    && sourceOutlineTopsCache.width === source.clientWidth
+    && sourceOutlineTopsCache.key === key
+  ) {
+    return sourceOutlineTopsCache.tops
+  }
+  const tops = sourceLineTops(source, lines)
+  sourceOutlineTopsCache = { value: source.value, width: source.clientWidth, key, tops }
+  return tops
+}
+
 function sourceActiveIndex(): number {
   const source = sourceEl()
-  const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight) || 24
-  const firstLine = Math.round(source.scrollTop / lineHeight)
+  const atBottom = source.scrollTop + source.clientHeight >= source.scrollHeight - 2
+  if (atBottom) return outlineItems.length - 1
+  const threshold = Math.min(96, source.clientHeight * 0.2)
+  const tops = getSourceOutlineTops(source)
   let index = -1
-  for (let i = 0; i < outlineItems.length; i += 1) {
-    if ((outlineItems[i].line ?? 0) > firstLine + 1) break
+  for (let i = 0; i < tops.length; i += 1) {
+    if (tops[i] - source.scrollTop > threshold) break
     index = i
   }
   return index
-}
-
-// Source mode cannot render a heading band; selecting the heading line gives
-// the same "you have arrived" feedback as the visual flash (#64).
-function revealSourceHeading(source: HTMLTextAreaElement, line: number): void {
-  let start = 0
-  for (let i = 0; i < line; i += 1) {
-    const next = source.value.indexOf('\n', start)
-    if (next === -1) {
-      start = source.value.length
-      break
-    }
-    start = next + 1
-  }
-  const end = source.value.indexOf('\n', start)
-  source.setSelectionRange(start, end === -1 ? source.value.length : end)
 }
 
 function scheduleOutlineUpdate(): void {
