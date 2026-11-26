@@ -17,6 +17,7 @@ import {
   QUOTE_PREFIX_RE,
   adjustLeadEdit,
   countQuotes,
+  expandIndent,
   findFirstDirectChild,
   findIndentParent,
   findOutdentTarget,
@@ -366,7 +367,28 @@ function deleteAtLineStart(view: EditorView): boolean {
 
   const quotePrefix = QUOTE_PREFIX_RE.exec(line.text)?.[0] ?? ''
   const quoteLen = quotePrefix.length
-  const head = /^#{1,6}[ \t]?/.exec(line.text.slice(quoteLen))
+  const bodyFrom = line.from + quoteLen
+  const body = line.text.slice(quoteLen)
+  const leadRaw = /^[ \t]*/.exec(body)?.[0] ?? ''
+  // 列表项下的缩进续行（渲染层已隐藏前导空白）：行首退格直接退回上一级对齐或顶格，
+  // 避免逐个删看不见的空格导致退格像没反应。
+  if (!self && body.trim() !== '' && leadRaw.length > 0 && range.head <= bodyFrom + leadRaw.length) {
+    const cont = findContinuationAlign(state.doc, tree, fmEnd, line.number, countQuotes(quotePrefix))
+    if (cont) {
+      const curCols = expandIndent(leadRaw)
+      const prevCols = [...cont.levels].reverse().find((c) => c < curCols) ?? 0
+      const replacement = ' '.repeat(prevCols)
+      view.dispatch({
+        changes: { from: bodyFrom, to: bodyFrom + leadRaw.length, insert: replacement },
+        selection: { anchor: bodyFrom + replacement.length },
+        scrollIntoView: true,
+        userEvent: 'delete',
+      })
+      return true
+    }
+  }
+
+  const head = /^#{1,6}[ \t]?/.exec(body)
   if (head && head[0].length > 0 && range.head >= line.from + quoteLen && range.head <= line.from + quoteLen + head[0].length) {
     const from = line.from + quoteLen
     view.dispatch({
@@ -418,6 +440,38 @@ function handleTab(view: EditorView, direction: 1 | -1): boolean {
   return indentMultiLineSelection(view, startLine.number, endLine.number, direction)
 }
 
+/**
+ * 查紧贴在当前普通行上方的列表块，算出从顶格到最深列表项正文的逐级对齐列宽（如 `[0, 3, 7]`）。
+ * 用于列表项下方插入普通行时，按 Tab 对齐上级列表正文、按 Shift+Tab 一次干净退回。
+ */
+function findContinuationAlign(
+  doc: EditorState['doc'],
+  tree: ReturnType<typeof syntaxTree>,
+  fmEnd: number,
+  lineNumber: number,
+  quoteDepth: number,
+): { levels: number[] } | null {
+  if (lineNumber <= 1) return null
+  const prevBlock = scanListBlock(doc, lineNumber - 1, tree, fmEnd)
+  if (!prevBlock || prevBlock.quoteDepth !== quoteDepth || prevBlock.items.length === 0) return null
+  const cols = new Set<number>([0])
+  let cur: BlockItem | undefined
+  for (let i = prevBlock.items.length - 1; i >= 0; i--) {
+    if (prevBlock.items[i].lineNumber < lineNumber) {
+      cur = prevBlock.items[i]
+      break
+    }
+  }
+  if (!cur) return null
+  while (cur) {
+    cols.add(cur.parsed.lead + cur.parsed.markerWidth)
+    if (cur.parentLine === null) break
+    const parentIdx = prevBlock.itemIndexByLine.get(cur.parentLine)
+    cur = parentIdx !== undefined ? prevBlock.items[parentIdx] : undefined
+  }
+  return { levels: [...cols].sort((a, b) => a - b) }
+}
+
 function indentSingleLine(view: EditorView, lineNumber: number, direction: 1 | -1): boolean {
   const { state } = view
   const { tree, fmEnd } = getTreeAndFm(state)
@@ -426,7 +480,46 @@ function indentSingleLine(view: EditorView, lineNumber: number, direction: 1 | -
   const self = parseListLine(line.text)
 
   if (!self) {
-    const quotePrefix = QUOTE_PREFIX_RE.exec(line.text)?.[0]
+    const quotePrefix = QUOTE_PREFIX_RE.exec(line.text)?.[0] ?? ''
+    const quoteLen = quotePrefix.length
+    const bodyFrom = line.from + quoteLen
+    const body = line.text.slice(quoteLen)
+    const leadRaw = /^[ \t]*/.exec(body)?.[0] ?? ''
+
+    // 紧贴列表块下方的非空普通行：行首 Tab 按上级列表正文对齐（用空格，避免叠 \t 且自动接回下半段序号），
+    // Shift+Tab 逐级干净退回顶格（不再走默认 2 空格退格卡在半截缩进）。
+    if (body.trim() !== '') {
+      const cont = findContinuationAlign(state.doc, tree, fmEnd, lineNumber, countQuotes(quotePrefix))
+      if (cont) {
+        const curCols = expandIndent(leadRaw)
+        if (direction === 1 && range.empty && range.head <= bodyFrom + leadRaw.length) {
+          const nextCols = cont.levels.find((c) => c > curCols)
+          if (nextCols === undefined) return true
+          const replacement = ' '.repeat(nextCols)
+          view.dispatch({
+            changes: { from: bodyFrom, to: bodyFrom + leadRaw.length, insert: replacement },
+            selection: { anchor: bodyFrom + replacement.length },
+            scrollIntoView: true,
+            userEvent: 'input',
+          })
+          return true
+        }
+        if (direction === -1 && leadRaw.length > 0) {
+          const prevCols = [...cont.levels].reverse().find((c) => c < curCols) ?? 0
+          const replacement = ' '.repeat(prevCols)
+          const changes = state.changes({ from: bodyFrom, to: bodyFrom + leadRaw.length, insert: replacement })
+          const anchor = Math.min(changes.newLength, Math.max(bodyFrom + replacement.length, changes.mapPos(range.head, -1)))
+          view.dispatch({
+            changes,
+            selection: { anchor },
+            scrollIntoView: true,
+            userEvent: 'input',
+          })
+          return true
+        }
+      }
+    }
+
     if (!quotePrefix) {
       // 普通非列表行（非代码围栏）在空选区按 Tab 插入制表符而非调用 indentMore 强推整行首空格，
       // 避免敲完 `1.` / `-` 按 Tab 时整行缩进或误触发列表续行；Shift+Tab 交回默认减缩进。
@@ -441,7 +534,6 @@ function indentSingleLine(view: EditorView, lineNumber: number, direction: 1 | -
       }
       return false
     }
-    const bodyFrom = line.from + quotePrefix.length
     if (direction === 1) {
       const at = Math.max(range.head, bodyFrom)
       // 引用内普通行按 Tab 写制表符而非空格，避免 `> 1.` / `> -` 后按 Tab 误触发列表格式
@@ -453,7 +545,7 @@ function indentSingleLine(view: EditorView, lineNumber: number, direction: 1 | -
       })
       return true
     }
-    const spaces = /^[ \t]+/.exec(line.text.slice(quotePrefix.length))?.[0] ?? ''
+    const spaces = /^[ \t]+/.exec(body)?.[0] ?? ''
     if (!spaces) return true
     const edit = adjustLeadEdit(spaces, -BULLET_INDENT)
     if (edit.removeChars === 0 && edit.replaceWith === '') return true
@@ -702,7 +794,44 @@ const orderedSelectionGuard = EditorState.transactionFilter.of((tr) => {
   }
 })
 
+/**
+ * 双击有序列表序号（`.cm-md-listmark`）：直接选中纯数字区间，方便修改列表起始号
+ * （改完由 list-renumber 同事务顺延同组后续项）。单击仍走 orderedSelectionGuard 落正文首字前。
+ * 用 domEventHandlers 直接 dispatch 而非 mouseSelectionStyle，避免 CM6 把选区右端按
+ * listPrefixAtomicRanges 扩到 `. ` 后面。
+ */
+const selectOrderedMarkOnDoubleClick = Prec.high(EditorView.domEventHandlers({
+  mousedown(event, view) {
+    if (event.button !== 0 || event.detail !== 2 || event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) {
+      return false
+    }
+    const target = event.target instanceof Element ? event.target : (event.target as Node | null)?.parentElement ?? null
+    const markEl = target?.closest('.cm-md-listmark')
+    if (!markEl) return false
+    let pos: number
+    try {
+      pos = view.posAtDOM(markEl)
+    } catch {
+      return false
+    }
+    const { doc } = view.state
+    const line = doc.lineAt(Math.min(pos, doc.length))
+    const self = isActiveOrderedListLine(doc, syntaxTree(view.state), line.number, frontmatterEnd(doc))
+    if (!self || !self.digits) return false
+    const from = line.from + self.markerStart
+    const to = from + self.digits.length
+    event.preventDefault()
+    view.focus()
+    view.dispatch({
+      selection: EditorSelection.range(from, to),
+      userEvent: 'select.pointer',
+    })
+    return true
+  },
+}))
+
 export const listInput: Extension = [
+  selectOrderedMarkOnDoubleClick,
   orderedSelectionGuard,
   Prec.high(keymap.of([
     { key: 'Enter', run: handleEnter },

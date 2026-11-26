@@ -654,6 +654,106 @@ async function main() {
       (await docOf()) === '> 1.\t\n> ' && !quoteAfterNumCls.includes('cm-md-li'),
       `doc=${JSON.stringify(await docOf())} cls=${JSON.stringify(quoteAfterNumCls)}`)
 
+    // 22. 双击隔空行后有序列表的 `1.` 选中数字，改回 `2` 后同组顺延为 `2. 乙 / 3. 丙`
+    await setDoc('1. 甲\n\n插一段\n\n1. 乙\n2. 丙')
+    await setCursor(0)
+    await sleep(140)
+    const secondListMarkPos = JSON.parse(await evaluate(renderer, `(() => {
+      const marks = [...document.querySelectorAll('#editor .cm-md-li-ordered .cm-md-listmark')]
+      const m = marks[1]
+      if (!m) return 'null'
+      const r = m.getBoundingClientRect()
+      return JSON.stringify({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) })
+    })()`))
+    if (secondListMarkPos) {
+      for (const clickCount of [1, 2]) {
+        for (const type of ['mousePressed', 'mouseReleased']) {
+          await renderer.send('Input.dispatchMouseEvent', {
+            type, x: secondListMarkPos.x, y: secondListMarkPos.y, button: 'left', clickCount,
+          })
+        }
+      }
+      await sleep(160)
+    }
+    const dblSel = JSON.parse(await evaluate(renderer, `(() => {
+      const r = ${VIEW}.state.selection.main
+      return JSON.stringify({ from: r.from, to: r.to, text: ${VIEW}.state.sliceDoc(r.from, r.to) })
+    })()`))
+    await renderer.send('Input.insertText', { text: '2' })
+    await sleep(160)
+    check('双击有序序号选中纯数字并改起始号，同组顺延',
+      dblSel.text === '1' && (await docOf()) === '1. 甲\n\n插一段\n\n2. 乙\n3. 丙',
+      `dblSel=${JSON.stringify(dblSel)} doc=${JSON.stringify(await docOf())}`)
+
+    // 23. 有序列表中间插入普通行：行首 Tab 按上一项正文宽度对齐、接回下方序号，且渲染层不再叠双倍缩进
+    const contDoc = '1. 甲\n新内容\n1. 乙\n2. 丙'
+    await setDoc(contDoc)
+    await setCursor(contDoc.indexOf('新内容'))
+    await press(renderer, 'Tab')
+    await sleep(140)
+    const afterContTab = await docOf()
+    const contGeom = JSON.parse(await evaluate(renderer, `(() => {
+      const lines = [...document.querySelectorAll('#editor .cm-line')]
+      const firstLine = lines[0]
+      const contLine = lines[1]
+      const findCharLeft = (el, ch) => {
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+        while (w.nextNode()) {
+          const i = w.currentNode.nodeValue.indexOf(ch)
+          if (i >= 0) {
+            const r = document.createRange()
+            r.setStart(w.currentNode, i)
+            r.setEnd(w.currentNode, i + 1)
+            return r.getBoundingClientRect().left
+          }
+        }
+        return null
+      }
+      return JSON.stringify({
+        cls: contLine?.className ?? '',
+        text: contLine?.textContent ?? '',
+        firstLeft: firstLine ? findCharLeft(firstLine, '甲') : null,
+        contLeft: contLine ? findCharLeft(contLine, '新') : null,
+      })
+    })()`))
+    check('列表中间插入普通行按 Tab 对齐正文、接回编号且无双倍缩进',
+      afterContTab === '1. 甲\n   新内容\n2. 乙\n3. 丙'
+        && contGeom.cls.includes('cm-md-li-ordered-cont')
+        && contGeom.text === '新内容'
+        && contGeom.firstLeft !== null && contGeom.contLeft !== null
+        && Math.abs(contGeom.contLeft - contGeom.firstLeft) <= 8,
+      `doc=${JSON.stringify(afterContTab)} geom=${JSON.stringify(contGeom)}`)
+
+    // 24. 列表续行按 Shift+Tab 或行首退格一次退回顶格（不卡 2 空格）
+    await press(renderer, 'Tab', 8) // Shift+Tab
+    const afterContShiftTab = await docOf()
+    await press(renderer, 'Tab')
+    await press(renderer, 'Backspace')
+    const afterContBackspace = await docOf()
+    check('列表续行按 Shift+Tab 与行首退格均一次干净退回顶格',
+      afterContShiftTab === '1. 甲\n新内容\n1. 乙\n2. 丙'
+        && afterContBackspace === '1. 甲\n新内容\n1. 乙\n2. 丙',
+      `shiftTab=${JSON.stringify(afterContShiftTab)} backspace=${JSON.stringify(afterContBackspace)}`)
+
+    // 25. 嵌套子列表中间插普通行：Tab 逐级对齐并接回子项与外层编号，Shift+Tab 逐级退回顶格
+    const nestedContDoc = '1. 甲\n    1. 子一\n新内容\n    1. 子二\n1. 乙'
+    await setDoc(nestedContDoc)
+    await setCursor(nestedContDoc.indexOf('新内容'))
+    await press(renderer, 'Tab')
+    const nestedTab1 = await docOf()
+    await press(renderer, 'Tab')
+    const nestedTab2 = await docOf()
+    await press(renderer, 'Tab', 8)
+    const nestedShift1 = await docOf()
+    await press(renderer, 'Tab', 8)
+    const nestedShift2 = await docOf()
+    check('嵌套列表中间普通行 Tab/Shift+Tab 逐级对齐并恢复编号',
+      nestedTab1 === '1. 甲\n    1. 子一\n   新内容\n    2. 子二\n2. 乙'
+        && nestedTab2 === '1. 甲\n    1. 子一\n       新内容\n    2. 子二\n2. 乙'
+        && nestedShift1 === '1. 甲\n    1. 子一\n   新内容\n    2. 子二\n2. 乙'
+        && nestedShift2 === '1. 甲\n    1. 子一\n新内容\n    1. 子二\n1. 乙',
+      JSON.stringify({ nestedTab1, nestedTab2, nestedShift1, nestedShift2 }))
+
     reportChecks()
   } finally {
     stopVerifyApp(udd)

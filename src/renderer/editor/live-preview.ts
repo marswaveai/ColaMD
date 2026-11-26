@@ -154,8 +154,21 @@ function pushListItemLines(state: EditorState, node: SyntaxNode, ranges: Decorat
     }
     const lineClass = n > first && isBlank
       ? `${baseClass} cm-md-li-blank`
-      : (isOrdered && n === first ? `${baseClass} cm-md-li-ordered` : baseClass)
+      : (isOrdered
+          ? (n === first ? `${baseClass} cm-md-li-ordered` : `${baseClass} cm-md-li-ordered-cont`)
+          : baseClass)
     ranges.push({ from: line.from, to: line.from, deco: Decoration.line({ class: lineClass, attributes: lineAttrs }) })
+    // 列表项内的普通缩进续行：CSS 的 cm-md-li-* 已经给了对应层级的左缩进，
+    // 藏掉行首源码里的对齐空格/制表符，避免屏幕上叠出双倍缩进。
+    if (n > first && !isBlank && paragraph) {
+      const quoteLen = QUOTE_PREFIX_RE.exec(line.text)?.[0].length ?? 0
+      const leadLen = /^[ \t]+/.exec(line.text.slice(quoteLen))?.[0].length ?? 0
+      const hideFrom = line.from + quoteLen
+      const atLead = tree.resolveInner(hideFrom, 1).name
+      if (leadLen > 0 && (atLead === 'Paragraph' || atLead === 'ListItem')) {
+        ranges.push({ from: hideFrom, to: hideFrom + leadLen, deco: hide(hideFrom, hideFrom + leadLen) })
+      }
+    }
   }
 }
 
