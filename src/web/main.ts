@@ -16,6 +16,7 @@ import { applyTheme, onThemeChange } from '../renderer/themes/theme-manager'
 import { SAMPLES } from './sample'
 import '../renderer/themes/base.css'
 import '../renderer/themes/premium.css'
+import '../renderer/themes/editor-preview.css'
 import './web.css'
 
 type Lang = 'zh' | 'en'
