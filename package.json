@@ -26,6 +26,7 @@
     "check:theme-colors": "node scripts/check-theme-colors.mjs",
     "verify:inline-math": "node scripts/verify-inline-math.mjs",
     "verify:markdown": "node scripts/verify-markdown.mjs",
+    "verify:rename": "node scripts/verify-rename.mjs",
     "verify:links": "node scripts/verify-links.mjs",
     "verify:features": "node scripts/verify-features.mjs",
     "verify:list": "node scripts/verify-list-input.mjs",
